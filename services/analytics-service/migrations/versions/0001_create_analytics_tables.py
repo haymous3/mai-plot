@@ -4,6 +4,7 @@ Revision ID: 0001_create_analytics_tables
 Revises:
 Create Date: 2026-05-28
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -38,7 +39,9 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute("CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id, created_at DESC)")
+    op.execute(
+        "CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id, created_at DESC)"
+    )
     op.execute("CREATE INDEX idx_audit_actor  ON audit_log(actor_id, created_at DESC)")
 
     # Append-only enforcement. Raising an exception from a BEFORE trigger
