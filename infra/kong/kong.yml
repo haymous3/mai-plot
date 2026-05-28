@@ -1,9 +1,361 @@
 # Maiplot — Kong declarative config (DB-less mode).
-# SCRUM-35: empty stub so Kong boots cleanly.
-# SCRUM-37 fills in service routing, rate-limiting plugins,
-# JWT validation, and the admin IP whitelist.
+#
+# Owned by SCRUM-37. Routes every public path prefix in api-contracts.md to
+# its backing FastAPI service, applies tiered rate limits, gates protected
+# routes with a JWT plugin (HS256 stub for local dev), and IP-restricts the
+# /admin/* surface.
+#
+# Conventions
+#   * Services use their own path prefix internally (FastAPI APIRouter with
+#     prefix="/auth", "/listings", etc.). Therefore strip_path = false on all
+#     routes — Kong forwards the full path unchanged.
+#   * Rate-limit tiers (see infra/kong/README.md for the table):
+#       OTP / auth public  10 / min / IP
+#       Generic write       30 / min / IP
+#       Generic read        60 / min / IP
+#       Hot read (feed)    100 / min / IP
+#       Webhook (bank,ps)  200 / min / IP
+#   * The JWT consumer below uses the dev placeholder secret shipped in
+#     .env.example. Production replaces this entire kong.yml at deploy time
+#     via templating against AWS Secrets Manager — no real secret ever lives
+#     in the repo. We tried Kong's env-vault indirection
+#     ({vault://env/jwt-secret}) but in 3.7 the reference is not expanded
+#     when loading a JWT credential's secret field at declarative-config
+#     load time, leading to "Invalid signature" on every token validation.
+#     Hardcoding the dev placeholder keeps local smoke tests passing without
+#     adding a config-templating step here.
+#   * IP whitelist on /admin/* allows loopback and the private RFC1918
+#     ranges Docker assigns to the maiplot-net bridge. Production deploys
+#     replace these with the office VPN / bastion CIDRs.
+#
+# Plugin policy backends (rate-limiting, etc.) are "local" — per-Kong-node
+# memory. Switching to "redis" is a one-line change when SCRUM-39 lights up
+# the Redis cluster and SCRUM-37 scales to >1 Kong node.
 
 _format_version: "3.0"
+_transform: true
 
-services: []
-routes: []
+# ---------------------------------------------------------------------------
+# Consumers — single platform consumer for HS256 JWT stub.
+# ---------------------------------------------------------------------------
+consumers:
+  - username: maiplot-platform
+    jwt_secrets:
+      - key: maiplot-platform
+        algorithm: HS256
+        secret: change-me-to-a-long-random-string
+
+# ---------------------------------------------------------------------------
+# Services + routes
+# ---------------------------------------------------------------------------
+services:
+
+  # =========================================================================
+  # Auth service — /auth/*
+  # =========================================================================
+  - name: auth-service
+    url: http://auth-service:8000
+    routes:
+      - name: auth-public
+        paths:
+          - /auth/register
+          - /auth/login
+          - /auth/otp
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+      - name: auth-protected
+        paths:
+          - /auth/logout
+          - /auth/token
+          - /auth/verify
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+  # =========================================================================
+  # Listing service — /listings/*  +  /admin/listings/*
+  # =========================================================================
+  - name: listing-service
+    url: http://listing-service:8000
+    routes:
+      - name: listings-read
+        paths:
+          - /listings
+        methods:
+          - GET
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 100
+              policy: local
+              fault_tolerant: true
+      - name: listings-write
+        paths:
+          - /listings
+        methods:
+          - POST
+          - PATCH
+          - DELETE
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 30
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+      - name: admin-listings
+        paths:
+          - /admin/listings
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+  # =========================================================================
+  # Transaction service — /transactions/*  +  /admin/{transactions,escrow}/*
+  #                       +  /webhooks/paystack/*
+  # =========================================================================
+  - name: transaction-service
+    url: http://transaction-service:8000
+    routes:
+      - name: transactions
+        paths:
+          - /transactions
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+      - name: admin-transactions
+        paths:
+          - /admin/transactions
+          - /admin/escrow
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+      - name: paystack-webhook
+        # Inbound webhook from Paystack — no JWT (HMAC verified in-service
+        # via X-Paystack-Signature). Wide rate limit; per-IP is OK because
+        # Paystack rotates source IPs but the request rate is bounded.
+        paths:
+          - /webhooks/paystack
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 200
+              policy: local
+              fault_tolerant: true
+
+  # =========================================================================
+  # Loan service — /loans/*  +  /webhooks/bank/*
+  # =========================================================================
+  - name: loan-service
+    url: http://loan-service:8000
+    routes:
+      - name: loans
+        paths:
+          - /loans
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            # Gateway-level cap; per-buyer "3 applications per day" is
+            # enforced at the service layer (api-contracts.md, /loans/apply).
+            config:
+              minute: 30
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+      - name: bank-webhook
+        # Inbound webhooks from bank partners — HMAC verified in-service.
+        paths:
+          - /webhooks/bank
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 200
+              policy: local
+              fault_tolerant: true
+
+  # =========================================================================
+  # Document service — /admin/poa/* (PoA review queue)
+  # Public document upload paths live under /listings/{id}/documents on the
+  # listing service, which delegates to document-service internally.
+  # =========================================================================
+  - name: document-service
+    url: http://document-service:8000
+    routes:
+      - name: admin-poa
+        paths:
+          - /admin/poa
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+  # =========================================================================
+  # Notification service — /notifications/*
+  # =========================================================================
+  - name: notification-service
+    url: http://notification-service:8000
+    routes:
+      - name: notifications
+        paths:
+          - /notifications
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 100
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+  # =========================================================================
+  # Realtor service — /realtors/*  +  /inspections/*
+  # =========================================================================
+  - name: realtor-service
+    url: http://realtor-service:8000
+    routes:
+      - name: realtors
+        paths:
+          - /realtors
+          - /inspections
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+  # =========================================================================
+  # Analytics service — /admin/analytics
+  # =========================================================================
+  - name: analytics-service
+    url: http://analytics-service:8000
+    routes:
+      - name: admin-analytics
+        paths:
+          - /admin/analytics
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+
+# ---------------------------------------------------------------------------
+# Global plugins — prometheus is declared but disabled. SCRUM-40 owns the
+# observability stack and will flip enabled: true once Prometheus is scraping
+# Kong's /metrics endpoint on the admin port.
+# ---------------------------------------------------------------------------
+plugins:
+  - name: prometheus
+    enabled: false
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true
