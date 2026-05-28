@@ -1,0 +1,46 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "maiplot_text": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "id":                       { "type": "keyword" },
+      "seller_id":                { "type": "keyword" },
+
+      "title":                    { "type": "text", "analyzer": "maiplot_text", "fields": { "raw": { "type": "keyword", "ignore_above": 256 } } },
+      "description":              { "type": "text", "analyzer": "maiplot_text" },
+      "address_text":             { "type": "text", "analyzer": "maiplot_text", "fields": { "raw": { "type": "keyword", "ignore_above": 512 } } },
+
+      "property_type":            { "type": "keyword" },
+      "sale_type":                { "type": "keyword" },
+      "urgency_tag":              { "type": "keyword" },
+      "status":                   { "type": "keyword" },
+      "doc_verification_status":  { "type": "keyword" },
+      "lga":                      { "type": "keyword" },
+      "state":                    { "type": "keyword" },
+
+      "asking_price_kobo":        { "type": "long" },
+      "size_sqm":                 { "type": "float" },
+      "view_count":               { "type": "integer" },
+      "interest_count":           { "type": "integer" },
+
+      "location":                 { "type": "geo_point" },
+
+      "created_at":               { "type": "date" },
+      "updated_at":               { "type": "date" },
+      "expires_at":               { "type": "date" },
+      "es_indexed_at":            { "type": "date" }
+    }
+  }
+}
