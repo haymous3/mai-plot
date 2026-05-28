@@ -1,0 +1,9 @@
+# Maiplot — Kong declarative config (DB-less mode).
+# SCRUM-35: empty stub so Kong boots cleanly.
+# SCRUM-37 fills in service routing, rate-limiting plugins,
+# JWT validation, and the admin IP whitelist.
+
+_format_version: "3.0"
+
+services: []
+routes: []
