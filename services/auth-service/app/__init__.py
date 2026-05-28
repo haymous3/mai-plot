@@ -1,0 +1,1 @@
+"""Maiplot Auth Service package."""

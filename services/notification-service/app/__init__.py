@@ -1,0 +1,1 @@
+"""Maiplot Notification Service package."""

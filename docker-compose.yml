@@ -1,0 +1,278 @@
+# Maiplot — local development stack.
+# Run: docker compose up -d
+#
+# SCRUM-35 boots the full infrastructure tier and 8 FastAPI service
+# stubs + Next.js web stub. Deep config (Kong routing, ES mappings,
+# Grafana dashboards) is owned by SCRUM-37 / SCRUM-39 / SCRUM-40.
+
+name: maiplot
+
+# ---------------------------------------------------------------------
+# Shared anchors
+# ---------------------------------------------------------------------
+# All 8 FastAPI services share the same environment + dependency wiring.
+# Per-service overrides go in each service block (port, container_name,
+# build context).
+x-fastapi-defaults: &fastapi-defaults
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+    JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ENV: ${ENV:-local}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    elasticsearch:
+      condition: service_healthy
+  networks:
+    - maiplot-net
+
+services:
+
+  # =====================================================================
+  # Data tier
+  # =====================================================================
+
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: maiplot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-maiplot}
+      POSTGRES_USER: ${POSTGRES_USER:-maiplot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maiplot} -d ${POSTGRES_DB:-maiplot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - maiplot-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: maiplot-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - maiplot-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: maiplot-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - maiplot-net
+
+  # =====================================================================
+  # Gateway
+  # =====================================================================
+
+  kong:
+    image: kong:3.7
+    container_name: maiplot-kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+    volumes:
+      - ./infra/kong:/etc/kong:ro
+    ports:
+      - "8000:8000"   # public proxy (per SCRUM-35 AC)
+      - "8001:8001"   # admin API
+    networks:
+      - maiplot-net
+
+  # =====================================================================
+  # Observability
+  # =====================================================================
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: maiplot-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "${LOKI_HOST_PORT:-3100}:3100"
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    networks:
+      - maiplot-net
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: maiplot-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - maiplot-net
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: maiplot-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "3001:3000"   # SCRUM-35 AC: Grafana on host port 3001
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+      - prometheus
+    networks:
+      - maiplot-net
+
+  # =====================================================================
+  # Application services (FastAPI)
+  # Host ports 8011-8018 expose each service directly for local debugging.
+  # In production, public traffic enters via Kong (port 8000) only.
+  # =====================================================================
+
+  auth-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/auth-service
+    container_name: maiplot-auth-service
+    ports:
+      - "8011:8000"
+
+  listing-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/listing-service
+    container_name: maiplot-listing-service
+    ports:
+      - "8012:8000"
+
+  document-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/document-service
+    container_name: maiplot-document-service
+    ports:
+      - "8013:8000"
+
+  transaction-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/transaction-service
+    container_name: maiplot-transaction-service
+    ports:
+      - "8014:8000"
+
+  loan-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/loan-service
+    container_name: maiplot-loan-service
+    ports:
+      - "8015:8000"
+
+  notification-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/notification-service
+    container_name: maiplot-notification-service
+    ports:
+      - "8016:8000"
+
+  realtor-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/realtor-service
+    container_name: maiplot-realtor-service
+    ports:
+      - "8017:8000"
+
+  analytics-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/analytics-service
+    container_name: maiplot-analytics-service
+    ports:
+      - "8018:8000"
+
+  # =====================================================================
+  # Frontend (Next.js)
+  # =====================================================================
+
+  web:
+    build:
+      context: ./frontend/web
+    container_name: maiplot-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"   # per SCRUM-35 AC
+    depends_on:
+      - kong
+    networks:
+      - maiplot-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  maiplot-net:
+    driver: bridge
