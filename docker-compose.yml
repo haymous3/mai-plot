@@ -1,11 +1,36 @@
 # Maiplot — local development stack.
 # Run: docker compose up -d
 #
-# SCRUM-35 boots the full infrastructure (this file) and 8 FastAPI service
+# SCRUM-35 boots the full infrastructure tier and 8 FastAPI service
 # stubs + Next.js web stub. Deep config (Kong routing, ES mappings,
 # Grafana dashboards) is owned by SCRUM-37 / SCRUM-39 / SCRUM-40.
 
 name: maiplot
+
+# ---------------------------------------------------------------------
+# Shared anchors
+# ---------------------------------------------------------------------
+# All 8 FastAPI services share the same environment + dependency wiring.
+# Per-service overrides go in each service block (port, container_name,
+# build context).
+x-fastapi-defaults: &fastapi-defaults
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+    JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ENV: ${ENV:-local}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    elasticsearch:
+      condition: service_healthy
+  networks:
+    - maiplot-net
 
 services:
 
@@ -22,7 +47,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-maiplot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -41,7 +66,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -112,7 +137,7 @@ services:
     restart: unless-stopped
     command: ["-config.file=/etc/loki/loki-config.yml"]
     ports:
-      - "3100:3100"
+      - "${LOKI_HOST_PORT:-3100}:3100"
     volumes:
       - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
     networks:
@@ -153,9 +178,93 @@ services:
       - maiplot-net
 
   # =====================================================================
-  # Application services (auth-service, listing-service, ..., web)
-  # are appended in Build E of SCRUM-35.
+  # Application services (FastAPI)
+  # Host ports 8011-8018 expose each service directly for local debugging.
+  # In production, public traffic enters via Kong (port 8000) only.
   # =====================================================================
+
+  auth-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/auth-service
+    container_name: maiplot-auth-service
+    ports:
+      - "8011:8000"
+
+  listing-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/listing-service
+    container_name: maiplot-listing-service
+    ports:
+      - "8012:8000"
+
+  document-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/document-service
+    container_name: maiplot-document-service
+    ports:
+      - "8013:8000"
+
+  transaction-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/transaction-service
+    container_name: maiplot-transaction-service
+    ports:
+      - "8014:8000"
+
+  loan-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/loan-service
+    container_name: maiplot-loan-service
+    ports:
+      - "8015:8000"
+
+  notification-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/notification-service
+    container_name: maiplot-notification-service
+    ports:
+      - "8016:8000"
+
+  realtor-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/realtor-service
+    container_name: maiplot-realtor-service
+    ports:
+      - "8017:8000"
+
+  analytics-service:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/analytics-service
+    container_name: maiplot-analytics-service
+    ports:
+      - "8018:8000"
+
+  # =====================================================================
+  # Frontend (Next.js)
+  # =====================================================================
+
+  web:
+    build:
+      context: ./frontend/web
+    container_name: maiplot-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"   # per SCRUM-35 AC
+    depends_on:
+      - kong
+    networks:
+      - maiplot-net
 
 volumes:
   postgres_data:
