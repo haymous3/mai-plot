@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 from fastapi import FastAPI
@@ -78,9 +80,7 @@ def setup_telemetry(service_name: str, app: FastAPI) -> None:
         OTLPMetricExporter(endpoint=endpoint, insecure=True),
         export_interval_millis=15_000,
     )
-    metrics.set_meter_provider(
-        MeterProvider(resource=resource, metric_readers=[metric_reader])
-    )
+    metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
 
     # Logs — OTLP path. The LoggingHandler attached to the root logger
     # below shovels every stdlib logging record through the OTel pipeline.
@@ -97,9 +97,7 @@ def setup_telemetry(service_name: str, app: FastAPI) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     # Avoid duplicates if setup runs twice (e.g. hot reload).
-    root_logger.handlers = [
-        h for h in root_logger.handlers if not isinstance(h, LoggingHandler)
-    ]
+    root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, LoggingHandler)]
     root_logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
 
     # structlog — emit JSON, route through stdlib logging so the same
@@ -155,14 +153,16 @@ def _instrument_optional(library: str, tracer_provider: TracerProvider) -> None:
     if library == "asyncpg":
         from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
-        AsyncPGInstrumentor().instrument(tracer_provider=tracer_provider)
+        AsyncPGInstrumentor().instrument(tracer_provider=tracer_provider)  # type: ignore[no-untyped-call]
     elif library == "httpx":
         from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
         HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
 
 
-def _attach_trace_context(_logger, _method_name, event_dict):
+def _attach_trace_context(
+    _logger: Any, _method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """structlog processor — copies trace_id/span_id from the active span
     into the rendered JSON record. Mirrors what LoggingInstrumentor does
     for stdlib calls so structlog-direct log lines also carry the keys."""

@@ -4,6 +4,7 @@ Revision ID: 0001_create_document_tables
 Revises:
 Create Date: 2026-05-28
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -43,7 +44,9 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute("CREATE INDEX idx_docs_listing ON listing_documents(listing_id, verification_status)")
+    op.execute(
+        "CREATE INDEX idx_docs_listing ON listing_documents(listing_id, verification_status)"
+    )
 
 
 def downgrade() -> None:

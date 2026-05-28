@@ -9,6 +9,7 @@ Revision ID: 0001_create_transaction_tables
 Revises:
 Create Date: 2026-05-28
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -71,9 +72,7 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX idx_txn_events_txn ON transaction_events(transaction_id, created_at)"
-    )
+    op.execute("CREATE INDEX idx_txn_events_txn ON transaction_events(transaction_id, created_at)")
 
     # payment_events — idempotent payment record. UNIQUE(payer_id,
     # idempotency_key) is the last line of defense against duplicate

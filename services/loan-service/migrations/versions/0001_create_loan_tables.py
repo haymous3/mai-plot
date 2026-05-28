@@ -4,6 +4,7 @@ Revision ID: 0001_create_loan_tables
 Revises:
 Create Date: 2026-05-28
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

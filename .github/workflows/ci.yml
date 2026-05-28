@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint — ruff check + ruff format check across every service.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: ruff check
+        run: uv run ruff check services/
+
+      - name: ruff format --check
+        run: uv run ruff format --check services/
+
+  # ---------------------------------------------------------------------------
+  # Typecheck — mypy per service. The workspace has duplicate `app` packages
+  # (one per service) so a single batch run collides; the per-service loop is
+  # the same pattern documented in services/ + scripts/migrate-all.sh.
+  # ---------------------------------------------------------------------------
+  typecheck:
+    name: Typecheck (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: mypy each service
+        run: |
+          for svc in services/*/; do
+            echo "==> mypy $svc"
+            (cd "$svc" && uv run mypy app tests)
+          done
+
+  # ---------------------------------------------------------------------------
+  # Test — bring up postgres + redis from our docker-compose.yml (uses
+  # init.sql for PostGIS/pgcrypto), run migrations, then pytest --cov.
+  # Coverage XML is uploaded to Codecov; CODECOV_TOKEN must be set in repo
+  # secrets for the upload to succeed on this private repo.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test (pytest + Postgres + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Start postgres + redis
+        run: docker compose up -d postgres redis
+
+      - name: Wait for postgres healthcheck
+        run: |
+          for i in {1..30}; do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' maiplot-postgres)" = "healthy" ]; then
+              echo "postgres healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "postgres did not become healthy in 60s"
+          docker logs maiplot-postgres
+          exit 1
+
+      - name: Run alembic migrations across all services
+        run: bash scripts/migrate-all.sh
+
+      - name: pytest with coverage
+        run: uv run pytest services/ --cov=services --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: false  # don't block on Codecov outage; the upload itself isn't AC-critical
+
+      - name: Tear down postgres + redis
+        if: always()
+        run: docker compose down -v postgres redis
+
+  # ---------------------------------------------------------------------------
+  # Build — matrix over every service, just verify the Dockerfile compiles.
+  # No push; pushing to GHCR for prod deployment is a separate ticket.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Docker image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - listing-service
+          - document-service
+          - transaction-service
+          - loan-service
+          - notification-service
+          - realtor-service
+          - analytics-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/${{ matrix.service }}
+          push: false
+          tags: maiplot-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

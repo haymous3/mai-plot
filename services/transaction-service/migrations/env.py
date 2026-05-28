@@ -26,9 +26,7 @@ if config.config_file_name is not None:
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is not set; alembic needs it to connect to PostgreSQL."
-    )
+    raise RuntimeError("DATABASE_URL is not set; alembic needs it to connect to PostgreSQL.")
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Derive service identity from the directory name (services/<svc>/migrations/env.py).
