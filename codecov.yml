@@ -1,0 +1,59 @@
+# Codecov configuration — formalises the gates that were implicit before
+# SCRUM-111. Without this file Codecov defaults its patch-coverage target
+# to ~71% (whatever the running project average is at the time of the
+# PR), which produced surprise failures during SCRUM-110.
+#
+# Targets are deliberately conservative for early-stage M0/M1 work; bump
+# them as the codebase matures and real handlers replace stub /health
+# endpoints.
+
+coverage:
+  status:
+    project:
+      default:
+        # Workspace-wide floor. Lets us catch regressions without blocking
+        # every PR that doesn't push coverage forward.
+        target: 70%
+        threshold: 1%
+        if_ci_failed: error
+
+    patch:
+      default:
+        # Coverage on lines changed by the PR. The 2% slack absorbs the
+        # noise from CI ordering + per-service test runs combining late.
+        target: 70%
+        threshold: 2%
+        if_ci_failed: error
+
+# Per-service files are duplicated by design (CLAUDE.md §3 keeps services
+# independent). For example, app/telemetry.py exists × 8, conftest.py × 8.
+# Patch coverage on duplicated lines only registers if tests in EACH
+# service's tests/ exercise that service's copy — a single test in one
+# service does not cover the other seven (see SCRUM-110 commit eae6225).
+# Distribute tests across services when modifying any duplicated file.
+
+ignore:
+  # Alembic migrations are raw SQL inside op.execute() strings — no Python
+  # logic to cover, and the schema is validated separately by migrate-all.sh
+  # against a live Postgres in CI.
+  - "**/migrations/versions/**"
+  - "**/migrations/env.py"
+  - "**/migrations/script.py.mako"
+
+  # conftest.py files are pytest wiring (fixtures, sys.path tweaks, env
+  # bootstrap). Their correctness is implied by every test that runs
+  # through them, not by direct line coverage.
+  - "conftest.py"
+  - "**/conftest.py"
+
+  # docker-build artifacts; not source.
+  - "**/__pycache__/**"
+  - "**/build/**"
+  - "**/dist/**"
+
+# Always post the inline PR comment so reviewers see coverage delta
+# without clicking through to codecov.io.
+comment:
+  layout: "header, diff, files, flags, components"
+  behavior: default
+  require_changes: false
