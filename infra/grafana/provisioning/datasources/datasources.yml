@@ -1,6 +1,5 @@
 # Maiplot — Grafana data source provisioning.
-# Auto-wires Loki + Prometheus when Grafana boots.
-# Tempo (traces) is added by SCRUM-40 alongside the OTel collector.
+# Auto-wires Loki + Prometheus + Tempo when Grafana boots.
 
 apiVersion: 1
 
@@ -11,6 +10,14 @@ datasources:
     url: http://loki:3100
     isDefault: false
     editable: false
+    jsonData:
+      # Click-through from a Loki log line to the matching Tempo trace
+      # via the trace_id field that OTel injects into every log record.
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
 
   - name: Prometheus
     type: prometheus
@@ -18,3 +25,17 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    uid: tempo
+    url: http://tempo:3200
+    isDefault: false
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        filterByTraceID: true
