@@ -103,8 +103,29 @@ jobs:
       - name: Run alembic migrations across all services
         run: bash scripts/migrate-all.sh
 
-      - name: pytest with coverage
-        run: uv run pytest services/ --cov=services --cov-report=xml --cov-report=term
+      - name: pytest per service with coverage
+        # Per-service pytest is required because every service ships a
+        # top-level `app` package and uv's editable install registers all
+        # of them on sys.path — running pytest once at the root resolves
+        # `import app` to whichever service is alphabetically first and
+        # the other services' app.models become invisible. Per-service
+        # invocation isolates the import root via each service's
+        # conftest.py. Coverage is accumulated via --cov-append, combined
+        # at the end, and emitted as a single XML for Codecov.
+        run: |
+          rm -f .coverage coverage.xml
+          for svc in services/*/; do
+            echo "==> pytest $svc"
+            (cd "$svc" && uv run pytest --cov=app --cov-append --cov-config=../../pyproject.toml \
+              --cov-report= --cov-report=term)
+            # Move the per-service .coverage so we can combine them at root.
+            if [ -f "$svc.coverage" ]; then
+              mv "$svc.coverage" ".coverage.${svc##services/}"
+            fi
+          done
+          # Combine all per-service .coverage.* files into one and emit xml.
+          uv run coverage combine || true
+          uv run coverage xml -o coverage.xml || true
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
