@@ -113,14 +113,19 @@ jobs:
         # conftest.py. Coverage is accumulated via --cov-append, combined
         # at the end, and emitted as a single XML for Codecov.
         run: |
-          rm -f .coverage coverage.xml
+          rm -f .coverage coverage.xml .coverage.*
           for svc in services/*/; do
-            echo "==> pytest $svc"
+            svc_name=$(basename "$svc")
+            echo "==> pytest $svc_name"
             (cd "$svc" && uv run pytest --cov=app --cov-append --cov-config=../../pyproject.toml \
               --cov-report= --cov-report=term)
-            # Move the per-service .coverage so we can combine them at root.
+            # Move the per-service .coverage to the workspace root with a
+            # service-tagged suffix so `coverage combine` can merge them.
+            # basename strips the trailing slash that the services/*/ glob
+            # leaves on $svc (otherwise mv treats the target as a missing
+            # directory and fails).
             if [ -f "$svc.coverage" ]; then
-              mv "$svc.coverage" ".coverage.${svc##services/}"
+              mv "$svc.coverage" ".coverage.$svc_name"
             fi
           done
           # Combine all per-service .coverage.* files into one and emit xml.
