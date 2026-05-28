@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 
+from app.telemetry import setup_telemetry
+
 SERVICE_NAME = "notification-service"
 
 app = FastAPI(title="Maiplot Notification Service", version="0.1.0")
+setup_telemetry(SERVICE_NAME, app)
 
 
 @app.get("/health")

@@ -1,0 +1,63 @@
+# Maiplot — OpenTelemetry Collector dev config (SCRUM-40).
+#
+# Single ingress for traces, logs, and metrics from every FastAPI service.
+# Fan-outs to Tempo (traces), Loki (logs), and Prometheus (metrics).
+# Services point their OTLP exporter at otel-collector:4317 — they do not
+# know about Tempo / Loki / Prometheus directly, so swapping backends or
+# adding sampling later is a config-only change here.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  # Add resource attrs that downstream backends use as labels / fields.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: upsert
+
+exporters:
+  # Traces → Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Logs → Loki. The loki exporter maps OTel resource attributes to Loki
+  # labels and embeds the rest of the log record (including trace_id /
+  # span_id) into the line itself.
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+  # Metrics → Prometheus. The collector exposes a /metrics endpoint that
+  # Prometheus scrapes (see infra/prometheus/prometheus.yml).
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    send_timestamps: true
+    metric_expiration: 5m
+    enable_open_metrics: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [loki]
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [prometheus]

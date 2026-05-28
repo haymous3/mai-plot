@@ -7,10 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Install deps from pyproject.toml (SCRUM-40 — replaces the hardcoded
+# `pip install fastapi uvicorn` left over from SCRUM-35). pip resolves
+# the full dependency set declared by the project.
 COPY pyproject.toml ./
-RUN pip install "fastapi>=0.110" "uvicorn[standard]>=0.29"
-
 COPY app/ ./app/
+RUN pip install .
 
 EXPOSE 8000
 

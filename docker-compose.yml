@@ -158,6 +158,37 @@ services:
     networks:
       - maiplot-net
 
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: maiplot-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP query API (Grafana datasource hits this)
+    networks:
+      - maiplot-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: maiplot-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/otel-collector-config.yml"]
+    volumes:
+      - ./infra/otel/otel-collector-config.yml:/etc/otel/otel-collector-config.yml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC — services export here
+      - "4318:4318"   # OTLP HTTP — alt for clients that prefer HTTP
+      - "8889:8889"   # Prometheus exporter scrape endpoint
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    networks:
+      - maiplot-net
+
   grafana:
     image: grafana/grafana:10.4.2
     container_name: maiplot-grafana
@@ -174,6 +205,7 @@ services:
     depends_on:
       - loki
       - prometheus
+      - tempo
     networks:
       - maiplot-net
 
@@ -272,6 +304,7 @@ volumes:
   elasticsearch_data:
   prometheus_data:
   grafana_data:
+  tempo_data:
 
 networks:
   maiplot-net:
