@@ -60,6 +60,11 @@ def setup_telemetry(service_name: str, app: FastAPI) -> None:
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", DEFAULT_OTLP_ENDPOINT)
     environment = os.environ.get("ENV", "local")
 
+    # Sentry is initialised before any OTel wiring so an exception during
+    # OTel setup itself still surfaces in Sentry. It's a no-op in dev
+    # without a DSN, so this adds zero overhead locally.
+    _init_sentry(service_name, environment)
+
     resource = Resource.create(
         {
             "service.name": service_name,
@@ -139,6 +144,34 @@ def setup_telemetry(service_name: str, app: FastAPI) -> None:
         service=service_name,
         environment=environment,
         otlp_endpoint=endpoint,
+    )
+
+
+def _init_sentry(service_name: str, environment: str) -> None:
+    """Initialise Sentry error capture if SENTRY_DSN is set in env.
+
+    Tracing stays with OTel (traces_sample_rate=0) — Sentry handles
+    error capture only, no double ingestion. server_name is the service
+    name so the Sentry UI can split error streams per service even
+    though all services share one DSN."""
+    dsn = os.environ.get("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=environment,
+        server_name=service_name,
+        traces_sample_rate=0.0,
+        send_default_pii=False,
+        integrations=[
+            StarletteIntegration(),
+            FastApiIntegration(),
+        ],
     )
 
 
