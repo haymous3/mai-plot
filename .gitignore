@@ -10,7 +10,7 @@ build/
 .venv/
 venv/
 env/
-.python-version
+# .python-version IS committed — pins the workspace's Python version for uv
 
 # Test / lint caches
 .pytest_cache/
