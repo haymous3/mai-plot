@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, MutableMapping
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 from fastapi import FastAPI
