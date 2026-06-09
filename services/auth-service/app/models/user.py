@@ -26,6 +26,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     email: Mapped[str | None] = mapped_column(String(254), unique=True, default=None)
     verified_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unverified")
+    seller_authority_type: Mapped[str | None] = mapped_column(String(30), default=None)
+    poa_verified_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_applicable"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -33,3 +37,4 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
