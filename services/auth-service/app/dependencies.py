@@ -17,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
+from app.services.login import LoginService
 from app.services.logout import LogoutService
 from app.services.otp_verification import OtpVerificationService
 from app.services.rate_limit import OtpRateLimiter
@@ -82,6 +84,10 @@ def _refresh_token_repo(session: SessionDep) -> RefreshTokenRepository:
     return RefreshTokenRepository(session)
 
 
+def _auth_credentials_repo(session: SessionDep) -> AuthCredentialsRepository:
+    return AuthCredentialsRepository(session)
+
+
 def _jwt_service(settings: SettingsDep) -> JwtService:
     return JwtService(
         secret=settings.jwt_secret,
@@ -98,6 +104,7 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     otps: Annotated[OtpRepository, Depends(_otp_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
     termii: TermiiDep,
     settings: SettingsDep,
@@ -105,9 +112,24 @@ def get_registration_service(
     return RegistrationService(
         users=users,
         otps=otps,
+        credentials=credentials,
         rate_limiter=rate_limiter,
         termii=termii,
         otp_expire_minutes=settings.otp_expire_minutes,
+    )
+
+
+def get_login_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> LoginService:
+    return LoginService(
+        users=users,
+        credentials=credentials,
+        refresh_tokens=refresh_tokens,
+        jwt=jwt_service,
     )
 
 

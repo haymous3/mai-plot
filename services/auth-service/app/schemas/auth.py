@@ -83,6 +83,21 @@ class OtpVerifyResponse(BaseModel):
     user: UserPublic
 
 
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    access_expires_in: int
+    user: UserPublic
+
+
 class TokenRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

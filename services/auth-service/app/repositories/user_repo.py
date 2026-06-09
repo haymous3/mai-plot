@@ -54,6 +54,19 @@ class UserRepository:
             return None
         return UserCore(id=row.id, role=row.role, verified_status=row.verified_status)
 
+    async def get_active_by_email(self, email: str) -> UserCore | None:
+        """Fetch a live user by email for password login. Returns None for
+        unknown, soft-deleted, or deactivated accounts."""
+        stmt = select(User.id, User.role, User.verified_status).where(
+            User.email == email,
+            User.deleted_at.is_(None),
+            User.is_active.is_(True),
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return UserCore(id=row.id, role=row.role, verified_status=row.verified_status)
+
     async def get_by_phone(self, phone: str) -> UserWithPhone | None:
         stmt = (
             select(User.id, User.role, UserPii.phone, User.verified_status)

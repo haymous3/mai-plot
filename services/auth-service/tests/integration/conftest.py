@@ -26,8 +26,8 @@ from app.adapters.termii import InMemoryTermiiClient
 from app.config import get_settings
 from app.db import dispose_engine
 
-# Match the auth tables the migration creates, in FK-safe order.
-_TABLES = ("refresh_tokens", "otp_codes", "user_pii", "users")
+# Match the auth tables the migrations create, in FK-safe order.
+_TABLES = ("refresh_tokens", "auth_credentials", "otp_codes", "user_pii", "users")
 
 
 @pytest.fixture

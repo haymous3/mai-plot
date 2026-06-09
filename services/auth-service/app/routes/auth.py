@@ -14,12 +14,15 @@ from fastapi.responses import JSONResponse
 
 from app.dependencies import (
     get_current_user,
+    get_login_service,
     get_logout_service,
     get_otp_verification_service,
     get_registration_service,
     get_token_refresh_service,
 )
 from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
     LogoutRequest,
     LogoutResponse,
     OtpVerifyRequest,
@@ -31,6 +34,7 @@ from app.schemas.auth import (
     UserPublic,
 )
 from app.security import CurrentUser
+from app.services.login import InvalidCredentials, LoginService
 from app.services.logout import LogoutService
 from app.services.otp_verification import (
     OtpExpired,
@@ -70,6 +74,7 @@ async def register(
             phone=body.phone,
             role=body.role,
             email=body.email,
+            password=body.password,
             seller_authority_type=body.seller_authority_type,
         )
     except PhoneAlreadyRegistered:
@@ -95,6 +100,32 @@ async def register(
         user_id=result.user_id,
         message=f"OTP sent to {body.phone}",
         otp_expires_in_seconds=result.otp_expires_in_seconds,
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    body: LoginRequest,
+    service: Annotated[LoginService, Depends(get_login_service)],
+) -> LoginResponse | JSONResponse:
+    try:
+        result = await service.login(email=body.email, password=body.password)
+    except InvalidCredentials:
+        # One generic message for unknown email / no password / wrong
+        # password — never reveal which, to prevent account enumeration.
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_CREDENTIALS",
+            "Email or password is incorrect.",
+        )
+
+    return LoginResponse(
+        access_token=result.tokens.access_token,
+        refresh_token=result.tokens.refresh_token,
+        access_expires_in=result.tokens.access_expires_in,
+        user=UserPublic.model_validate(
+            {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
+        ),
     )
 
 
