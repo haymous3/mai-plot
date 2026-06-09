@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +20,13 @@ from app.db import get_session
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
-from app.services.jwt_service import JwtService
+from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
+from app.services.logout import LogoutService
 from app.services.otp_verification import OtpVerificationService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
+from app.services.token_refresh import TokenRefreshService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -120,3 +123,46 @@ def get_otp_verification_service(
         refresh_tokens=refresh_tokens,
         jwt=jwt_service,
     )
+
+
+def get_token_refresh_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> TokenRefreshService:
+    return TokenRefreshService(
+        users=users,
+        refresh_tokens=refresh_tokens,
+        jwt=jwt_service,
+    )
+
+
+def get_logout_service(
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> LogoutService:
+    return LogoutService(refresh_tokens=refresh_tokens, jwt=jwt_service)
+
+
+async def get_current_user(
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> CurrentUser:
+    """Validate the bearer access token and return the caller's identity.
+
+    Raises AuthenticationError (-> 401 envelope) for a missing, malformed,
+    expired, or otherwise invalid access token.
+    """
+    token = parse_bearer(authorization)
+    try:
+        claims = jwt_service.decode(token, expected_type="access")
+    except TokenExpired as exc:
+        raise AuthenticationError("TOKEN_EXPIRED", "Access token has expired.") from exc
+    except TokenInvalid as exc:
+        raise AuthenticationError("TOKEN_INVALID", "Access token is invalid.") from exc
+
+    # An access token always carries a role; guard defensively so a
+    # malformed-but-signed token can't yield a None role downstream.
+    if claims.role is None:
+        raise AuthenticationError("TOKEN_INVALID", "Access token is missing a role.")
+    return CurrentUser(user_id=claims.user_id, role=claims.role)

@@ -25,9 +25,34 @@ class UserWithPhone:
     verified_status: str
 
 
+@dataclass(frozen=True)
+class UserCore:
+    """Minimal user view for id-based lookups (refresh, auth dependency)."""
+
+    id: UUID
+    role: str
+    verified_status: str
+
+
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_active_by_id(self, user_id: UUID) -> UserCore | None:
+        """Fetch a live (not soft-deleted, active) user by id.
+
+        Returns None for unknown, soft-deleted, or deactivated users so the
+        refresh/auth paths reject tokens for accounts that no longer exist.
+        """
+        stmt = select(User.id, User.role, User.verified_status).where(
+            User.id == user_id,
+            User.deleted_at.is_(None),
+            User.is_active.is_(True),
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return UserCore(id=row.id, role=row.role, verified_status=row.verified_status)
 
     async def get_by_phone(self, phone: str) -> UserWithPhone | None:
         stmt = (

@@ -83,6 +83,31 @@ class OtpVerifyResponse(BaseModel):
     user: UserPublic
 
 
+class TokenRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: str = Field(min_length=1)
+
+
+class TokenRefreshResponse(BaseModel):
+    access_token: str
+    # Rotation: a brand-new refresh token is returned each call (see
+    # TokenRefreshService); the caller must replace the one it sent.
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    access_expires_in: int
+
+
+class LogoutRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: str = Field(min_length=1)
+
+
+class LogoutResponse(BaseModel):
+    message: str = "Logged out successfully"
+
+
 class ErrorResponse(BaseModel):
     """Matches the standard error envelope in api-contracts.md."""
 
