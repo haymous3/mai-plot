@@ -28,6 +28,9 @@ class UserPii(Base):
     # will populate it. Avoids a schema migration on this PII table.
     full_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     bvn_hash: Mapped[str | None] = mapped_column(String(128), default=None)
+    # Deterministic HMAC-SHA256(bvn, pepper) for cross-account dedup; unique.
+    # bvn_hash (bcrypt) verifies, bvn_lookup (HMAC) is the queryable key.
+    bvn_lookup: Mapped[str | None] = mapped_column(String(64), default=None, unique=True)
     nin_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

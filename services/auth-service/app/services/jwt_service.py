@@ -21,6 +21,18 @@ import jwt
 ALGORITHM = "HS256"
 
 
+class JwtError(RuntimeError):
+    """Base for token decode failures."""
+
+
+class TokenExpired(JwtError):
+    pass
+
+
+class TokenInvalid(JwtError):
+    pass
+
+
 @dataclass(frozen=True)
 class TokenPair:
     access_token: str
@@ -28,6 +40,16 @@ class TokenPair:
     refresh_token_hash: str
     access_expires_in: int
     refresh_expires_at: datetime
+
+
+@dataclass(frozen=True)
+class TokenClaims:
+    """The subset of verified claims callers act on."""
+
+    user_id: UUID
+    token_type: str
+    role: str | None
+    jti: str | None
 
 
 class JwtService:
@@ -82,6 +104,47 @@ class JwtService:
             access_expires_in=self._access_expire_minutes * 60,
             refresh_expires_at=refresh_exp,
         )
+
+    def decode(self, token: str, *, expected_type: str) -> TokenClaims:
+        """Verify signature + expiry + issuer and return the claims.
+
+        Raises TokenExpired if the exp has passed, TokenInvalid for a bad
+        signature, wrong issuer, malformed token, or a token whose `type`
+        claim is not `expected_type` (so an access token can't be replayed
+        on the refresh path, or vice versa).
+        """
+        try:
+            payload = jwt.decode(
+                token,
+                self._secret,
+                algorithms=[ALGORITHM],
+                issuer=self._issuer,
+                options={"require": ["exp", "iss", "sub"]},
+            )
+        except jwt.ExpiredSignatureError as exc:
+            raise TokenExpired() from exc
+        except jwt.InvalidTokenError as exc:
+            raise TokenInvalid() from exc
+
+        if payload.get("type") != expected_type:
+            raise TokenInvalid()
+
+        try:
+            user_id = UUID(str(payload["sub"]))
+        except (KeyError, ValueError) as exc:
+            raise TokenInvalid() from exc
+
+        return TokenClaims(
+            user_id=user_id,
+            token_type=expected_type,
+            role=payload.get("role"),
+            jti=payload.get("jti"),
+        )
+
+    @staticmethod
+    def hash_token(token: str) -> str:
+        """sha256 hex of a refresh token — matches the stored token_hash."""
+        return _sha256(token)
 
 
 def _sha256(value: str) -> str:

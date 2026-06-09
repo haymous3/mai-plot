@@ -12,14 +12,39 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_otp_verification_service, get_registration_service
+from app.dependencies import (
+    get_bvn_verification_service,
+    get_current_user,
+    get_login_service,
+    get_logout_service,
+    get_otp_verification_service,
+    get_registration_service,
+    get_token_refresh_service,
+)
 from app.schemas.auth import (
+    BvnVerifyRequest,
+    BvnVerifyResponse,
+    LoginRequest,
+    LoginResponse,
+    LogoutRequest,
+    LogoutResponse,
     OtpVerifyRequest,
     OtpVerifyResponse,
     RegisterRequest,
     RegisterResponse,
+    TokenRefreshRequest,
+    TokenRefreshResponse,
     UserPublic,
 )
+from app.security import CurrentUser
+from app.services.bvn import InvalidBvnError
+from app.services.bvn_verification import (
+    BvnAlreadyVerified,
+    BvnVerificationService,
+    BvnVerificationUnavailable,
+)
+from app.services.login import InvalidCredentials, LoginService
+from app.services.logout import LogoutService
 from app.services.otp_verification import (
     OtpExpired,
     OtpInvalid,
@@ -30,6 +55,12 @@ from app.services.registration import (
     OtpRateLimited,
     PhoneAlreadyRegistered,
     RegistrationService,
+)
+from app.services.token_refresh import (
+    RefreshTokenExpired,
+    RefreshTokenInvalid,
+    RefreshTokenRevoked,
+    TokenRefreshService,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -52,6 +83,7 @@ async def register(
             phone=body.phone,
             role=body.role,
             email=body.email,
+            password=body.password,
             seller_authority_type=body.seller_authority_type,
         )
     except PhoneAlreadyRegistered:
@@ -77,6 +109,32 @@ async def register(
         user_id=result.user_id,
         message=f"OTP sent to {body.phone}",
         otp_expires_in_seconds=result.otp_expires_in_seconds,
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    body: LoginRequest,
+    service: Annotated[LoginService, Depends(get_login_service)],
+) -> LoginResponse | JSONResponse:
+    try:
+        result = await service.login(email=body.email, password=body.password)
+    except InvalidCredentials:
+        # One generic message for unknown email / no password / wrong
+        # password — never reveal which, to prevent account enumeration.
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_CREDENTIALS",
+            "Email or password is incorrect.",
+        )
+
+    return LoginResponse(
+        access_token=result.tokens.access_token,
+        refresh_token=result.tokens.refresh_token,
+        access_expires_in=result.tokens.access_expires_in,
+        user=UserPublic.model_validate(
+            {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
+        ),
     )
 
 
@@ -112,3 +170,78 @@ async def otp_verify(
             {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
         ),
     )
+
+
+@router.post("/token/refresh", response_model=TokenRefreshResponse)
+async def token_refresh(
+    body: TokenRefreshRequest,
+    service: Annotated[TokenRefreshService, Depends(get_token_refresh_service)],
+) -> TokenRefreshResponse | JSONResponse:
+    try:
+        result = await service.refresh(refresh_token=body.refresh_token)
+    except RefreshTokenExpired:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "REFRESH_TOKEN_EXPIRED",
+            "The refresh token has expired. Please log in again.",
+        )
+    except RefreshTokenRevoked:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "REFRESH_TOKEN_REVOKED",
+            "The refresh token has been revoked. Please log in again.",
+        )
+    except RefreshTokenInvalid:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "REFRESH_TOKEN_INVALID",
+            "The refresh token is invalid.",
+        )
+
+    return TokenRefreshResponse(
+        access_token=result.tokens.access_token,
+        refresh_token=result.tokens.refresh_token,
+        access_expires_in=result.tokens.access_expires_in,
+    )
+
+
+@router.post("/logout", response_model=LogoutResponse)
+async def logout(
+    body: LogoutRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[LogoutService, Depends(get_logout_service)],
+) -> LogoutResponse:
+    await service.logout(user_id=current_user.user_id, refresh_token=body.refresh_token)
+    return LogoutResponse()
+
+
+@router.post("/verify/bvn", status_code=status.HTTP_202_ACCEPTED, response_model=BvnVerifyResponse)
+async def verify_bvn(
+    body: BvnVerifyRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[BvnVerificationService, Depends(get_bvn_verification_service)],
+) -> BvnVerifyResponse | JSONResponse:
+    try:
+        result = await service.verify(user_id=current_user.user_id, bvn=body.bvn)
+    except InvalidBvnError:
+        # Never echo the BVN value in the error. Literal 422 sidesteps the
+        # status.HTTP_422_* deprecation rename (see main.py).
+        return _error(
+            422,
+            "BVN_FORMAT_INVALID",
+            "BVN must be exactly 11 digits.",
+        )
+    except BvnAlreadyVerified:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "BVN_ALREADY_VERIFIED",
+            "This BVN has already been verified.",
+        )
+    except BvnVerificationUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "BVN_VERIFICATION_UNAVAILABLE",
+            "BVN verification is temporarily unavailable. Please retry.",
+        )
+
+    return BvnVerifyResponse(message="BVN verification initiated", status=result.status)

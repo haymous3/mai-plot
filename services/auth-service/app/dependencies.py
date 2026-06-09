@@ -10,26 +10,34 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.bvn import BvnVerifier, build_bvn_verifier
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
-from app.services.jwt_service import JwtService
+from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.services.bvn_verification import BvnVerificationService
+from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
+from app.services.login import LoginService
+from app.services.logout import LogoutService
 from app.services.otp_verification import OtpVerificationService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
+from app.services.token_refresh import TokenRefreshService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
 _termii: TermiiClient | None = None
+_bvn_verifier: BvnVerifier | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -63,8 +71,22 @@ async def get_termii(settings: SettingsDep) -> TermiiClient:
     return _termii
 
 
+async def get_bvn_verifier(settings: SettingsDep) -> BvnVerifier:
+    """Process-wide BVN verifier. The factory picks fake vs real bureau."""
+    global _bvn_verifier
+    if _bvn_verifier is None:
+        _bvn_verifier = build_bvn_verifier(
+            use_fake=settings.bvn_use_fake,
+            api_url=settings.bvn_api_url,
+            api_key=settings.bvn_api_key,
+            timeout_seconds=settings.bvn_timeout_seconds,
+        )
+    return _bvn_verifier
+
+
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
+BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 
 
 def _user_repo(session: SessionDep) -> UserRepository:
@@ -77,6 +99,10 @@ def _otp_repo(session: SessionDep) -> OtpRepository:
 
 def _refresh_token_repo(session: SessionDep) -> RefreshTokenRepository:
     return RefreshTokenRepository(session)
+
+
+def _auth_credentials_repo(session: SessionDep) -> AuthCredentialsRepository:
+    return AuthCredentialsRepository(session)
 
 
 def _jwt_service(settings: SettingsDep) -> JwtService:
@@ -95,6 +121,7 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     otps: Annotated[OtpRepository, Depends(_otp_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
     termii: TermiiDep,
     settings: SettingsDep,
@@ -102,9 +129,24 @@ def get_registration_service(
     return RegistrationService(
         users=users,
         otps=otps,
+        credentials=credentials,
         rate_limiter=rate_limiter,
         termii=termii,
         otp_expire_minutes=settings.otp_expire_minutes,
+    )
+
+
+def get_login_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> LoginService:
+    return LoginService(
+        users=users,
+        credentials=credentials,
+        refresh_tokens=refresh_tokens,
+        jwt=jwt_service,
     )
 
 
@@ -120,3 +162,58 @@ def get_otp_verification_service(
         refresh_tokens=refresh_tokens,
         jwt=jwt_service,
     )
+
+
+def get_token_refresh_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> TokenRefreshService:
+    return TokenRefreshService(
+        users=users,
+        refresh_tokens=refresh_tokens,
+        jwt=jwt_service,
+    )
+
+
+def get_logout_service(
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> LogoutService:
+    return LogoutService(refresh_tokens=refresh_tokens, jwt=jwt_service)
+
+
+def get_bvn_verification_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    verifier: BvnVerifierDep,
+    settings: SettingsDep,
+) -> BvnVerificationService:
+    return BvnVerificationService(
+        users=users,
+        verifier=verifier,
+        pepper=settings.bvn_pepper,
+    )
+
+
+async def get_current_user(
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> CurrentUser:
+    """Validate the bearer access token and return the caller's identity.
+
+    Raises AuthenticationError (-> 401 envelope) for a missing, malformed,
+    expired, or otherwise invalid access token.
+    """
+    token = parse_bearer(authorization)
+    try:
+        claims = jwt_service.decode(token, expected_type="access")
+    except TokenExpired as exc:
+        raise AuthenticationError("TOKEN_EXPIRED", "Access token has expired.") from exc
+    except TokenInvalid as exc:
+        raise AuthenticationError("TOKEN_INVALID", "Access token is invalid.") from exc
+
+    # An access token always carries a role; guard defensively so a
+    # malformed-but-signed token can't yield a None role downstream.
+    if claims.role is None:
+        raise AuthenticationError("TOKEN_INVALID", "Access token is missing a role.")
+    return CurrentUser(user_id=claims.user_id, role=claims.role)

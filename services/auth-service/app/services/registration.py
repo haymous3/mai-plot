@@ -14,9 +14,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.adapters.termii import TermiiClient, TermiiError
+from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.user_repo import UserRepository
 from app.services.otp import generate_code, hash_code
+from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -50,12 +52,14 @@ class RegistrationService:
         *,
         users: UserRepository,
         otps: OtpRepository,
+        credentials: AuthCredentialsRepository,
         rate_limiter: OtpRateLimiter,
         termii: TermiiClient,
         otp_expire_minutes: int,
     ) -> None:
         self._users = users
         self._otps = otps
+        self._credentials = credentials
         self._rate_limiter = rate_limiter
         self._termii = termii
         self._otp_expire_minutes = otp_expire_minutes
@@ -66,6 +70,7 @@ class RegistrationService:
         phone: str,
         role: str,
         email: str | None,
+        password: str | None,
         seller_authority_type: str | None,
     ) -> RegistrationResult:
         existing = await self._users.get_by_phone(phone)
@@ -86,6 +91,10 @@ class RegistrationService:
             email=email,
             seller_authority_type=seller_authority_type,
         )
+        # Store the password hash if one was supplied, so the user can later
+        # log in via email/password (SCRUM-45). Phone-OTP-only users skip this.
+        if password is not None:
+            await self._credentials.upsert(user_id=user_id, password_hash=hash_password(password))
         await self._otps.create(
             phone=phone,
             code_hash=code_hash,

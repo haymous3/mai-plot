@@ -9,11 +9,13 @@ from fastapi.responses import JSONResponse
 from app.middleware.trace_id import HEADER as TRACE_HEADER
 from app.middleware.trace_id import TraceIdMiddleware
 from app.routes.auth import router as auth_router
+from app.security import AuthenticationError
 from app.telemetry import setup_telemetry
 
 # FastAPI's status.HTTP_422_UNPROCESSABLE_ENTITY is being renamed; the
 # numeric literal sidesteps the deprecation warning across versions.
 _HTTP_422 = 422
+_HTTP_401 = 401
 
 SERVICE_NAME = "auth-service"
 
@@ -33,6 +35,16 @@ async def _validation_handler(request: Request, exc: RequestValidationError) -> 
             "message": "Request validation failed.",
             "details": {"errors": _safe_errors(exc)},
         },
+        headers={TRACE_HEADER: request.headers.get(TRACE_HEADER, "")},
+    )
+
+
+@app.exception_handler(AuthenticationError)
+async def _auth_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
+    """Map a failed bearer-token check to a 401 in the standard envelope."""
+    return JSONResponse(
+        status_code=_HTTP_401,
+        content={"error_code": exc.code, "message": exc.message, "details": {}},
         headers={TRACE_HEADER: request.headers.get(TRACE_HEADER, "")},
     )
 

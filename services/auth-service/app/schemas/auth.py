@@ -83,6 +83,60 @@ class OtpVerifyResponse(BaseModel):
     user: UserPublic
 
 
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    access_expires_in: int
+    user: UserPublic
+
+
+class TokenRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: str = Field(min_length=1)
+
+
+class TokenRefreshResponse(BaseModel):
+    access_token: str
+    # Rotation: a brand-new refresh token is returned each call (see
+    # TokenRefreshService); the caller must replace the one it sent.
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    access_expires_in: int
+
+
+class LogoutRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: str = Field(min_length=1)
+
+
+class LogoutResponse(BaseModel):
+    message: str = "Logged out successfully"
+
+
+class BvnVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Accepted as a bounded free string (no regex): format is validated in
+    # the service so the 422 carries BVN_FORMAT_INVALID and the BVN value is
+    # never echoed back in a Pydantic validation error.
+    bvn: str = Field(min_length=1, max_length=64)
+
+
+class BvnVerifyResponse(BaseModel):
+    message: str = "BVN verification initiated"
+    status: str = "pending"
+
+
 class ErrorResponse(BaseModel):
     """Matches the standard error envelope in api-contracts.md."""
 

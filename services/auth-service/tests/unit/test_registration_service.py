@@ -47,6 +47,14 @@ class _StubOtpRepo:
         return uuid4()
 
 
+class _StubCredsRepo:
+    def __init__(self) -> None:
+        self.upserted: list[dict[str, Any]] = []
+
+    async def upsert(self, **kwargs: Any) -> None:
+        self.upserted.append(kwargs)
+
+
 class _StubLimiter:
     def __init__(self, allowed: bool = True) -> None:
         self._allowed = allowed
@@ -59,12 +67,14 @@ def _build_service(
     *,
     user_repo: _StubUserRepo,
     otp_repo: _StubOtpRepo | None = None,
+    creds_repo: _StubCredsRepo | None = None,
     limiter: _StubLimiter | None = None,
     termii: InMemoryTermiiClient | None = None,
 ) -> RegistrationService:
     return RegistrationService(
         users=user_repo,  # type: ignore[arg-type]
         otps=otp_repo or _StubOtpRepo(),  # type: ignore[arg-type]
+        credentials=creds_repo or _StubCredsRepo(),  # type: ignore[arg-type]
         rate_limiter=limiter or _StubLimiter(),  # type: ignore[arg-type]
         termii=termii or InMemoryTermiiClient(),
         otp_expire_minutes=5,
@@ -82,6 +92,7 @@ async def test_happy_path_creates_user_and_sends_sms() -> None:
         phone="+2348012345678",
         role="buyer",
         email=None,
+        password=None,
         seller_authority_type=None,
     )
 
@@ -98,6 +109,44 @@ async def test_happy_path_creates_user_and_sends_sms() -> None:
 
 
 @pytest.mark.asyncio
+async def test_password_is_hashed_and_stored_when_provided() -> None:
+    user_repo = _StubUserRepo()
+    creds_repo = _StubCredsRepo()
+    service = _build_service(user_repo=user_repo, creds_repo=creds_repo)
+
+    await service.register(
+        phone="+2348012345678",
+        role="buyer",
+        email="user@example.com",
+        password="SecurePass123!",
+        seller_authority_type=None,
+    )
+
+    assert len(creds_repo.upserted) == 1
+    stored = creds_repo.upserted[0]["password_hash"]
+    # Stored as a bcrypt hash, never the plaintext.
+    assert stored != "SecurePass123!"
+    assert stored.startswith("$2")
+
+
+@pytest.mark.asyncio
+async def test_password_skipped_when_absent() -> None:
+    user_repo = _StubUserRepo()
+    creds_repo = _StubCredsRepo()
+    service = _build_service(user_repo=user_repo, creds_repo=creds_repo)
+
+    await service.register(
+        phone="+2348012345678",
+        role="buyer",
+        email=None,
+        password=None,
+        seller_authority_type=None,
+    )
+
+    assert creds_repo.upserted == []
+
+
+@pytest.mark.asyncio
 async def test_duplicate_phone_rejected_before_anything_else() -> None:
     user_repo = _StubUserRepo(existing_phone="+2348012345678")
     otp_repo = _StubOtpRepo()
@@ -109,6 +158,7 @@ async def test_duplicate_phone_rejected_before_anything_else() -> None:
             phone="+2348012345678",
             role="buyer",
             email=None,
+            password=None,
             seller_authority_type=None,
         )
 
@@ -134,6 +184,7 @@ async def test_rate_limited_short_circuits() -> None:
             phone="+2348012345678",
             role="buyer",
             email=None,
+            password=None,
             seller_authority_type=None,
         )
 
@@ -154,6 +205,7 @@ async def test_termii_failure_surfaces_as_dispatch_error() -> None:
             phone="+2348012345678",
             role="buyer",
             email=None,
+            password=None,
             seller_authority_type=None,
         )
     # User + OTP were persisted before the dispatch attempt; the DB
