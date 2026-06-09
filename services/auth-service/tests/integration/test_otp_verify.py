@@ -16,7 +16,10 @@ from tests.integration.conftest import assert_error_envelope
 async def _register(http_client: AsyncClient, phone: str = "08012345678") -> dict[str, object]:
     response = await http_client.post("/auth/register", json={"phone": phone, "role": "buyer"})
     assert response.status_code == 201, response.text
-    return response.json()
+    # httpx's .json() is typed Any; pin it to the declared return type so
+    # mypy's no-any-return (run as `mypy app tests` in CI) stays happy.
+    body: dict[str, object] = response.json()
+    return body
 
 
 def _extract_code(message: str) -> str:
