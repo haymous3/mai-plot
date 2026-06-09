@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     termii_base_url: str = "https://api.ng.termii.com"
     termii_timeout_seconds: float = 3.0
 
+    # BVN verification (SCRUM-46). The fake verifier is default for local +
+    # CI. bvn_pepper is the HMAC key for the deterministic bvn_lookup column
+    # used for cross-account dedup — it is a server secret, NOT per-user,
+    # and MUST be set to a strong random value in every real environment.
+    bvn_use_fake: bool = True
+    bvn_api_url: str = ""
+    bvn_api_key: str = ""
+    bvn_timeout_seconds: float = 5.0
+    bvn_pepper: str = "change-me-to-a-long-random-bvn-pepper"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -7,6 +7,7 @@ not touch SQLAlchemy directly.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -114,3 +115,29 @@ class UserRepository:
             return
         if user.verified_status == "unverified":
             user.verified_status = "phone_verified"
+
+    async def has_bvn(self, user_id: UUID) -> bool:
+        """True if this user already has a BVN on file."""
+        stmt = select(UserPii.bvn_hash).where(UserPii.user_id == user_id)
+        return (await self._session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def find_user_by_bvn_lookup(self, bvn_lookup: str) -> UUID | None:
+        """Return the user_id that already owns this BVN (via the
+        deterministic lookup hash), or None. Used for cross-account dedup."""
+        stmt = select(UserPii.user_id).where(UserPii.bvn_lookup == bvn_lookup)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def set_bvn_verified(self, user_id: UUID, *, bvn_hash: str, bvn_lookup: str) -> None:
+        """Persist the BVN hashes and advance verified_status.
+
+        Writes only the bcrypt hash and the HMAC lookup — never the BVN.
+        verified_status moves to id_verified (unless already fully_verified).
+        """
+        pii = await self._session.get(UserPii, user_id)
+        if pii is not None:
+            pii.bvn_hash = bvn_hash
+            pii.bvn_lookup = bvn_lookup
+            pii.updated_at = datetime.now(UTC)
+        user = await self._session.get(User, user_id)
+        if user is not None and user.verified_status != "fully_verified":
+            user.verified_status = "id_verified"

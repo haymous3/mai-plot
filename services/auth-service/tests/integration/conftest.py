@@ -22,6 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.adapters.bvn import InMemoryBvnVerifier
 from app.adapters.termii import InMemoryTermiiClient
 from app.config import get_settings
 from app.db import dispose_engine
@@ -73,6 +74,18 @@ async def termii_fake() -> AsyncIterator[InMemoryTermiiClient]:
     app.dependency_overrides[get_termii] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_termii, None)
+
+
+@pytest_asyncio.fixture
+async def bvn_fake() -> AsyncIterator[InMemoryBvnVerifier]:
+    """Bind a fresh InMemoryBvnVerifier (defaults to a 'verified' outcome)."""
+    from app.dependencies import get_bvn_verifier
+    from app.main import app
+
+    fake = InMemoryBvnVerifier()
+    app.dependency_overrides[get_bvn_verifier] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_bvn_verifier, None)
 
 
 @pytest_asyncio.fixture

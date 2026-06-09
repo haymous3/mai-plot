@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_bvn_verification_service,
     get_current_user,
     get_login_service,
     get_logout_service,
@@ -21,6 +22,8 @@ from app.dependencies import (
     get_token_refresh_service,
 )
 from app.schemas.auth import (
+    BvnVerifyRequest,
+    BvnVerifyResponse,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -34,6 +37,12 @@ from app.schemas.auth import (
     UserPublic,
 )
 from app.security import CurrentUser
+from app.services.bvn import InvalidBvnError
+from app.services.bvn_verification import (
+    BvnAlreadyVerified,
+    BvnVerificationService,
+    BvnVerificationUnavailable,
+)
 from app.services.login import InvalidCredentials, LoginService
 from app.services.logout import LogoutService
 from app.services.otp_verification import (
@@ -204,3 +213,35 @@ async def logout(
 ) -> LogoutResponse:
     await service.logout(user_id=current_user.user_id, refresh_token=body.refresh_token)
     return LogoutResponse()
+
+
+@router.post("/verify/bvn", status_code=status.HTTP_202_ACCEPTED, response_model=BvnVerifyResponse)
+async def verify_bvn(
+    body: BvnVerifyRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[BvnVerificationService, Depends(get_bvn_verification_service)],
+) -> BvnVerifyResponse | JSONResponse:
+    try:
+        result = await service.verify(user_id=current_user.user_id, bvn=body.bvn)
+    except InvalidBvnError:
+        # Never echo the BVN value in the error. Literal 422 sidesteps the
+        # status.HTTP_422_* deprecation rename (see main.py).
+        return _error(
+            422,
+            "BVN_FORMAT_INVALID",
+            "BVN must be exactly 11 digits.",
+        )
+    except BvnAlreadyVerified:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "BVN_ALREADY_VERIFIED",
+            "This BVN has already been verified.",
+        )
+    except BvnVerificationUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "BVN_VERIFICATION_UNAVAILABLE",
+            "BVN verification is temporarily unavailable. Please retry.",
+        )
+
+    return BvnVerifyResponse(message="BVN verification initiated", status=result.status)

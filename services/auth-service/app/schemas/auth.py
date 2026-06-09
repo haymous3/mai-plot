@@ -123,6 +123,20 @@ class LogoutResponse(BaseModel):
     message: str = "Logged out successfully"
 
 
+class BvnVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Accepted as a bounded free string (no regex): format is validated in
+    # the service so the 422 carries BVN_FORMAT_INVALID and the BVN value is
+    # never echoed back in a Pydantic validation error.
+    bvn: str = Field(min_length=1, max_length=64)
+
+
+class BvnVerifyResponse(BaseModel):
+    message: str = "BVN verification initiated"
+    status: str = "pending"
+
+
 class ErrorResponse(BaseModel):
     """Matches the standard error envelope in api-contracts.md."""
 

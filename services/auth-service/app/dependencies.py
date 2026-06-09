@@ -14,6 +14,7 @@ from fastapi import Depends, Header
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.bvn import BvnVerifier, build_bvn_verifier
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
 from app.db import get_session
@@ -22,6 +23,7 @@ from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.services.bvn_verification import BvnVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
@@ -35,6 +37,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
 _termii: TermiiClient | None = None
+_bvn_verifier: BvnVerifier | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -68,8 +71,22 @@ async def get_termii(settings: SettingsDep) -> TermiiClient:
     return _termii
 
 
+async def get_bvn_verifier(settings: SettingsDep) -> BvnVerifier:
+    """Process-wide BVN verifier. The factory picks fake vs real bureau."""
+    global _bvn_verifier
+    if _bvn_verifier is None:
+        _bvn_verifier = build_bvn_verifier(
+            use_fake=settings.bvn_use_fake,
+            api_url=settings.bvn_api_url,
+            api_key=settings.bvn_api_key,
+            timeout_seconds=settings.bvn_timeout_seconds,
+        )
+    return _bvn_verifier
+
+
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
+BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 
 
 def _user_repo(session: SessionDep) -> UserRepository:
@@ -164,6 +181,18 @@ def get_logout_service(
     jwt_service: Annotated[JwtService, Depends(_jwt_service)],
 ) -> LogoutService:
     return LogoutService(refresh_tokens=refresh_tokens, jwt=jwt_service)
+
+
+def get_bvn_verification_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    verifier: BvnVerifierDep,
+    settings: SettingsDep,
+) -> BvnVerificationService:
+    return BvnVerificationService(
+        users=users,
+        verifier=verifier,
+        pepper=settings.bvn_pepper,
+    )
 
 
 async def get_current_user(
