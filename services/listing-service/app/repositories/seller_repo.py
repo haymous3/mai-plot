@@ -28,6 +28,14 @@ class SellerEligibility:
     has_identity_document: bool
 
 
+@dataclass(frozen=True)
+class SellerPublic:
+    """The non-sensitive seller fields shown on a listing detail page."""
+
+    authority_type: str | None
+    poa_owner_name: str | None
+
+
 class SellerRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -58,4 +66,22 @@ class SellerRepository:
             poa_verified_status=row.poa_verified_status,
             verified_status=row.verified_status,
             has_identity_document=bool(row.has_identity_document),
+        )
+
+    async def get_seller_public(self, seller_id: UUID) -> SellerPublic | None:
+        """Public seller fields for a listing detail page (no contact PII)."""
+        stmt = text(
+            """
+            SELECT u.seller_authority_type, p.poa_document_owner_name AS poa_owner_name
+            FROM users u
+            LEFT JOIN user_pii p ON p.user_id = u.id
+            WHERE u.id = :sid AND u.deleted_at IS NULL
+            """
+        )
+        row = (await self._session.execute(stmt, {"sid": seller_id})).first()
+        if row is None:
+            return None
+        return SellerPublic(
+            authority_type=row.seller_authority_type,
+            poa_owner_name=row.poa_owner_name,
         )
