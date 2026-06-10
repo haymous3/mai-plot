@@ -1,8 +1,10 @@
 """AuditLog — append-only system audit trail (data-model.md §19).
 
-Rows are INSERT-only: the repository never updates or deletes them. The
-old_value/new_value JSON columns capture state transitions (e.g. a PoA
-document upload moving poa_verified_status not_applicable -> pending).
+The audit_log TABLE is owned and created by analytics-service (migration
+0001_create_analytics_tables), which also installs BEFORE UPDATE/DELETE
+triggers enforcing append-only. auth-service does NOT create the table — it
+only maps this ORM onto the shared table to INSERT rows (e.g. poa.uploaded).
+The repository never updates or deletes, so the triggers are never tripped.
 """
 
 from __future__ import annotations
