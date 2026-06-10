@@ -48,6 +48,31 @@ class CreateListingResponse(BaseModel):
     status: str = "pending_review"
 
 
+class UpdateListingRequest(BaseModel):
+    """Partial update — every field optional. Only fields the client actually
+    sends are applied (the route uses model_dump(exclude_unset=True)), so an
+    omitted field is left unchanged while an explicit null clears it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    property_type: PropertyType | None = None
+    description: str | None = Field(default=None, max_length=10_000)
+    address_text: str | None = Field(default=None, min_length=1)
+    location: GeoPoint | None = None
+    lga: str | None = Field(default=None, min_length=1, max_length=100)
+    state: str | None = Field(default=None, min_length=1, max_length=50)
+    size_sqm: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    asking_price_kobo: int | None = Field(default=None, gt=0)
+    sale_type: SaleType | None = None
+    urgency_tag: UrgencyTag | None = None
+
+
+class UpdateListingResponse(BaseModel):
+    listing_id: UUID
+    status: str
+
+
 # ---- Feed (GET /listings) -------------------------------------------------
 
 SortOption = Literal["urgency", "recency", "price_asc", "price_desc"]

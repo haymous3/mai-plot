@@ -13,10 +13,10 @@ from app.repositories.seller_repo import SellerEligibility
 from app.services.listing_create import (
     BvnRequired,
     CreateListingInput,
-    InvalidUrgency,
     ListingCreateService,
     NotSeller,
 )
+from app.services.listing_rules import InvalidUrgency
 from app.services.poa_guard import PoaNotVerified
 
 _OWNER_VERIFIED = SellerEligibility(

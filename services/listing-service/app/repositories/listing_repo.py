@@ -7,14 +7,34 @@ handlers never touch SQLAlchemy directly.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PropertyListing
+
+# Columns a PATCH may set. Keys of the update dict are validated against this
+# so the dynamic UPDATE can only touch intended columns.
+_UPDATABLE_COLUMNS = frozenset(
+    {
+        "title",
+        "description",
+        "property_type",
+        "address_text",
+        "location",
+        "lga",
+        "state",
+        "size_sqm",
+        "asking_price_kobo",
+        "sale_type",
+        "urgency_tag",
+        "expires_at",
+    }
+)
 
 # Whitelisted ORDER BY fragments — keys come from a Literal in the schema, so
 # the interpolated SQL is from a fixed set (values are always bound params).
@@ -104,6 +124,13 @@ class MediaRow:
     media_type: str
     cdn_url: str
     sort_order: int
+
+
+@dataclass(frozen=True)
+class OwnerStatus:
+    seller_id: UUID
+    status: str
+    sale_type: str
 
 
 class ListingRepository:
@@ -245,6 +272,35 @@ class ListingRepository:
             MediaRow(media_type=r.media_type, cdn_url=r.cdn_url, sort_order=r.sort_order)
             for r in rows
         ]
+
+    async def get_owner_status(self, listing_id: UUID) -> OwnerStatus | None:
+        """Owner + status + sale_type for a live listing (PATCH auth + rules)."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT seller_id, status, sale_type FROM property_listings "
+                    "WHERE id = :id AND deleted_at IS NULL"
+                ),
+                {"id": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return OwnerStatus(seller_id=row.seller_id, status=row.status, sale_type=row.sale_type)
+
+    async def apply_update(self, listing_id: UUID, updates: dict[str, object]) -> None:
+        """Partial UPDATE of a listing. Only whitelisted columns are set;
+        updated_at is always refreshed. `location` is a PostGIS WKT string —
+        the Geography column's bind processor casts it, same as on create."""
+        safe = {k: v for k, v in updates.items() if k in _UPDATABLE_COLUMNS}
+        if not safe:
+            return
+        stmt = (
+            sa_update(PropertyListing)
+            .where(PropertyListing.id == listing_id)
+            .values({**safe, "updated_at": datetime.now(UTC)})
+        )
+        await self._session.execute(stmt)
 
     async def create(self, listing: NewListing) -> UUID:
         """Insert a listing with status 'pending_review' (the DB default) and

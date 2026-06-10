@@ -18,6 +18,7 @@ from app.dependencies import (
     get_listing_create_service,
     get_listing_detail_service,
     get_listing_query_service,
+    get_listing_update_service,
 )
 from app.repositories.listing_repo import FeedFilters
 from app.schemas.listing import (
@@ -26,17 +27,25 @@ from app.schemas.listing import (
     FeedResponse,
     ListingDetailResponse,
     SortOption,
+    UpdateListingRequest,
+    UpdateListingResponse,
 )
 from app.security import CurrentUser
 from app.services.listing_create import (
     BvnRequired,
     CreateListingInput,
-    InvalidUrgency,
     ListingCreateService,
     NotSeller,
 )
 from app.services.listing_detail import ListingDetailService
 from app.services.listing_query import ListingQueryService
+from app.services.listing_rules import InvalidUrgency
+from app.services.listing_update import (
+    CannotEditSoldListing,
+    ListingNotFound,
+    ListingUpdateService,
+    NotListingOwner,
+)
 from app.services.poa_guard import PoaNotVerified
 
 router = APIRouter(prefix="/listings", tags=["listings"])
@@ -143,3 +152,40 @@ async def create_listing(
         )
 
     return CreateListingResponse(listing_id=result.listing_id, status=result.status)
+
+
+@router.patch("/{listing_id}", response_model=UpdateListingResponse)
+async def update_listing(
+    listing_id: UUID,
+    body: UpdateListingRequest,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ListingUpdateService, Depends(get_listing_update_service)],
+) -> UpdateListingResponse | JSONResponse:
+    # exclude_unset distinguishes an omitted field (leave as-is) from an
+    # explicit null (clear it); the service applies only what was sent.
+    try:
+        result = await service.update(
+            listing_id=listing_id,
+            caller=caller,
+            changes=body.model_dump(exclude_unset=True),
+        )
+    except ListingNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found with that id."
+        )
+    except NotListingOwner:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_LISTING_OWNER",
+            "You can only edit your own listings.",
+        )
+    except CannotEditSoldListing:
+        return _error(422, "CANNOT_EDIT_SOLD_LISTING", "A sold listing can no longer be edited.")
+    except InvalidUrgency:
+        return _error(
+            422,
+            "URGENCY_TAG_REQUIRED_FOR_DISTRESS",
+            "A distress sale requires an urgency tag (7_days, 14_days, or 30_days).",
+        )
+
+    return UpdateListingResponse(listing_id=result.listing_id, status=result.status)
