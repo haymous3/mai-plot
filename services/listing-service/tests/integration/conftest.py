@@ -30,7 +30,7 @@ from app.db import dispose_engine
 
 # Tables this service's tests touch, in FK-safe order (CASCADE handles the
 # property_listings partitions and any users-referencing rows).
-_TABLES = ("property_listings", "user_pii", "users")
+_TABLES = ("listing_media", "property_listings", "user_pii", "users")
 
 
 @pytest.fixture
@@ -70,6 +70,19 @@ async def http_client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
     await dispose_engine()
+
+
+@pytest_asyncio.fixture
+async def disable_cache() -> AsyncIterator[None]:
+    """Force the feed/detail endpoints to bypass Redis and read Postgres, so
+    integration assertions are deterministic whether or not CI's Redis is up.
+    The caching path itself is covered by the get_with_fallback unit tests."""
+    from app.dependencies import get_redis
+    from app.main import app
+
+    app.dependency_overrides[get_redis] = lambda: None
+    yield
+    app.dependency_overrides.pop(get_redis, None)
 
 
 @pytest.fixture
@@ -136,6 +149,93 @@ def seed_seller(db_engine: Engine) -> Callable[..., UUID]:
                 {"id": user_id, "phone": phone, "name": "Test Seller", "bvn": bvn_hash},
             )
         return user_id
+
+    return _seed
+
+
+@pytest.fixture
+def seed_listing(db_engine: Engine) -> Callable[..., UUID]:
+    """Insert a property_listings row directly and return its id."""
+
+    def _seed(
+        *,
+        seller_id: UUID,
+        state: str = "Lagos",
+        lga: str = "Ikeja",
+        sale_type: str = "normal",
+        status: str = "active",
+        asking_price_kobo: int = 5_000_000_000,
+        property_type: str = "land",
+        title: str = "Test Plot",
+        urgency_tag: str | None = None,
+        doc_verification_status: str = "not_submitted",
+        lat: float = 6.5,
+        lng: float = 3.4,
+    ) -> UUID:
+        listing_id = uuid4()
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO property_listings
+                        (id, seller_id, property_type, title, address_text, location,
+                         lga, state, asking_price_kobo, sale_type, urgency_tag, status,
+                         doc_verification_status)
+                    VALUES
+                        (:id, :sid, :ptype, :title, :addr,
+                         ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                         :lga, :state, :price, :stype, :urg, :status, :doc)
+                    """
+                ),
+                {
+                    "id": listing_id,
+                    "sid": seller_id,
+                    "ptype": property_type,
+                    "title": title,
+                    "addr": "1 Demo St, Lagos",
+                    "lng": lng,
+                    "lat": lat,
+                    "lga": lga,
+                    "state": state,
+                    "price": asking_price_kobo,
+                    "stype": sale_type,
+                    "urg": urgency_tag,
+                    "status": status,
+                    "doc": doc_verification_status,
+                },
+            )
+        return listing_id
+
+    return _seed
+
+
+@pytest.fixture
+def seed_media(db_engine: Engine) -> Callable[..., None]:
+    """Insert a listing_media row for a listing."""
+
+    def _seed(
+        *,
+        listing_id: UUID,
+        media_type: str = "photo",
+        cdn_url: str = "https://cdn.maiplot.ng/x.jpg",
+        sort_order: int = 0,
+    ) -> None:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO listing_media (listing_id, media_type, s3_key, cdn_url, sort_order)
+                    VALUES (:lid, :mtype, :s3, :cdn, :sort)
+                    """
+                ),
+                {
+                    "lid": listing_id,
+                    "mtype": media_type,
+                    "s3": "media/x.jpg",
+                    "cdn": cdn_url,
+                    "sort": sort_order,
+                },
+            )
 
     return _seed
 

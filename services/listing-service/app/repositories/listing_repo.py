@@ -11,9 +11,19 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PropertyListing
+
+# Whitelisted ORDER BY fragments — keys come from a Literal in the schema, so
+# the interpolated SQL is from a fixed set (values are always bound params).
+_SORT_SQL = {
+    "recency": "pl.created_at DESC",
+    "price_asc": "pl.asking_price_kobo ASC",
+    "price_desc": "pl.asking_price_kobo DESC",
+    "urgency": "(pl.sale_type = 'distress') DESC, pl.expires_at ASC NULLS LAST, pl.created_at DESC",
+}
 
 
 @dataclass(frozen=True)
@@ -36,9 +46,205 @@ class NewListing:
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class FeedFilters:
+    state: str | None = None
+    lga: str | None = None
+    sale_type: str | None = None  # 'distress' | 'normal' | 'all'/None
+    property_type: str | None = None
+    price_min: int | None = None
+    price_max: int | None = None
+    doc_status: str | None = None  # 'verified' | 'all'/None
+    sort: str = "recency"
+    page: int = 1
+    page_size: int = 20
+
+
+@dataclass(frozen=True)
+class FeedRow:
+    id: UUID
+    title: str
+    property_type: str
+    state: str
+    lga: str
+    size_sqm: Decimal | None
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    expires_at: datetime | None
+    status: str
+    doc_verification_status: str
+    view_count: int
+    interest_count: int
+    created_at: datetime
+    seller_authority_type: str | None
+
+
+@dataclass(frozen=True)
+class DetailRow:
+    id: UUID
+    seller_id: UUID
+    title: str
+    description: str | None
+    address_text: str
+    lat: float
+    lng: float
+    size_sqm: Decimal | None
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    expires_at: datetime | None
+    status: str
+    view_count: int
+    interest_count: int
+
+
+@dataclass(frozen=True)
+class MediaRow:
+    media_type: str
+    cdn_url: str
+    sort_order: int
+
+
 class ListingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def list_feed(self, filters: FeedFilters) -> tuple[list[FeedRow], int]:
+        """Active, non-deleted listings matching the filters, paginated.
+
+        Joins users for seller_authority_type (shared DB). All user values are
+        bound params; only the column/sort fragments — from a fixed whitelist —
+        are interpolated, so there is no injection surface.
+        """
+        where = ["pl.deleted_at IS NULL", "pl.status = 'active'"]
+        params: dict[str, object] = {}
+        if filters.state:
+            where.append("pl.state = :state")
+            params["state"] = filters.state
+        if filters.lga:
+            where.append("pl.lga = :lga")
+            params["lga"] = filters.lga
+        if filters.sale_type and filters.sale_type != "all":
+            where.append("pl.sale_type = :sale_type")
+            params["sale_type"] = filters.sale_type
+        if filters.property_type:
+            where.append("pl.property_type = :ptype")
+            params["ptype"] = filters.property_type
+        if filters.price_min is not None:
+            where.append("pl.asking_price_kobo >= :pmin")
+            params["pmin"] = filters.price_min
+        if filters.price_max is not None:
+            where.append("pl.asking_price_kobo <= :pmax")
+            params["pmax"] = filters.price_max
+        if filters.doc_status == "verified":
+            where.append("pl.doc_verification_status = 'verified'")
+        where_sql = " AND ".join(where)
+        order_sql = _SORT_SQL.get(filters.sort, _SORT_SQL["recency"])
+
+        total = (
+            await self._session.execute(
+                text(f"SELECT COUNT(*) FROM property_listings pl WHERE {where_sql}"), params
+            )
+        ).scalar_one()
+
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT pl.id, pl.title, pl.property_type, pl.state, pl.lga, pl.size_sqm,
+                           pl.asking_price_kobo, pl.sale_type, pl.urgency_tag, pl.expires_at,
+                           pl.status, pl.doc_verification_status, pl.view_count,
+                           pl.interest_count, pl.created_at, u.seller_authority_type
+                    FROM property_listings pl
+                    LEFT JOIN users u ON u.id = pl.seller_id
+                    WHERE {where_sql}
+                    ORDER BY {order_sql}
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {
+                    **params,
+                    "limit": filters.page_size,
+                    "offset": (filters.page - 1) * filters.page_size,
+                },
+            )
+        ).all()
+
+        items = [
+            FeedRow(
+                id=r.id,
+                title=r.title,
+                property_type=r.property_type,
+                state=r.state,
+                lga=r.lga,
+                size_sqm=r.size_sqm,
+                asking_price_kobo=r.asking_price_kobo,
+                sale_type=r.sale_type,
+                urgency_tag=r.urgency_tag,
+                expires_at=r.expires_at,
+                status=r.status,
+                doc_verification_status=r.doc_verification_status,
+                view_count=r.view_count,
+                interest_count=r.interest_count,
+                created_at=r.created_at,
+                seller_authority_type=r.seller_authority_type,
+            )
+            for r in rows
+        ]
+        return items, int(total)
+
+    async def get_detail(self, listing_id: UUID) -> DetailRow | None:
+        """A single non-deleted listing with lat/lng extracted from PostGIS."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pl.id, pl.seller_id, pl.title, pl.description, pl.address_text,
+                           ST_Y(pl.location::geometry) AS lat, ST_X(pl.location::geometry) AS lng,
+                           pl.size_sqm, pl.asking_price_kobo, pl.sale_type, pl.urgency_tag,
+                           pl.expires_at, pl.status, pl.view_count, pl.interest_count
+                    FROM property_listings pl
+                    WHERE pl.id = :id AND pl.deleted_at IS NULL
+                    """
+                ),
+                {"id": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return DetailRow(
+            id=row.id,
+            seller_id=row.seller_id,
+            title=row.title,
+            description=row.description,
+            address_text=row.address_text,
+            lat=row.lat,
+            lng=row.lng,
+            size_sqm=row.size_sqm,
+            asking_price_kobo=row.asking_price_kobo,
+            sale_type=row.sale_type,
+            urgency_tag=row.urgency_tag,
+            expires_at=row.expires_at,
+            status=row.status,
+            view_count=row.view_count,
+            interest_count=row.interest_count,
+        )
+
+    async def list_media(self, listing_id: UUID) -> list[MediaRow]:
+        rows = (
+            await self._session.execute(
+                text(
+                    "SELECT media_type, cdn_url, sort_order FROM listing_media "
+                    "WHERE listing_id = :id ORDER BY sort_order"
+                ),
+                {"id": listing_id},
+            )
+        ).all()
+        return [
+            MediaRow(media_type=r.media_type, cdn_url=r.cdn_url, sort_order=r.sort_order)
+            for r in rows
+        ]
 
     async def create(self, listing: NewListing) -> UUID:
         """Insert a listing with status 'pending_review' (the DB default) and

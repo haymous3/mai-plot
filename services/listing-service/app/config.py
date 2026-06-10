@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
     database_url: str = "postgresql+asyncpg://maiplot:change-me-local@localhost:5432/maiplot"
+    redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret: str = "change-me-to-a-long-random-string"
     jwt_issuer: str = "maiplot-platform"
+
+    # Cache TTLs (CLAUDE.md §6). Feed is short-lived; detail a little longer.
+    feed_cache_ttl_seconds: int = 60
+    listing_cache_ttl_seconds: int = 300
 
 
 @lru_cache(maxsize=1)
