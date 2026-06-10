@@ -151,6 +151,15 @@ class NinVerifyResponse(BaseModel):
     status: str = "pending"
 
 
+class PoaUploadResponse(BaseModel):
+    # The S3 key is an internal, private reference (not a URL). Returned so
+    # the client can correlate the upload; the document is only ever served
+    # later via a short-TTL pre-signed URL, never this key directly.
+    message: str = "PoA document uploaded; awaiting verification"
+    poa_verified_status: str = "pending"
+    s3_key: str
+
+
 class ErrorResponse(BaseModel):
     """Matches the standard error envelope in api-contracts.md."""
 

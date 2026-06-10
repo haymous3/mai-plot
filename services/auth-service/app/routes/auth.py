@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
@@ -19,6 +19,7 @@ from app.dependencies import (
     get_logout_service,
     get_nin_verification_service,
     get_otp_verification_service,
+    get_poa_upload_service,
     get_registration_service,
     get_token_refresh_service,
 )
@@ -33,6 +34,7 @@ from app.schemas.auth import (
     NinVerifyResponse,
     OtpVerifyRequest,
     OtpVerifyResponse,
+    PoaUploadResponse,
     RegisterRequest,
     RegisterResponse,
     TokenRefreshRequest,
@@ -59,6 +61,13 @@ from app.services.otp_verification import (
     OtpExpired,
     OtpInvalid,
     OtpVerificationService,
+)
+from app.services.poa import InvalidPoaDocument
+from app.services.poa_upload import (
+    PoaAlreadySubmitted,
+    PoaNotEligible,
+    PoaStorageUnavailable,
+    PoaUploadService,
 )
 from app.services.registration import (
     OtpDispatchFailed,
@@ -294,3 +303,48 @@ async def verify_nin(
         )
 
     return NinVerifyResponse(message="NIN verification initiated", status=result.status)
+
+
+@router.post("/poa/upload", status_code=status.HTTP_201_CREATED, response_model=PoaUploadResponse)
+async def upload_poa(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[PoaUploadService, Depends(get_poa_upload_service)],
+    file: Annotated[UploadFile, File(description="PoA document — PDF or JPEG")],
+) -> PoaUploadResponse | JSONResponse:
+    # Read the bytes once; the service validates size + magic-number type
+    # server-side (the client-supplied content type/filename is not trusted).
+    data = await file.read()
+    client_ip = request.client.host if request.client else None
+    try:
+        result = await service.upload(
+            user_id=current_user.user_id,
+            data=data,
+            ip_address=client_ip,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except PoaNotEligible:
+        # Only sellers with authority_type=power_of_attorney may upload a PoA.
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "POA_NOT_ELIGIBLE",
+            "PoA upload is only available to sellers with power-of-attorney authority.",
+        )
+    except InvalidPoaDocument as exc:
+        # Never echo the document bytes. Literal 422 sidesteps the
+        # status.HTTP_422_* deprecation rename (see main.py).
+        return _error(422, exc.code, str(exc))
+    except PoaAlreadySubmitted:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "POA_ALREADY_SUBMITTED",
+            "A PoA document is already pending review or verified.",
+        )
+    except PoaStorageUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "POA_STORAGE_UNAVAILABLE",
+            "Document storage is temporarily unavailable. Please retry.",
+        )
+
+    return PoaUploadResponse(poa_verified_status=result.status, s3_key=result.s3_key)

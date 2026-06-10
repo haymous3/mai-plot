@@ -15,10 +15,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.bvn import BvnVerifier, build_bvn_verifier
+from app.adapters.document_storage import DocumentStorage, build_document_storage
 from app.adapters.nin import NinVerifier, build_nin_verifier
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
@@ -30,6 +32,7 @@ from app.services.login import LoginService
 from app.services.logout import LogoutService
 from app.services.nin_verification import NinVerificationService
 from app.services.otp_verification import OtpVerificationService
+from app.services.poa_upload import PoaUploadService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
 from app.services.token_refresh import TokenRefreshService
@@ -41,6 +44,7 @@ _redis: Redis | None = None
 _termii: TermiiClient | None = None
 _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
+_document_storage: DocumentStorage | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -100,14 +104,33 @@ async def get_nin_verifier(settings: SettingsDep) -> NinVerifier:
     return _nin_verifier
 
 
+async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
+    """Process-wide PoA document storage. The factory picks the in-memory
+    fake (local/CI) vs the real private-bucket S3 client (production)."""
+    global _document_storage
+    if _document_storage is None:
+        _document_storage = build_document_storage(
+            use_fake=settings.poa_storage_use_fake,
+            bucket=settings.poa_s3_bucket,
+            region=settings.poa_s3_region,
+            endpoint_url=settings.poa_s3_endpoint_url,
+        )
+    return _document_storage
+
+
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]
+DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
 
 
 def _user_repo(session: SessionDep) -> UserRepository:
     return UserRepository(session)
+
+
+def _audit_repo(session: SessionDep) -> AuditLogRepository:
+    return AuditLogRepository(session)
 
 
 def _otp_repo(session: SessionDep) -> OtpRepository:
@@ -221,6 +244,20 @@ def get_nin_verification_service(
         users=users,
         verifier=verifier,
         pepper=settings.nin_pepper,
+    )
+
+
+def get_poa_upload_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    storage: DocumentStorageDep,
+    settings: SettingsDep,
+) -> PoaUploadService:
+    return PoaUploadService(
+        users=users,
+        audit=audit,
+        storage=storage,
+        max_upload_bytes=settings.poa_max_upload_bytes,
     )
 
 

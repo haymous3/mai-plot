@@ -43,6 +43,20 @@ class UserAuthority:
     seller_authority_type: str | None
 
 
+@dataclass(frozen=True)
+class PoaState:
+    """Role + authority + current PoA verification status, plus whether a
+    document is already on file. Drives the PoA upload eligibility/conflict
+    checks. (Registration pre-sets poa_verified_status='pending' for PoA
+    sellers before any upload, so the conflict check keys off has_document,
+    not the status, to allow the first upload through.)"""
+
+    role: str
+    seller_authority_type: str | None
+    poa_verified_status: str
+    has_document: bool
+
+
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -166,6 +180,45 @@ class UserRepository:
         """True if this user already has a NIN on file."""
         stmt = select(UserPii.nin_hash).where(UserPii.user_id == user_id)
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def get_poa_state(self, user_id: UUID) -> PoaState | None:
+        """Role + authority + PoA status + whether a document is on file, for
+        a live user (PoA upload gate). Joins user_pii for the document key."""
+        stmt = (
+            select(
+                User.role,
+                User.seller_authority_type,
+                User.poa_verified_status,
+                UserPii.poa_document_s3_key,
+            )
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+            )
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return PoaState(
+            role=row.role,
+            seller_authority_type=row.seller_authority_type,
+            poa_verified_status=row.poa_verified_status,
+            has_document=row.poa_document_s3_key is not None,
+        )
+
+    async def set_poa_document(self, user_id: UUID, *, s3_key: str) -> None:
+        """Record the uploaded PoA document key and move poa_verified_status
+        to 'pending' (awaiting legal-team review). Only the private S3 key is
+        stored — never the document bytes."""
+        pii = await self._session.get(UserPii, user_id)
+        if pii is not None:
+            pii.poa_document_s3_key = s3_key
+            pii.updated_at = datetime.now(UTC)
+        user = await self._session.get(User, user_id)
+        if user is not None:
+            user.poa_verified_status = "pending"
 
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
         """Return the user_id that already owns this NIN, or None."""

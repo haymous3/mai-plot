@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     nin_timeout_seconds: float = 5.0
     nin_pepper: str = "change-me-to-a-long-random-nin-pepper"
 
+    # PoA document upload (SCRUM-48). PoA sellers upload a Power-of-Attorney
+    # document to the PRIVATE documents bucket; it is served later only via
+    # short-TTL pre-signed URLs. The in-memory fake storage is the default so
+    # local + CI never reach S3; production sets poa_storage_use_fake=false
+    # plus the real bucket/region (endpoint_url is for localstack/minio dev).
+    poa_storage_use_fake: bool = True
+    poa_s3_bucket: str = "maiplot-documents-local"
+    poa_s3_region: str = "af-south-1"
+    poa_s3_endpoint_url: str = ""
+    poa_max_upload_bytes: int = 10 * 1024 * 1024
+    poa_presign_ttl_seconds: int = 900
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
