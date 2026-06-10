@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     bvn_timeout_seconds: float = 5.0
     bvn_pepper: str = "change-me-to-a-long-random-bvn-pepper"
 
+    # NIN verification (SCRUM-47). Same shape as BVN. nin_pepper is a
+    # separate server secret for the deterministic nin_lookup dedup column.
+    nin_use_fake: bool = True
+    nin_api_url: str = ""
+    nin_api_key: str = ""
+    nin_timeout_seconds: float = 5.0
+    nin_pepper: str = "change-me-to-a-long-random-nin-pepper"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

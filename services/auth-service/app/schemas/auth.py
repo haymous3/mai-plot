@@ -137,6 +137,20 @@ class BvnVerifyResponse(BaseModel):
     status: str = "pending"
 
 
+class NinVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Bounded free string (no regex): format is validated in the service so
+    # the 422 carries NIN_FORMAT_INVALID and the NIN is never echoed in a
+    # Pydantic validation error.
+    nin: str = Field(min_length=1, max_length=64)
+
+
+class NinVerifyResponse(BaseModel):
+    message: str = "NIN verification initiated"
+    status: str = "pending"
+
+
 class ErrorResponse(BaseModel):
     """Matches the standard error envelope in api-contracts.md."""
 

@@ -35,6 +35,14 @@ class UserCore:
     verified_status: str
 
 
+@dataclass(frozen=True)
+class UserAuthority:
+    """Role + seller authority, for the NIN eligibility gate."""
+
+    role: str
+    seller_authority_type: str | None
+
+
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -137,6 +145,40 @@ class UserRepository:
         if pii is not None:
             pii.bvn_hash = bvn_hash
             pii.bvn_lookup = bvn_lookup
+            pii.updated_at = datetime.now(UTC)
+        user = await self._session.get(User, user_id)
+        if user is not None and user.verified_status != "fully_verified":
+            user.verified_status = "id_verified"
+
+    async def get_authority(self, user_id: UUID) -> UserAuthority | None:
+        """Role + seller_authority_type for a live user (NIN eligibility)."""
+        stmt = select(User.role, User.seller_authority_type).where(
+            User.id == user_id,
+            User.deleted_at.is_(None),
+            User.is_active.is_(True),
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return UserAuthority(role=row.role, seller_authority_type=row.seller_authority_type)
+
+    async def has_nin(self, user_id: UUID) -> bool:
+        """True if this user already has a NIN on file."""
+        stmt = select(UserPii.nin_hash).where(UserPii.user_id == user_id)
+        return (await self._session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
+        """Return the user_id that already owns this NIN, or None."""
+        stmt = select(UserPii.user_id).where(UserPii.nin_lookup == nin_lookup)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def set_nin_verified(self, user_id: UUID, *, nin_hash: str, nin_lookup: str) -> None:
+        """Persist the NIN hashes and advance verified_status to id_verified
+        (unless already fully_verified). Writes only hashes — never the NIN."""
+        pii = await self._session.get(UserPii, user_id)
+        if pii is not None:
+            pii.nin_hash = nin_hash
+            pii.nin_lookup = nin_lookup
             pii.updated_at = datetime.now(UTC)
         user = await self._session.get(User, user_id)
         if user is not None and user.verified_status != "fully_verified":
