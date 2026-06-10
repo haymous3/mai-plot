@@ -17,6 +17,7 @@ from app.dependencies import (
     get_current_user,
     get_login_service,
     get_logout_service,
+    get_nin_verification_service,
     get_otp_verification_service,
     get_registration_service,
     get_token_refresh_service,
@@ -28,6 +29,8 @@ from app.schemas.auth import (
     LoginResponse,
     LogoutRequest,
     LogoutResponse,
+    NinVerifyRequest,
+    NinVerifyResponse,
     OtpVerifyRequest,
     OtpVerifyResponse,
     RegisterRequest,
@@ -45,6 +48,13 @@ from app.services.bvn_verification import (
 )
 from app.services.login import InvalidCredentials, LoginService
 from app.services.logout import LogoutService
+from app.services.nin import InvalidNinError
+from app.services.nin_verification import (
+    NinAlreadyVerified,
+    NinNotEligible,
+    NinVerificationService,
+    NinVerificationUnavailable,
+)
 from app.services.otp_verification import (
     OtpExpired,
     OtpInvalid,
@@ -245,3 +255,42 @@ async def verify_bvn(
         )
 
     return BvnVerifyResponse(message="BVN verification initiated", status=result.status)
+
+
+@router.post("/verify/nin", status_code=status.HTTP_202_ACCEPTED, response_model=NinVerifyResponse)
+async def verify_nin(
+    body: NinVerifyRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[NinVerificationService, Depends(get_nin_verification_service)],
+) -> NinVerifyResponse | JSONResponse:
+    try:
+        result = await service.verify(user_id=current_user.user_id, nin=body.nin)
+    except NinNotEligible:
+        # Only sellers with authority_type=owner may verify a NIN.
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NIN_NOT_ELIGIBLE",
+            "NIN verification is only available to property owners (seller, owner authority).",
+        )
+    except InvalidNinError:
+        # Never echo the NIN value in the error. Literal 422 sidesteps the
+        # status.HTTP_422_* deprecation rename (see main.py).
+        return _error(
+            422,
+            "NIN_FORMAT_INVALID",
+            "NIN must be exactly 11 digits.",
+        )
+    except NinAlreadyVerified:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "NIN_ALREADY_VERIFIED",
+            "This NIN has already been verified.",
+        )
+    except NinVerificationUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "NIN_VERIFICATION_UNAVAILABLE",
+            "NIN verification is temporarily unavailable. Please retry.",
+        )
+
+    return NinVerifyResponse(message="NIN verification initiated", status=result.status)

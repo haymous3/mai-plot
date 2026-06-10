@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.bvn import BvnVerifier, build_bvn_verifier
+from app.adapters.nin import NinVerifier, build_nin_verifier
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
 from app.db import get_session
@@ -27,6 +28,7 @@ from app.services.bvn_verification import BvnVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
+from app.services.nin_verification import NinVerificationService
 from app.services.otp_verification import OtpVerificationService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
@@ -38,6 +40,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 _redis: Redis | None = None
 _termii: TermiiClient | None = None
 _bvn_verifier: BvnVerifier | None = None
+_nin_verifier: NinVerifier | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -84,9 +87,23 @@ async def get_bvn_verifier(settings: SettingsDep) -> BvnVerifier:
     return _bvn_verifier
 
 
+async def get_nin_verifier(settings: SettingsDep) -> NinVerifier:
+    """Process-wide NIN verifier. The factory picks fake vs real bureau."""
+    global _nin_verifier
+    if _nin_verifier is None:
+        _nin_verifier = build_nin_verifier(
+            use_fake=settings.nin_use_fake,
+            api_url=settings.nin_api_url,
+            api_key=settings.nin_api_key,
+            timeout_seconds=settings.nin_timeout_seconds,
+        )
+    return _nin_verifier
+
+
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
+NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]
 
 
 def _user_repo(session: SessionDep) -> UserRepository:
@@ -192,6 +209,18 @@ def get_bvn_verification_service(
         users=users,
         verifier=verifier,
         pepper=settings.bvn_pepper,
+    )
+
+
+def get_nin_verification_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    verifier: NinVerifierDep,
+    settings: SettingsDep,
+) -> NinVerificationService:
+    return NinVerificationService(
+        users=users,
+        verifier=verifier,
+        pepper=settings.nin_pepper,
     )
 
 

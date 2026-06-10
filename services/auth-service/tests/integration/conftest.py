@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.bvn import InMemoryBvnVerifier
+from app.adapters.nin import InMemoryNinVerifier
 from app.adapters.termii import InMemoryTermiiClient
 from app.config import get_settings
 from app.db import dispose_engine
@@ -86,6 +87,18 @@ async def bvn_fake() -> AsyncIterator[InMemoryBvnVerifier]:
     app.dependency_overrides[get_bvn_verifier] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_bvn_verifier, None)
+
+
+@pytest_asyncio.fixture
+async def nin_fake() -> AsyncIterator[InMemoryNinVerifier]:
+    """Bind a fresh InMemoryNinVerifier (defaults to a 'verified' outcome)."""
+    from app.dependencies import get_nin_verifier
+    from app.main import app
+
+    fake = InMemoryNinVerifier()
+    app.dependency_overrides[get_nin_verifier] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_nin_verifier, None)
 
 
 @pytest_asyncio.fixture

@@ -32,6 +32,8 @@ class UserPii(Base):
     # bvn_hash (bcrypt) verifies, bvn_lookup (HMAC) is the queryable key.
     bvn_lookup: Mapped[str | None] = mapped_column(String(64), default=None, unique=True)
     nin_hash: Mapped[str | None] = mapped_column(String(128), default=None)
+    # Deterministic HMAC-SHA256(nin, pepper) for cross-account dedup; unique.
+    nin_lookup: Mapped[str | None] = mapped_column(String(64), default=None, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
