@@ -23,13 +23,14 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.bvn import InMemoryBvnVerifier
+from app.adapters.document_storage import InMemoryDocumentStorage
 from app.adapters.nin import InMemoryNinVerifier
 from app.adapters.termii import InMemoryTermiiClient
 from app.config import get_settings
 from app.db import dispose_engine
 
 # Match the auth tables the migrations create, in FK-safe order.
-_TABLES = ("refresh_tokens", "auth_credentials", "otp_codes", "user_pii", "users")
+_TABLES = ("audit_log", "refresh_tokens", "auth_credentials", "otp_codes", "user_pii", "users")
 
 
 @pytest.fixture
@@ -99,6 +100,18 @@ async def nin_fake() -> AsyncIterator[InMemoryNinVerifier]:
     app.dependency_overrides[get_nin_verifier] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_nin_verifier, None)
+
+
+@pytest_asyncio.fixture
+async def storage_fake() -> AsyncIterator[InMemoryDocumentStorage]:
+    """Bind a fresh InMemoryDocumentStorage so PoA tests never touch S3."""
+    from app.dependencies import get_document_storage
+    from app.main import app
+
+    fake = InMemoryDocumentStorage()
+    app.dependency_overrides[get_document_storage] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_document_storage, None)
 
 
 @pytest_asyncio.fixture

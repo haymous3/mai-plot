@@ -34,6 +34,11 @@ class UserPii(Base):
     nin_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     # Deterministic HMAC-SHA256(nin, pepper) for cross-account dedup; unique.
     nin_lookup: Mapped[str | None] = mapped_column(String(64), default=None, unique=True)
+    # PoA document (SCRUM-48). Columns shipped in migration 0001; mapped here
+    # when the upload handler first needs them. s3_key points at a PRIVATE
+    # object served only via pre-signed URL — never a public URL.
+    poa_document_s3_key: Mapped[str | None] = mapped_column(String(512), default=None)
+    poa_document_owner_name: Mapped[str | None] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
