@@ -14,22 +14,16 @@ days (business rules §2/§3).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from app.repositories.listing_repo import ListingRepository, NewListing
 from app.repositories.seller_repo import SellerRepository
+from app.services.listing_rules import resolve_urgency_and_expiry
 from app.services.poa_guard import ensure_can_publish
 
 # Identity states that count as "ID verified" for the BVN_REQUIRED gate.
 _ID_VERIFIED_STATUSES = frozenset({"id_verified", "fully_verified"})
-
-# Distress urgency window -> days. Also the set of valid distress tags.
-_URGENCY_DAYS = {"7_days": 7, "14_days": 14, "30_days": 30}
-
-# Normal sales stay active for 90 days, renewable (business rule §3).
-_NORMAL_SALE_DAYS = 90
 
 
 class ListingCreateError(RuntimeError):
@@ -42,10 +36,6 @@ class NotSeller(ListingCreateError):
 
 class BvnRequired(ListingCreateError):
     """Seller has not completed identity (BVN/NIN) verification."""
-
-
-class InvalidUrgency(ListingCreateError):
-    """A distress sale was submitted without an urgency tag."""
 
 
 @dataclass(frozen=True)
@@ -94,7 +84,7 @@ class ListingCreateService:
             poa_verified_status=eligibility.poa_verified_status,
         )
 
-        urgency_tag, expires_at = self._resolve_urgency_and_expiry(
+        urgency_tag, expires_at = resolve_urgency_and_expiry(
             sale_type=data.sale_type, urgency_tag=data.urgency_tag
         )
 
@@ -117,19 +107,3 @@ class ListingCreateService:
             )
         )
         return CreateListingResult(listing_id=listing_id, status="pending_review")
-
-    def _resolve_urgency_and_expiry(
-        self, *, sale_type: str, urgency_tag: str | None
-    ) -> tuple[str | None, datetime]:
-        """Validate the urgency tag against sale_type and derive expiry.
-
-        Distress requires a valid urgency tag and expires at the end of that
-        window; normal sales ignore any urgency tag and run 90 days.
-        """
-        now = datetime.now(UTC)
-        if sale_type == "distress":
-            if urgency_tag not in _URGENCY_DAYS:
-                raise InvalidUrgency()
-            return urgency_tag, now + timedelta(days=_URGENCY_DAYS[urgency_tag])
-        # normal: urgency_tag is not applicable; the DB CHECK requires NULL.
-        return None, now + timedelta(days=_NORMAL_SALE_DAYS)

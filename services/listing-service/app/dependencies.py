@@ -21,6 +21,7 @@ from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_create import ListingCreateService
 from app.services.listing_detail import ListingDetailService
 from app.services.listing_query import ListingQueryService
+from app.services.listing_update import ListingUpdateService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -85,6 +86,13 @@ def get_listing_detail_service(
         sellers=sellers,
         ttl_seconds=settings.listing_cache_ttl_seconds,
     )
+
+
+def get_listing_update_service(
+    redis: RedisDep,
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> ListingUpdateService:
+    return ListingUpdateService(redis=redis, listings=listings)
 
 
 async def get_current_user(
