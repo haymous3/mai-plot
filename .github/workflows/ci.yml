@@ -72,6 +72,11 @@ jobs:
     name: Test (pytest + Postgres + Redis)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Surfaced for the optional Docker Hub login below. Job-level env is
+    # readable in step `if:` conditions (step-level env is not).
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -84,8 +89,31 @@ jobs:
       - name: Sync workspace
         run: uv sync --all-packages
 
+      # Authenticated Docker Hub pulls lift the anonymous rate limit that
+      # causes the postgis/redis pulls below to intermittently time out. Runs
+      # only if the repo has the DOCKERHUB_* secrets set; otherwise skipped
+      # and the retry loop below is the safety net.
+      - name: Log in to Docker Hub (optional)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
       - name: Start postgres + redis
-        run: docker compose up -d postgres redis
+        # Pulling postgis/redis from Docker Hub can hit a transient
+        # "registry-1.docker.io: context deadline exceeded". Retry so a
+        # network blip doesn't fail the whole run.
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose up -d postgres redis; then
+              exit 0
+            fi
+            echo "compose up failed (attempt $attempt) — likely a Docker Hub pull timeout; retrying in 15s"
+            sleep 15
+          done
+          echo "compose up still failing after 3 attempts"
+          exit 1
 
       - name: Wait for postgres healthcheck
         run: |
@@ -150,6 +178,9 @@ jobs:
   build:
     name: Build Docker image (${{ matrix.service }})
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -165,14 +196,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Exports ACTIONS_RUNTIME_TOKEN/URL so `--cache-to type=gha` works in
+      # the raw `docker buildx build` below (build-push-action used to do this
+      # implicitly; the retry wrapper needs it set explicitly).
+      - name: Export GitHub Actions runtime (for the gha build cache)
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.service }}
-        uses: docker/build-push-action@v6
+      # Authenticated pulls of the python:3.12-slim base lift the anonymous
+      # rate limit that intermittently times out the build. Optional — runs
+      # only when the DOCKERHUB_* secrets exist; the retry below is the
+      # secret-free safety net.
+      - name: Log in to Docker Hub (optional)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
         with:
-          context: ./services/${{ matrix.service }}
-          push: false
-          tags: maiplot-${{ matrix.service }}:ci
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Build ${{ matrix.service }} (retry on Docker Hub flake)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 20
+          # Raw buildx (not build-push-action) so the retry action can re-run
+          # it on a transient base-image pull timeout. Same gha cache scope as
+          # before; no --load/--push, so it just verifies the build compiles.
+          command: >
+            docker buildx build ./services/${{ matrix.service }}
+            --tag maiplot-${{ matrix.service }}:ci
+            --cache-from type=gha,scope=${{ matrix.service }}
+            --cache-to type=gha,mode=max,scope=${{ matrix.service }}
