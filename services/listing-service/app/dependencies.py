@@ -12,6 +12,7 @@ from fastapi import Depends, Header
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.media_storage import MediaStorage, build_media_storage
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.listing_repo import ListingRepository
@@ -22,11 +23,31 @@ from app.services.listing_create import ListingCreateService
 from app.services.listing_detail import ListingDetailService
 from app.services.listing_query import ListingQueryService
 from app.services.listing_update import ListingUpdateService
+from app.services.media_upload import MediaUploadService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
+_media_storage: MediaStorage | None = None
+
+
+async def get_media_storage(settings: SettingsDep) -> MediaStorage:
+    """Process-wide media storage. The factory picks the in-memory fake
+    (local/CI) vs the real public-bucket S3 client (production)."""
+    global _media_storage
+    if _media_storage is None:
+        _media_storage = build_media_storage(
+            use_fake=settings.media_storage_use_fake,
+            bucket=settings.media_s3_bucket,
+            region=settings.media_s3_region,
+            cdn_domain=settings.cloudfront_domain,
+            endpoint_url=settings.media_s3_endpoint_url,
+        )
+    return _media_storage
+
+
+MediaStorageDep = Annotated[MediaStorage, Depends(get_media_storage)]
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -93,6 +114,23 @@ def get_listing_update_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
 ) -> ListingUpdateService:
     return ListingUpdateService(redis=redis, listings=listings)
+
+
+def get_media_upload_service(
+    redis: RedisDep,
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    storage: MediaStorageDep,
+    settings: SettingsDep,
+) -> MediaUploadService:
+    return MediaUploadService(
+        redis=redis,
+        listings=listings,
+        storage=storage,
+        max_photo_bytes=settings.max_photo_bytes,
+        max_video_bytes=settings.max_video_bytes,
+        max_photos=settings.max_photos_per_listing,
+        max_videos=settings.max_videos_per_listing,
+    )
 
 
 async def get_current_user(
