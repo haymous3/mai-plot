@@ -73,6 +73,20 @@ async def http_client() -> AsyncIterator[AsyncClient]:
 
 
 @pytest_asyncio.fixture
+async def media_storage_fake() -> AsyncIterator[Any]:
+    """Bind a fresh InMemoryMediaStorage so each media test starts clean and
+    can inspect what was stored (the process-wide default is cached)."""
+    from app.adapters.media_storage import InMemoryMediaStorage
+    from app.dependencies import get_media_storage
+    from app.main import app
+
+    fake = InMemoryMediaStorage(cdn_domain="cdn.maiplot.test")
+    app.dependency_overrides[get_media_storage] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_media_storage, None)
+
+
+@pytest_asyncio.fixture
 async def disable_cache() -> AsyncIterator[None]:
     """Force the feed/detail endpoints to bypass Redis and read Postgres, so
     integration assertions are deterministic whether or not CI's Redis is up.

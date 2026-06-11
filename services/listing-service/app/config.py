@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     feed_cache_ttl_seconds: int = 60
     listing_cache_ttl_seconds: int = 300
 
+    # Listing media (SCRUM-22). Photos/videos are PUBLIC — stored in the media
+    # bucket and served via CloudFront (cdn_url is precomputed at upload), NOT
+    # via pre-signed URLs (that pattern is for private PoA/legal documents).
+    # In-memory fake storage is the default so local/CI never reach S3.
+    media_storage_use_fake: bool = True
+    media_s3_bucket: str = "maiplot-media-local"
+    media_s3_region: str = "af-south-1"
+    media_s3_endpoint_url: str = ""
+    cloudfront_domain: str = "cdn.maiplot.local"
+    max_photo_bytes: int = 5 * 1024 * 1024
+    max_video_bytes: int = 200 * 1024 * 1024
+    max_photos_per_listing: int = 15
+    max_videos_per_listing: int = 1
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

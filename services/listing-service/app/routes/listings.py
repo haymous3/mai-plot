@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
@@ -19,6 +19,7 @@ from app.dependencies import (
     get_listing_detail_service,
     get_listing_query_service,
     get_listing_update_service,
+    get_media_upload_service,
 )
 from app.repositories.listing_repo import FeedFilters
 from app.schemas.listing import (
@@ -26,6 +27,8 @@ from app.schemas.listing import (
     CreateListingResponse,
     FeedResponse,
     ListingDetailResponse,
+    MediaType,
+    MediaUploadResponse,
     SortOption,
     UpdateListingRequest,
     UpdateListingResponse,
@@ -45,6 +48,12 @@ from app.services.listing_update import (
     ListingNotFound,
     ListingUpdateService,
     NotListingOwner,
+)
+from app.services.media import InvalidMedia
+from app.services.media_upload import (
+    MediaLimitExceeded,
+    MediaStorageUnavailable,
+    MediaUploadService,
 )
 from app.services.poa_guard import PoaNotVerified
 
@@ -189,3 +198,56 @@ async def update_listing(
         )
 
     return UpdateListingResponse(listing_id=result.listing_id, status=result.status)
+
+
+@router.post(
+    "/{listing_id}/media",
+    status_code=status.HTTP_201_CREATED,
+    response_model=MediaUploadResponse,
+)
+async def upload_media(
+    listing_id: UUID,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[MediaUploadService, Depends(get_media_upload_service)],
+    media_type: Annotated[MediaType, Form()],
+    file: Annotated[UploadFile, File(description="Photo (JPEG/PNG) or video (MP4)")],
+    sort_order: Annotated[int, Form(ge=0)] = 0,
+) -> MediaUploadResponse | JSONResponse:
+    # Read the bytes once; the service validates the magic-number type + size
+    # server-side (the client content type/filename is not trusted).
+    data = await file.read()
+    try:
+        result = await service.upload(
+            listing_id=listing_id,
+            caller=caller,
+            media_type=media_type,
+            data=data,
+            sort_order=sort_order,
+        )
+    except ListingNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found with that id."
+        )
+    except NotListingOwner:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_LISTING_OWNER",
+            "You can only add media to your own listings.",
+        )
+    except InvalidMedia as exc:
+        # Never echo the media bytes. Literal 422 sidesteps the deprecation rename.
+        return _error(422, exc.code, str(exc))
+    except MediaLimitExceeded:
+        return _error(
+            422,
+            "MEDIA_LIMIT_EXCEEDED",
+            "This listing already has the maximum number of that media type.",
+        )
+    except MediaStorageUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "MEDIA_STORAGE_UNAVAILABLE",
+            "Media storage is temporarily unavailable. Please retry.",
+        )
+
+    return MediaUploadResponse(media_id=result.media_id, cdn_url=result.cdn_url)

@@ -273,6 +273,52 @@ class ListingRepository:
             for r in rows
         ]
 
+    async def count_media(self, listing_id: UUID, media_type: str) -> int:
+        """How many photos/videos a listing already has (for the per-type cap)."""
+        total = (
+            await self._session.execute(
+                text(
+                    "SELECT COUNT(*) FROM listing_media WHERE listing_id = :id AND media_type = :t"
+                ),
+                {"id": listing_id, "t": media_type},
+            )
+        ).scalar_one()
+        return int(total)
+
+    async def insert_media(
+        self,
+        *,
+        listing_id: UUID,
+        media_type: str,
+        s3_key: str,
+        cdn_url: str,
+        sort_order: int,
+        size_bytes: int,
+    ) -> UUID:
+        """Insert a listing_media row and return its id."""
+        media_id = (
+            await self._session.execute(
+                text(
+                    """
+                    INSERT INTO listing_media
+                        (listing_id, media_type, s3_key, cdn_url, sort_order, size_bytes)
+                    VALUES (:lid, :mtype, :s3, :cdn, :sort, :size)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "lid": listing_id,
+                    "mtype": media_type,
+                    "s3": s3_key,
+                    "cdn": cdn_url,
+                    "sort": sort_order,
+                    "size": size_bytes,
+                },
+            )
+        ).scalar_one()
+        assert isinstance(media_id, UUID)
+        return media_id
+
     async def get_owner_status(self, listing_id: UUID) -> OwnerStatus | None:
         """Owner + status + sale_type for a live listing (PATCH auth + rules)."""
         row = (

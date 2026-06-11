@@ -73,6 +73,14 @@ class UpdateListingResponse(BaseModel):
     status: str
 
 
+MediaType = Literal["photo", "video"]
+
+
+class MediaUploadResponse(BaseModel):
+    media_id: UUID
+    cdn_url: str
+
+
 # ---- Feed (GET /listings) -------------------------------------------------
 
 SortOption = Literal["urgency", "recency", "price_asc", "price_desc"]
