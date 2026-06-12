@@ -134,6 +134,20 @@ class OwnerStatus:
     sale_type: str
 
 
+@dataclass(frozen=True)
+class QueueRow:
+    id: UUID
+    seller_id: UUID
+    title: str
+    state: str
+    lga: str
+    asking_price_kobo: int
+    sale_type: str
+    status: str
+    seller_authority_type: str | None
+    created_at: datetime
+
+
 class ListingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -319,6 +333,81 @@ class ListingRepository:
         ).scalar_one()
         assert isinstance(media_id, UUID)
         return media_id
+
+    async def list_review_queue(
+        self,
+        *,
+        status: str,
+        authority_type: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[QueueRow], int]:
+        """Listings in a given status for the admin review queue. PoA sellers
+        are prioritised (shown first); within that, oldest-first (FIFO)."""
+        where = ["pl.deleted_at IS NULL", "pl.status = :status"]
+        params: dict[str, object] = {"status": status}
+        if authority_type:
+            where.append("u.seller_authority_type = :authority_type")
+            params["authority_type"] = authority_type
+        where_sql = " AND ".join(where)
+
+        total = (
+            await self._session.execute(
+                text(
+                    f"SELECT COUNT(*) FROM property_listings pl "
+                    f"LEFT JOIN users u ON u.id = pl.seller_id WHERE {where_sql}"
+                ),
+                params,
+            )
+        ).scalar_one()
+
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT pl.id, pl.seller_id, pl.title, pl.state, pl.lga,
+                           pl.asking_price_kobo, pl.sale_type, pl.status, pl.created_at,
+                           u.seller_authority_type
+                    FROM property_listings pl
+                    LEFT JOIN users u ON u.id = pl.seller_id
+                    WHERE {where_sql}
+                    ORDER BY (u.seller_authority_type = 'power_of_attorney') DESC,
+                             pl.created_at ASC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {**params, "limit": page_size, "offset": (page - 1) * page_size},
+            )
+        ).all()
+        items = [
+            QueueRow(
+                id=r.id,
+                seller_id=r.seller_id,
+                title=r.title,
+                state=r.state,
+                lga=r.lga,
+                asking_price_kobo=r.asking_price_kobo,
+                sale_type=r.sale_type,
+                status=r.status,
+                seller_authority_type=r.seller_authority_type,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+        return items, int(total)
+
+    async def set_review_status(
+        self, listing_id: UUID, *, new_status: str, rejection_reason: str | None
+    ) -> None:
+        """Apply an admin review decision: set status (+ rejection_reason)."""
+        await self._session.execute(
+            text(
+                "UPDATE property_listings "
+                "SET status = :s, rejection_reason = :r, updated_at = NOW() "
+                "WHERE id = :id AND deleted_at IS NULL"
+            ),
+            {"s": new_status, "r": rejection_reason, "id": listing_id},
+        )
 
     async def get_search_doc(self, listing_id: UUID) -> SearchDoc | None:
         """Build the search-index document for a listing (any status — search

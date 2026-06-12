@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     elasticsearch_url: str = "http://localhost:9200"
     es_listings_index: str = "listings"
 
+    # Admin endpoints require admin JWT AND an IP whitelist (CLAUDE.md). Kong
+    # enforces the IP allowlist at the edge; this app-level check is defence
+    # in depth. Comma-separated IPs; empty = allow any (dev/test default —
+    # production sets the real allowlist).
+    admin_ip_allowlist: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

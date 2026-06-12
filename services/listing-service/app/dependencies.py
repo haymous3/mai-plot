@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,14 +16,17 @@ from app.adapters.media_storage import MediaStorage, build_media_storage
 from app.adapters.search_index import SearchIndex, build_search_index
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.seller_repo import SellerRepository
-from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_queue import AdminQueueService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_create import ListingCreateService
 from app.services.listing_detail import ListingDetailService
 from app.services.listing_indexer import ListingIndexer
 from app.services.listing_query import ListingQueryService
+from app.services.listing_review import ListingReviewService
 from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
 from app.services.media_upload import MediaUploadService
@@ -98,6 +101,10 @@ def _listing_repo(session: SessionDep) -> ListingRepository:
     return ListingRepository(session)
 
 
+def _audit_repo(session: SessionDep) -> AuditLogRepository:
+    return AuditLogRepository(session)
+
+
 def _listing_indexer(
     index: SearchIndexDep,
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
@@ -115,6 +122,20 @@ def get_listing_create_service(
 
 def get_listing_search_service(index: SearchIndexDep) -> ListingSearchService:
     return ListingSearchService(index=index)
+
+
+def get_admin_queue_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> AdminQueueService:
+    return AdminQueueService(listings=listings)
+
+
+def get_listing_review_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
+) -> ListingReviewService:
+    return ListingReviewService(listings=listings, audit=audit, indexer=indexer)
 
 
 def get_listing_query_service(
@@ -205,3 +226,23 @@ async def get_current_user_optional(
     if claims.role is None:
         return None
     return CurrentUser(user_id=claims.user_id, role=claims.role)
+
+
+async def require_admin(
+    request: Request,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    settings: SettingsDep,
+) -> CurrentUser:
+    """Admin gate: a valid admin JWT AND (if configured) a whitelisted IP.
+    CLAUDE.md requires both; Kong enforces the IP allowlist at the edge and
+    this app-level check is defence in depth. Raises AdminAccessError -> 403."""
+    if caller.role != "admin":
+        raise AdminAccessError("ADMIN_FORBIDDEN", "Admin access required.")
+    allowlist = [ip.strip() for ip in settings.admin_ip_allowlist.split(",") if ip.strip()]
+    if allowlist:
+        client_ip = request.client.host if request.client else None
+        if client_ip not in allowlist:
+            raise AdminAccessError(
+                "ADMIN_IP_FORBIDDEN", "Your IP is not permitted for admin access."
+            )
+    return caller
