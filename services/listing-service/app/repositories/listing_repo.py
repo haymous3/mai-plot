@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.search_index import SearchDoc
 from app.models import PropertyListing
 
 # Columns a PATCH may set. Keys of the update dict are validated against this
@@ -318,6 +319,53 @@ class ListingRepository:
         ).scalar_one()
         assert isinstance(media_id, UUID)
         return media_id
+
+    async def get_search_doc(self, listing_id: UUID) -> SearchDoc | None:
+        """Build the search-index document for a listing (any status — search
+        filters to active itself). Joins users for seller_authority_type."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pl.id, pl.title, pl.description, pl.property_type, pl.state, pl.lga,
+                           pl.address_text,
+                           ST_Y(pl.location::geometry) AS lat, ST_X(pl.location::geometry) AS lng,
+                           pl.size_sqm, pl.asking_price_kobo, pl.sale_type, pl.urgency_tag,
+                           pl.expires_at, pl.status, pl.doc_verification_status,
+                           pl.view_count, pl.interest_count, pl.created_at,
+                           u.seller_authority_type
+                    FROM property_listings pl
+                    LEFT JOIN users u ON u.id = pl.seller_id
+                    WHERE pl.id = :id AND pl.deleted_at IS NULL
+                    """
+                ),
+                {"id": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return SearchDoc(
+            id=row.id,
+            title=row.title,
+            description=row.description,
+            property_type=row.property_type,
+            state=row.state,
+            lga=row.lga,
+            address_text=row.address_text,
+            lat=row.lat,
+            lng=row.lng,
+            size_sqm=row.size_sqm,
+            asking_price_kobo=row.asking_price_kobo,
+            sale_type=row.sale_type,
+            urgency_tag=row.urgency_tag,
+            expires_at=row.expires_at,
+            status=row.status,
+            doc_verification_status=row.doc_verification_status,
+            seller_authority_type=row.seller_authority_type,
+            view_count=row.view_count,
+            interest_count=row.interest_count,
+            created_at=row.created_at,
+        )
 
     async def get_owner_status(self, listing_id: UUID) -> OwnerStatus | None:
         """Owner + status + sale_type for a live listing (PATCH auth + rules)."""

@@ -87,6 +87,20 @@ async def media_storage_fake() -> AsyncIterator[Any]:
 
 
 @pytest_asyncio.fixture
+async def search_index_fake() -> AsyncIterator[Any]:
+    """Bind a fresh InMemorySearchIndex so search tests start clean and can
+    seed/inspect indexed docs directly (the process-wide default is cached)."""
+    from app.adapters.search_index import InMemorySearchIndex
+    from app.dependencies import get_search_index
+    from app.main import app
+
+    fake = InMemorySearchIndex()
+    app.dependency_overrides[get_search_index] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_search_index, None)
+
+
+@pytest_asyncio.fixture
 async def disable_cache() -> AsyncIterator[None]:
     """Force the feed/detail endpoints to bypass Redis and read Postgres, so
     integration assertions are deterministic whether or not CI's Redis is up.

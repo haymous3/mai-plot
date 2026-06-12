@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     max_photos_per_listing: int = 15
     max_videos_per_listing: int = 1
 
+    # Listing search (SCRUM-22). All listing search runs on Elasticsearch
+    # (CLAUDE.md non-negotiable) — never Postgres full-text. The in-memory
+    # fake index is the default so local/CI never need an ES cluster; prod
+    # sets search_use_fake=false + the real cluster URL.
+    search_use_fake: bool = True
+    elasticsearch_url: str = "http://localhost:9200"
+    es_listings_index: str = "listings"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

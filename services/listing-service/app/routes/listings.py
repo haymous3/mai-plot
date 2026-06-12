@@ -12,12 +12,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 
+from app.adapters.search_index import SearchParams
 from app.dependencies import (
     get_current_user,
     get_current_user_optional,
     get_listing_create_service,
     get_listing_detail_service,
     get_listing_query_service,
+    get_listing_search_service,
     get_listing_update_service,
     get_media_upload_service,
 )
@@ -29,6 +31,7 @@ from app.schemas.listing import (
     ListingDetailResponse,
     MediaType,
     MediaUploadResponse,
+    SearchResponse,
     SortOption,
     UpdateListingRequest,
     UpdateListingResponse,
@@ -43,6 +46,7 @@ from app.services.listing_create import (
 from app.services.listing_detail import ListingDetailService
 from app.services.listing_query import ListingQueryService
 from app.services.listing_rules import InvalidUrgency
+from app.services.listing_search import ListingSearchService
 from app.services.listing_update import (
     CannotEditSoldListing,
     ListingNotFound,
@@ -94,6 +98,51 @@ async def get_feed(
         page_size=page_size,
     )
     return await service.get_feed(filters)
+
+
+@router.get("/search", response_model=SearchResponse)
+async def search_listings(
+    service: Annotated[ListingSearchService, Depends(get_listing_search_service)],
+    q: str | None = None,
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lng: float | None = Query(default=None, ge=-180, le=180),
+    radius_km: float | None = Query(default=None, gt=0),
+    state: str | None = None,
+    lga: str | None = None,
+    sale_type: str | None = Query(default=None, pattern="^(distress|normal|all)$"),
+    property_type: str | None = Query(default=None, pattern="^(land|residential|commercial)$"),
+    price_min: int | None = Query(default=None, ge=0),
+    price_max: int | None = Query(default=None, ge=0),
+    doc_status: str | None = Query(default=None, pattern="^(verified|all)$"),
+    sort: SortOption = "recency",
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> SearchResponse | JSONResponse:
+    # Geo is all-or-nothing: lat, lng and radius_km must be supplied together.
+    geo = (lat, lng, radius_km)
+    if any(v is not None for v in geo) and any(v is None for v in geo):
+        return _error(
+            422,
+            "GEO_PARAMS_INCOMPLETE",
+            "lat, lng and radius_km must all be provided together for a geo search.",
+        )
+    params = SearchParams(
+        q=q,
+        lat=lat,
+        lng=lng,
+        radius_km=radius_km,
+        state=state,
+        lga=lga,
+        sale_type=sale_type,
+        property_type=property_type,
+        price_min=price_min,
+        price_max=price_max,
+        doc_status=doc_status,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+    return await service.search(params)
 
 
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
