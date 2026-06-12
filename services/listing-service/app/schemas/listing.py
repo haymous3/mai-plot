@@ -81,6 +81,43 @@ class MediaUploadResponse(BaseModel):
     cdn_url: str
 
 
+# ---- Admin review (SCRUM-22 status management) ----------------------------
+
+ReviewAction = Literal["approve", "reject"]
+
+
+class AdminQueueItem(BaseModel):
+    id: UUID
+    seller_id: UUID
+    title: str
+    state: str
+    lga: str
+    asking_price_kobo: int
+    sale_type: str
+    status: str
+    seller_authority_type: str | None
+    created_at: datetime
+
+
+class AdminQueueResponse(BaseModel):
+    data: list[AdminQueueItem]
+    pagination: Pagination
+
+
+class ReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    action: ReviewAction
+    # Required for reject (enforced in the service so the code is specific);
+    # ignored for approve.
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class ReviewResponse(BaseModel):
+    listing_id: UUID
+    status: str
+
+
 # ---- Feed (GET /listings) -------------------------------------------------
 
 SortOption = Literal["urgency", "recency", "price_asc", "price_desc"]
