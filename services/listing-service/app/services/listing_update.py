@@ -18,6 +18,7 @@ from redis.exceptions import RedisError
 
 from app.repositories.listing_repo import ListingRepository
 from app.security import CurrentUser
+from app.services.listing_indexer import ListingIndexer
 from app.services.listing_rules import resolve_urgency_and_expiry
 
 logger = logging.getLogger(__name__)
@@ -46,9 +47,16 @@ class UpdateResult:
 
 
 class ListingUpdateService:
-    def __init__(self, *, redis: Redis | None, listings: ListingRepository) -> None:
+    def __init__(
+        self,
+        *,
+        redis: Redis | None,
+        listings: ListingRepository,
+        indexer: ListingIndexer | None = None,
+    ) -> None:
         self._redis = redis
         self._listings = listings
+        self._indexer = indexer
 
     async def update(
         self, *, listing_id: UUID, caller: CurrentUser, changes: dict[str, object]
@@ -65,6 +73,8 @@ class ListingUpdateService:
         if updates:
             await self._listings.apply_update(listing_id, updates)
         await self._invalidate(listing_id)
+        if self._indexer is not None:
+            await self._indexer.reindex_safe(listing_id)
         return UpdateResult(listing_id=listing_id, status=current.status)
 
     def _build_updates(

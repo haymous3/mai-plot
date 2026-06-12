@@ -118,6 +118,16 @@ class FeedResponse(BaseModel):
     pagination: Pagination
 
 
+class SearchItem(FeedItem):
+    # Same shape as a feed item plus the Elasticsearch relevance score.
+    search_score: float
+
+
+class SearchResponse(BaseModel):
+    data: list[SearchItem]
+    pagination: Pagination
+
+
 # ---- Detail (GET /listings/{id}) ------------------------------------------
 
 

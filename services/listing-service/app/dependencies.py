@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.media_storage import MediaStorage, build_media_storage
+from app.adapters.search_index import SearchIndex, build_search_index
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.listing_repo import ListingRepository
@@ -21,7 +22,9 @@ from app.security import AuthenticationError, CurrentUser, parse_bearer
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_create import ListingCreateService
 from app.services.listing_detail import ListingDetailService
+from app.services.listing_indexer import ListingIndexer
 from app.services.listing_query import ListingQueryService
+from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
 from app.services.media_upload import MediaUploadService
 
@@ -30,6 +33,23 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
 _media_storage: MediaStorage | None = None
+_search_index: SearchIndex | None = None
+
+
+async def get_search_index(settings: SettingsDep) -> SearchIndex:
+    """Process-wide search index. The factory picks the in-memory fake
+    (local/CI) vs the real Elasticsearch client (production)."""
+    global _search_index
+    if _search_index is None:
+        _search_index = build_search_index(
+            use_fake=settings.search_use_fake,
+            url=settings.elasticsearch_url,
+            index=settings.es_listings_index,
+        )
+    return _search_index
+
+
+SearchIndexDep = Annotated[SearchIndex, Depends(get_search_index)]
 
 
 async def get_media_storage(settings: SettingsDep) -> MediaStorage:
@@ -78,11 +98,23 @@ def _listing_repo(session: SessionDep) -> ListingRepository:
     return ListingRepository(session)
 
 
+def _listing_indexer(
+    index: SearchIndexDep,
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> ListingIndexer:
+    return ListingIndexer(index=index, listings=listings)
+
+
 def get_listing_create_service(
     sellers: Annotated[SellerRepository, Depends(_seller_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
 ) -> ListingCreateService:
-    return ListingCreateService(sellers=sellers, listings=listings)
+    return ListingCreateService(sellers=sellers, listings=listings, indexer=indexer)
+
+
+def get_listing_search_service(index: SearchIndexDep) -> ListingSearchService:
+    return ListingSearchService(index=index)
 
 
 def get_listing_query_service(
@@ -112,8 +144,9 @@ def get_listing_detail_service(
 def get_listing_update_service(
     redis: RedisDep,
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
 ) -> ListingUpdateService:
-    return ListingUpdateService(redis=redis, listings=listings)
+    return ListingUpdateService(redis=redis, listings=listings, indexer=indexer)
 
 
 def get_media_upload_service(

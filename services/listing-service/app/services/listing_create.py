@@ -19,6 +19,7 @@ from uuid import UUID
 
 from app.repositories.listing_repo import ListingRepository, NewListing
 from app.repositories.seller_repo import SellerRepository
+from app.services.listing_indexer import ListingIndexer
 from app.services.listing_rules import resolve_urgency_and_expiry
 from app.services.poa_guard import ensure_can_publish
 
@@ -61,9 +62,16 @@ class CreateListingResult:
 
 
 class ListingCreateService:
-    def __init__(self, *, sellers: SellerRepository, listings: ListingRepository) -> None:
+    def __init__(
+        self,
+        *,
+        sellers: SellerRepository,
+        listings: ListingRepository,
+        indexer: ListingIndexer | None = None,
+    ) -> None:
         self._sellers = sellers
         self._listings = listings
+        self._indexer = indexer
 
     async def create(self, *, seller_id: UUID, data: CreateListingInput) -> CreateListingResult:
         # Authorization gates first: an ineligible caller never gets a row
@@ -106,4 +114,6 @@ class ListingCreateService:
                 expires_at=expires_at,
             )
         )
+        if self._indexer is not None:
+            await self._indexer.reindex_safe(listing_id)
         return CreateListingResult(listing_id=listing_id, status="pending_review")
