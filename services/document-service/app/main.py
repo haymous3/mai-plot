@@ -6,13 +6,15 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.routes.admin import router as admin_router
 from app.routes.documents import router as documents_router
-from app.security import AuthenticationError
+from app.security import AdminAccessError, AuthenticationError
 from app.telemetry import setup_telemetry
 
 # FastAPI's status.HTTP_422_UNPROCESSABLE_ENTITY is being renamed; the
 # numeric literal sidesteps the deprecation warning across versions.
 _HTTP_422 = 422
+_HTTP_403 = 403
 _HTTP_401 = 401
 
 SERVICE_NAME = "document-service"
@@ -20,6 +22,7 @@ SERVICE_NAME = "document-service"
 app = FastAPI(title="Maiplot Document Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(documents_router)
+app.include_router(admin_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -40,6 +43,15 @@ async def _auth_handler(request: Request, exc: AuthenticationError) -> JSONRespo
     """Map a failed bearer-token check to a 401 in the standard envelope."""
     return JSONResponse(
         status_code=_HTTP_401,
+        content={"error_code": exc.code, "message": exc.message, "details": {}},
+    )
+
+
+@app.exception_handler(AdminAccessError)
+async def _admin_handler(request: Request, exc: AdminAccessError) -> JSONResponse:
+    """Map a failed admin gate (role / IP) to a 403 in the standard envelope."""
+    return JSONResponse(
+        status_code=_HTTP_403,
         content={"error_code": exc.code, "message": exc.message, "details": {}},
     )
 

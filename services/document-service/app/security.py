@@ -23,6 +23,16 @@ class AuthenticationError(RuntimeError):
         super().__init__(message)
 
 
+class AdminAccessError(RuntimeError):
+    """Raised when an authenticated caller fails the admin gate (wrong role or
+    a non-whitelisted IP). Maps to 403, not 401 — authenticated, not authorised."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class CurrentUser:
     user_id: UUID

@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.document_storage import DocumentStorage, build_document_storage
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.document_repo import DocumentRepository
 from app.repositories.listing_repo import ListingRepository
-from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_queue import AdminQueueService
+from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 
@@ -51,6 +54,23 @@ def _document_repo(session: SessionDep) -> DocumentRepository:
     return DocumentRepository(session)
 
 
+def _audit_repo(session: SessionDep) -> AuditLogRepository:
+    return AuditLogRepository(session)
+
+
+def get_admin_queue_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+) -> AdminQueueService:
+    return AdminQueueService(documents=documents)
+
+
+def get_document_review_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> DocumentReviewService:
+    return DocumentReviewService(documents=documents, audit=audit)
+
+
 def get_document_upload_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
@@ -81,3 +101,23 @@ async def get_current_user(
     if claims.role is None:
         raise AuthenticationError("TOKEN_INVALID", "Access token is missing a role.")
     return CurrentUser(user_id=claims.user_id, role=claims.role)
+
+
+async def require_admin(
+    request: Request,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    settings: SettingsDep,
+) -> CurrentUser:
+    """Admin (legal team) gate: admin JWT AND (if configured) a whitelisted IP.
+    Kong enforces the allowlist at the edge; this is defence in depth. Raises
+    AdminAccessError -> 403."""
+    if caller.role != "admin":
+        raise AdminAccessError("ADMIN_FORBIDDEN", "Admin access required.")
+    allowlist = [ip.strip() for ip in settings.admin_ip_allowlist.split(",") if ip.strip()]
+    if allowlist:
+        client_ip = request.client.host if request.client else None
+        if client_ip not in allowlist:
+            raise AdminAccessError(
+                "ADMIN_IP_FORBIDDEN", "Your IP is not permitted for admin access."
+            )
+    return caller
