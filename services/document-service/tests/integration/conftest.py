@@ -27,7 +27,7 @@ from app.config import get_settings
 from app.db import dispose_engine
 
 # FK-safe order; CASCADE handles the property_listings partitions.
-_TABLES = ("audit_log", "listing_documents", "property_listings", "user_pii", "users")
+_TABLES = ("audit_log", "offers", "listing_documents", "property_listings", "user_pii", "users")
 
 
 @pytest.fixture
@@ -171,6 +171,26 @@ def seed_document(db_engine: Engine) -> Callable[..., UUID]:
                 },
             )
         return document_id
+
+    return _seed
+
+
+@pytest.fixture
+def seed_offer(db_engine: Engine) -> Callable[..., None]:
+    """Insert an offer (the access relationship that lets a buyer view docs)."""
+
+    def _seed(*, listing_id: UUID, buyer_id: UUID, status: str = "pending") -> None:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO offers
+                        (listing_id, buyer_id, offered_price_kobo, status, expires_at)
+                    VALUES (:lid, :uid, 1000000000, :status, NOW() + INTERVAL '7 days')
+                    """
+                ),
+                {"lid": listing_id, "uid": buyer_id, "status": status},
+            )
 
     return _seed
 

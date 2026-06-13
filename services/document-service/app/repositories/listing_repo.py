@@ -41,3 +41,22 @@ class ListingRepository:
         if row is None:
             return None
         return ListingOwner(seller_id=row.seller_id, status=row.status)
+
+    async def has_active_offer(self, *, listing_id: UUID, buyer_id: UUID) -> bool:
+        """True if this buyer has an engaged (not rejected/withdrawn) offer on
+        the listing — the access relationship that lets a buyer view its
+        documents during due diligence."""
+        exists = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT 1 FROM offers
+                    WHERE listing_id = :lid AND buyer_id = :uid
+                      AND status IN ('pending', 'accepted', 'countered')
+                    LIMIT 1
+                    """
+                ),
+                {"lid": listing_id, "uid": buyer_id},
+            )
+        ).first()
+        return exists is not None

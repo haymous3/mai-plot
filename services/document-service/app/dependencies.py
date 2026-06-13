@@ -77,12 +77,17 @@ def _user_repo(session: SessionDep) -> UserRepository:
 
 def get_document_view_service(
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
     users: Annotated[UserRepository, Depends(_user_repo)],
     storage: DocumentStorageDep,
     watermarker: WatermarkerDep,
 ) -> DocumentViewService:
     return DocumentViewService(
-        documents=documents, users=users, storage=storage, watermarker=watermarker
+        documents=documents,
+        listings=listings,
+        users=users,
+        storage=storage,
+        watermarker=watermarker,
     )
 
 
