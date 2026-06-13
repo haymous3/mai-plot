@@ -15,7 +15,8 @@ from uuid import UUID
 
 from app.adapters.document_storage import DocumentStorage, DocumentStorageError
 from app.adapters.watermark import Watermarker
-from app.repositories.document_repo import DocumentRepository
+from app.repositories.document_repo import DocumentRepository, ViewDoc
+from app.repositories.listing_repo import ListingRepository
 from app.repositories.user_repo import UserRepository
 from app.security import CurrentUser
 
@@ -56,11 +57,13 @@ class DocumentViewService:
         self,
         *,
         documents: DocumentRepository,
+        listings: ListingRepository,
         users: UserRepository,
         storage: DocumentStorage,
         watermarker: Watermarker,
     ) -> None:
         self._documents = documents
+        self._listings = listings
         self._users = users
         self._storage = storage
         self._watermarker = watermarker
@@ -69,8 +72,16 @@ class DocumentViewService:
         doc = await self._documents.get_view(document_id)
         if doc is None:
             raise DocumentNotFound()
+
+        # Entity-level authorization (prevents IDOR): only the listing's owner,
+        # an admin, or a buyer with an active offer may view the document. An
+        # unauthorized caller gets 404 — the endpoint never confirms the
+        # document exists to someone with no relationship to the listing.
+        if not await self._is_authorized(doc, viewer):
+            raise DocumentNotFound()
+
         if doc.verification_status != "verified":
-            # Unverified documents are never served to buyers.
+            # Unverified documents are never served (even to authorized callers).
             raise DocumentNotViewable()
 
         try:
@@ -84,3 +95,12 @@ class DocumentViewService:
         content_type = _content_type_for(doc.s3_key)
         watermarked = self._watermarker.apply(data=raw, content_type=content_type, overlay=overlay)
         return RenderedDocument(content=watermarked, content_type=content_type)
+
+    async def _is_authorized(self, doc: ViewDoc, viewer: CurrentUser) -> bool:
+        """The listing owner, an admin, or a buyer with an active offer on the
+        listing may view its documents."""
+        if viewer.role == "admin" or viewer.user_id == doc.seller_id:
+            return True
+        return await self._listings.has_active_offer(
+            listing_id=doc.listing_id, buyer_id=viewer.user_id
+        )

@@ -20,6 +20,8 @@ class DocStatus:
 class ViewDoc:
     s3_key: str
     verification_status: str
+    listing_id: UUID
+    seller_id: UUID
 
 
 @dataclass(frozen=True)
@@ -54,16 +56,29 @@ class DocumentRepository:
         return document_id
 
     async def get_view(self, document_id: UUID) -> ViewDoc | None:
-        """The S3 key + verification status of a document, for serving."""
+        """The S3 key + verification status + listing/seller of a document, for
+        serving (the listing/seller drive the view authorization check)."""
         row = (
             await self._session.execute(
-                text("SELECT s3_key, verification_status FROM listing_documents WHERE id = :id"),
+                text(
+                    """
+                    SELECT ld.s3_key, ld.verification_status, ld.listing_id, pl.seller_id
+                    FROM listing_documents ld
+                    JOIN property_listings pl ON pl.id = ld.listing_id
+                    WHERE ld.id = :id AND pl.deleted_at IS NULL
+                    """
+                ),
                 {"id": document_id},
             )
         ).first()
         if row is None:
             return None
-        return ViewDoc(s3_key=row.s3_key, verification_status=row.verification_status)
+        return ViewDoc(
+            s3_key=row.s3_key,
+            verification_status=row.verification_status,
+            listing_id=row.listing_id,
+            seller_id=row.seller_id,
+        )
 
     async def get_status(self, document_id: UUID) -> DocStatus | None:
         """The listing + current verification status of a document, or None."""
