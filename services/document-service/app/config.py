@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     doc_presign_ttl_seconds: int = 900
     max_document_bytes: int = 10 * 1024 * 1024
 
+    # Admin (legal team) endpoints require admin JWT AND an IP whitelist
+    # (CLAUDE.md). Kong enforces the allowlist at the edge; this app-level
+    # check is defence in depth. Comma-separated IPs; empty = allow any
+    # (dev/test default).
+    admin_ip_allowlist: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
