@@ -8,21 +8,25 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.document_storage import DocumentStorage, build_document_storage
+from app.adapters.watermark import Watermarker, build_watermarker
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.document_repo import DocumentRepository
 from app.repositories.listing_repo import ListingRepository
+from app.repositories.user_repo import UserRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
 from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
+from app.services.document_view import DocumentViewService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _document_storage: DocumentStorage | None = None
+_watermarker: Watermarker | None = None
 
 
 async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
@@ -39,7 +43,16 @@ async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
     return _document_storage
 
 
+async def get_watermarker(settings: SettingsDep) -> Watermarker:
+    """Process-wide watermarker (fake for local/CI, real overlay in prod)."""
+    global _watermarker
+    if _watermarker is None:
+        _watermarker = build_watermarker(use_fake=settings.watermark_use_fake)
+    return _watermarker
+
+
 DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
+WatermarkerDep = Annotated[Watermarker, Depends(get_watermarker)]
 
 
 def _jwt_verifier(settings: SettingsDep) -> JwtVerifier:
@@ -56,6 +69,21 @@ def _document_repo(session: SessionDep) -> DocumentRepository:
 
 def _audit_repo(session: SessionDep) -> AuditLogRepository:
     return AuditLogRepository(session)
+
+
+def _user_repo(session: SessionDep) -> UserRepository:
+    return UserRepository(session)
+
+
+def get_document_view_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    storage: DocumentStorageDep,
+    watermarker: WatermarkerDep,
+) -> DocumentViewService:
+    return DocumentViewService(
+        documents=documents, users=users, storage=storage, watermarker=watermarker
+    )
 
 
 def get_admin_queue_service(
