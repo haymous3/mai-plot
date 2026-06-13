@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     doc_presign_ttl_seconds: int = 900
     max_document_bytes: int = 10 * 1024 * 1024
 
+    # Watermarking (CLAUDE.md): a buyer-name + timestamp overlay is applied
+    # before a document is served to a buyer. The fake watermarker is the
+    # default so CI needs no image/PDF libraries at runtime.
+    watermark_use_fake: bool = True
+
     # Admin (legal team) endpoints require admin JWT AND an IP whitelist
     # (CLAUDE.md). Kong enforces the allowlist at the edge; this app-level
     # check is defence in depth. Comma-separated IPs; empty = allow any

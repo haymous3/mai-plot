@@ -17,6 +17,12 @@ class DocStatus:
 
 
 @dataclass(frozen=True)
+class ViewDoc:
+    s3_key: str
+    verification_status: str
+
+
+@dataclass(frozen=True)
 class QueueRow:
     id: UUID
     listing_id: UUID
@@ -46,6 +52,18 @@ class DocumentRepository:
         ).scalar_one()
         assert isinstance(document_id, UUID)
         return document_id
+
+    async def get_view(self, document_id: UUID) -> ViewDoc | None:
+        """The S3 key + verification status of a document, for serving."""
+        row = (
+            await self._session.execute(
+                text("SELECT s3_key, verification_status FROM listing_documents WHERE id = :id"),
+                {"id": document_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return ViewDoc(s3_key=row.s3_key, verification_status=row.verification_status)
 
     async def get_status(self, document_id: UUID) -> DocStatus | None:
         """The listing + current verification status of a document, or None."""
