@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     # production sets the real allowlist).
     admin_ip_allowlist: str = ""
 
+    # Celery (CLAUDE.md: all async/background work via Celery + Redis). The
+    # broker + result backend reuse the Redis instance. The expiry beat job
+    # runs hourly; warnings fire 48h before a listing expires.
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/1"
+    expiry_beat_interval_seconds: float = 3600.0
+    expiry_warning_window_hours: int = 48
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

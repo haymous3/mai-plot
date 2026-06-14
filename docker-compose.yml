@@ -231,6 +231,36 @@ services:
     ports:
       - "8012:8000"
 
+  # Background workers for listing-service (SCRUM-53). Same image, no HTTP
+  # port — the worker runs Celery tasks, beat schedules the hourly expiry job.
+  listing-celery-worker:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/listing-service
+    container_name: maiplot-listing-celery-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app worker --loglevel=INFO
+
+  listing-celery-beat:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/listing-service
+    container_name: maiplot-listing-celery-beat
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app beat --loglevel=INFO
+
   document-service:
     <<: *fastapi-defaults
     build:
