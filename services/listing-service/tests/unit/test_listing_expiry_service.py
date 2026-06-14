@@ -35,34 +35,34 @@ class _StubAudit:
         self.actions.append(str(kwargs["action"]))
 
 
-class _StubIndexer:
+class _StubIndexSync:
     def __init__(self) -> None:
-        self.reindexed: list[UUID] = []
+        self.synced: list[UUID] = []
 
-    async def reindex_safe(self, listing_id: UUID) -> None:
-        self.reindexed.append(listing_id)
+    async def sync_safe(self, listing_id: UUID) -> None:
+        self.synced.append(listing_id)
 
 
 def _service(
-    repo: _StubRepo, audit: _StubAudit, indexer: _StubIndexer | None
+    repo: _StubRepo, audit: _StubAudit, index_sync: _StubIndexSync | None
 ) -> ListingExpiryService:
     return ListingExpiryService(
         listings=repo,  # type: ignore[arg-type]
         audit=audit,  # type: ignore[arg-type]
-        indexer=indexer,  # type: ignore[arg-type]
+        index_sync=index_sync,  # type: ignore[arg-type]
     )
 
 
 @pytest.mark.asyncio
-async def test_expires_past_due_audits_and_reindexes() -> None:
+async def test_expires_past_due_audits_and_syncs_index() -> None:
     a, b = uuid4(), uuid4()
     repo = _StubRepo(expired=[a, b], warn=[])
-    audit, indexer = _StubAudit(), _StubIndexer()
-    result = await _service(repo, audit, indexer).run()
+    audit, index_sync = _StubAudit(), _StubIndexSync()
+    result = await _service(repo, audit, index_sync).run()
 
     assert result.expired == 2
     assert repo.marked == [a, b]
-    assert indexer.reindexed == [a, b]
+    assert index_sync.synced == [a, b]
     assert audit.actions == ["listing.expired", "listing.expired"]
 
 
@@ -80,10 +80,10 @@ async def test_warns_due_listings() -> None:
 @pytest.mark.asyncio
 async def test_nothing_due_is_noop() -> None:
     repo = _StubRepo(expired=[], warn=[])
-    audit, indexer = _StubAudit(), _StubIndexer()
-    result = await _service(repo, audit, indexer).run()
+    audit, index_sync = _StubAudit(), _StubIndexSync()
+    result = await _service(repo, audit, index_sync).run()
 
     assert result.expired == 0 and result.warned == 0
     assert repo.marked == []
-    assert indexer.reindexed == []
+    assert index_sync.synced == []
     assert audit.actions == []

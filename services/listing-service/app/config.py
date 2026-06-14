@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     expiry_beat_interval_seconds: float = 3600.0
     expiry_warning_window_hours: int = 48
 
+    # ES indexing (SCRUM-54). On create / edit / status change the listing is
+    # synced to Elasticsearch off the request path. In production
+    # (index_via_celery=true) the write path enqueues a Celery task — index
+    # failures retry with exponential backoff and never block the API. Local/CI
+    # (the default) dispatch the same sync inline against the in-memory fake,
+    # so search stays fresh without a broker or an ES cluster.
+    index_via_celery: bool = False
+    index_task_max_retries: int = 5
+    index_task_retry_backoff_max_seconds: int = 600
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -21,10 +21,10 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.seller_repo import SellerRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
+from app.services.index_dispatch import IndexDispatcher, build_index_dispatcher
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_create import ListingCreateService
 from app.services.listing_detail import ListingDetailService
-from app.services.listing_indexer import ListingIndexer
 from app.services.listing_query import ListingQueryService
 from app.services.listing_review import ListingReviewService
 from app.services.listing_search import ListingSearchService
@@ -105,19 +105,24 @@ def _audit_repo(session: SessionDep) -> AuditLogRepository:
     return AuditLogRepository(session)
 
 
-def _listing_indexer(
+def _index_dispatcher(
     index: SearchIndexDep,
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
-) -> ListingIndexer:
-    return ListingIndexer(index=index, listings=listings)
+    settings: SettingsDep,
+) -> IndexDispatcher:
+    """Dispatch index syncs to Celery in prod (index_via_celery), inline in
+    dev/CI. The inline transport reuses this request's session + fake index."""
+    return build_index_dispatcher(
+        via_celery=settings.index_via_celery, index=index, listings=listings
+    )
 
 
 def get_listing_create_service(
     sellers: Annotated[SellerRepository, Depends(_seller_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
-    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
+    dispatch: Annotated[IndexDispatcher, Depends(_index_dispatcher)],
 ) -> ListingCreateService:
-    return ListingCreateService(sellers=sellers, listings=listings, indexer=indexer)
+    return ListingCreateService(sellers=sellers, listings=listings, dispatch=dispatch)
 
 
 def get_listing_search_service(index: SearchIndexDep) -> ListingSearchService:
@@ -133,9 +138,9 @@ def get_admin_queue_service(
 def get_listing_review_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
-    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
+    dispatch: Annotated[IndexDispatcher, Depends(_index_dispatcher)],
 ) -> ListingReviewService:
-    return ListingReviewService(listings=listings, audit=audit, indexer=indexer)
+    return ListingReviewService(listings=listings, audit=audit, dispatch=dispatch)
 
 
 def get_listing_query_service(
@@ -165,9 +170,9 @@ def get_listing_detail_service(
 def get_listing_update_service(
     redis: RedisDep,
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
-    indexer: Annotated[ListingIndexer, Depends(_listing_indexer)],
+    dispatch: Annotated[IndexDispatcher, Depends(_index_dispatcher)],
 ) -> ListingUpdateService:
-    return ListingUpdateService(redis=redis, listings=listings, indexer=indexer)
+    return ListingUpdateService(redis=redis, listings=listings, dispatch=dispatch)
 
 
 def get_media_upload_service(

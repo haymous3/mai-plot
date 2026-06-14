@@ -1,4 +1,4 @@
-"""ListingReviewService — approve/reject, validation, audit, reindex."""
+"""ListingReviewService — approve/reject, validation, audit, index dispatch."""
 
 from __future__ import annotations
 
@@ -40,12 +40,12 @@ class _StubAudit:
         self.records.append(kwargs)
 
 
-class _StubIndexer:
+class _StubDispatcher:
     def __init__(self) -> None:
-        self.reindexed: list[UUID] = []
+        self.enqueued: list[UUID] = []
 
-    async def reindex_safe(self, listing_id: UUID) -> None:
-        self.reindexed.append(listing_id)
+    async def enqueue(self, listing_id: UUID) -> None:
+        self.enqueued.append(listing_id)
 
 
 def _pending() -> OwnerStatus:
@@ -53,29 +53,29 @@ def _pending() -> OwnerStatus:
 
 
 def _service(
-    repo: _StubRepo, audit: _StubAudit | None = None, indexer: _StubIndexer | None = None
-) -> tuple[ListingReviewService, _StubAudit, _StubIndexer]:
+    repo: _StubRepo, audit: _StubAudit | None = None, dispatch: _StubDispatcher | None = None
+) -> tuple[ListingReviewService, _StubAudit, _StubDispatcher]:
     a = audit or _StubAudit()
-    i = indexer or _StubIndexer()
+    d = dispatch or _StubDispatcher()
     svc = ListingReviewService(
         listings=repo,  # type: ignore[arg-type]
         audit=a,  # type: ignore[arg-type]
-        indexer=i,  # type: ignore[arg-type]
+        dispatch=d,
     )
-    return svc, a, i
+    return svc, a, d
 
 
 @pytest.mark.asyncio
-async def test_approve_activates_audits_and_reindexes() -> None:
+async def test_approve_activates_audits_and_dispatches_index() -> None:
     repo = _StubRepo(_pending())
-    svc, audit, indexer = _service(repo)
+    svc, audit, dispatch = _service(repo)
     lid = uuid4()
     result = await svc.review(listing_id=lid, admin=_ADMIN, action="approve", comment=None)
 
     assert result.status == "active"
     assert repo.review_call == {"new_status": "active", "rejection_reason": None}
     assert audit.records[0]["action"] == "listing.active"
-    assert indexer.reindexed == [lid]
+    assert dispatch.enqueued == [lid]
 
 
 @pytest.mark.asyncio

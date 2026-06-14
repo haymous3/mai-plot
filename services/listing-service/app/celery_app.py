@@ -20,7 +20,7 @@ celery_app = Celery(
     "listing-service",
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["app.tasks.listing_expiry"],
+    include=["app.tasks.listing_expiry", "app.tasks.listing_index"],
 )
 
 celery_app.conf.update(

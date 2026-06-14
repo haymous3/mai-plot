@@ -17,7 +17,7 @@ from app.config import get_settings
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
 from app.services.listing_expiry import ListingExpiryService
-from app.services.listing_indexer import ListingIndexer
+from app.services.listing_index_sync import ListingIndexSync
 
 
 async def _run() -> dict[str, int]:
@@ -35,7 +35,7 @@ async def _run() -> dict[str, int]:
             service = ListingExpiryService(
                 listings=listings,
                 audit=AuditLogRepository(session),
-                indexer=ListingIndexer(index=index, listings=listings),
+                index_sync=ListingIndexSync(index=index, listings=listings),
                 warning_window_hours=settings.expiry_warning_window_hours,
             )
             result = await service.run()
