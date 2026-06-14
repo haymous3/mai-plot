@@ -28,9 +28,9 @@ async def _sync(listing_id: UUID, index: InMemorySearchIndex) -> str:
     engine = create_async_engine(get_settings().database_url)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
-            action = await ListingIndexSync(
-                index=index, listings=ListingRepository(session)
-            ).sync(listing_id)
+            action = await ListingIndexSync(index=index, listings=ListingRepository(session)).sync(
+                listing_id
+            )
             await session.commit()
             return action
     finally:
