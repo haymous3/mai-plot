@@ -47,7 +47,7 @@ async def _run_expiry() -> ExpiryResult:
             service = ListingExpiryService(
                 listings=listings,
                 audit=AuditLogRepository(session),
-                indexer=None,  # reindex is covered by the unit test
+                index_sync=None,  # index sync is covered by test_es_indexing
                 warning_window_hours=48,
             )
             result = await service.run()

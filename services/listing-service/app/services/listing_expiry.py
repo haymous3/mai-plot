@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
-from app.services.listing_indexer import ListingIndexer
+from app.services.listing_index_sync import ListingIndexSync
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +36,12 @@ class ListingExpiryService:
         *,
         listings: ListingRepository,
         audit: AuditLogRepository,
-        indexer: ListingIndexer | None = None,
+        index_sync: ListingIndexSync | None = None,
         warning_window_hours: int = 48,
     ) -> None:
         self._listings = listings
         self._audit = audit
-        self._indexer = indexer
+        self._index_sync = index_sync
         self._window = warning_window_hours
 
     async def run(self) -> ExpiryResult:
@@ -63,9 +63,9 @@ class ListingExpiryService:
                 old_value={"status": "active"},
                 new_value={"status": "expired"},
             )
-            # Re-index so the expired listing leaves the feed/search.
-            if self._indexer is not None:
-                await self._indexer.reindex_safe(listing_id)
+            # Sync so the now-expired listing is removed from the search index.
+            if self._index_sync is not None:
+                await self._index_sync.sync_safe(listing_id)
         return len(ids)
 
     async def _warn_due(self) -> int:

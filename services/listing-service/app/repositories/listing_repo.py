@@ -461,6 +461,15 @@ class ListingRepository:
             {"s": new_status, "r": rejection_reason, "id": listing_id},
         )
 
+    async def mark_es_indexed(self, listing_id: UUID) -> None:
+        """Stamp es_indexed_at = NOW() after a successful ES sync (SCRUM-54).
+        No deleted_at filter: a soft-deleted listing that was just removed from
+        the index still records when it was last reconciled."""
+        await self._session.execute(
+            text("UPDATE property_listings SET es_indexed_at = NOW() WHERE id = :id"),
+            {"id": listing_id},
+        )
+
     async def get_search_doc(self, listing_id: UUID) -> SearchDoc | None:
         """Build the search-index document for a listing (any status — search
         filters to active itself). Joins users for seller_authority_type."""

@@ -15,7 +15,7 @@ from uuid import UUID
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
 from app.security import CurrentUser
-from app.services.listing_indexer import ListingIndexer
+from app.services.index_dispatch import IndexDispatcher
 from app.services.listing_update import ListingNotFound
 
 
@@ -43,11 +43,11 @@ class ListingReviewService:
         *,
         listings: ListingRepository,
         audit: AuditLogRepository,
-        indexer: ListingIndexer | None = None,
+        dispatch: IndexDispatcher | None = None,
     ) -> None:
         self._listings = listings
         self._audit = audit
-        self._indexer = indexer
+        self._dispatch = dispatch
 
     async def review(
         self,
@@ -86,7 +86,8 @@ class ListingReviewService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        # Re-index so the new visibility (active -> searchable) is reflected.
-        if self._indexer is not None:
-            await self._indexer.reindex_safe(listing_id)
+        # Re-sync so the new visibility is reflected: approve (-> active) indexes
+        # it, reject (-> rejected) removes it from the index.
+        if self._dispatch is not None:
+            await self._dispatch.enqueue(listing_id)
         return ReviewResult(listing_id=listing_id, status=new_status)
