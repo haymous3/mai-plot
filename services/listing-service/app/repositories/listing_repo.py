@@ -396,6 +396,58 @@ class ListingRepository:
         ]
         return items, int(total)
 
+    async def list_active_expired(self, *, limit: int = 500) -> list[UUID]:
+        """Active, non-deleted listings whose expires_at has passed."""
+        rows = (
+            await self._session.execute(
+                text(
+                    "SELECT id FROM property_listings "
+                    "WHERE status = 'active' AND deleted_at IS NULL "
+                    "AND expires_at IS NOT NULL AND expires_at <= NOW() "
+                    "ORDER BY expires_at ASC LIMIT :limit"
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [r.id for r in rows]
+
+    async def mark_expired(self, listing_id: UUID) -> None:
+        """Set an active listing to 'expired' (no-op if it already moved on)."""
+        await self._session.execute(
+            text(
+                "UPDATE property_listings SET status = 'expired', updated_at = NOW() "
+                "WHERE id = :id AND status = 'active' AND deleted_at IS NULL"
+            ),
+            {"id": listing_id},
+        )
+
+    async def list_due_for_expiry_warning(
+        self, *, window_hours: int, limit: int = 500
+    ) -> list[UUID]:
+        """Active listings expiring within `window_hours` that have NOT already
+        had an expiry warning recorded (the audit_log row is the idempotency
+        marker, so no extra column is needed)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pl.id FROM property_listings pl
+                    WHERE pl.status = 'active' AND pl.deleted_at IS NULL
+                      AND pl.expires_at IS NOT NULL
+                      AND pl.expires_at > NOW()
+                      AND pl.expires_at <= NOW() + make_interval(hours => :hours)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM audit_log a
+                          WHERE a.entity_id = pl.id AND a.action = 'listing.expiry_warning'
+                      )
+                    ORDER BY pl.expires_at ASC LIMIT :limit
+                    """
+                ),
+                {"hours": window_hours, "limit": limit},
+            )
+        ).all()
+        return [r.id for r in rows]
+
     async def set_review_status(
         self, listing_id: UUID, *, new_status: str, rejection_reason: str | None
     ) -> None:
