@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -54,6 +55,44 @@ class DocumentRepository:
         ).scalar_one()
         assert isinstance(document_id, UUID)
         return document_id
+
+    async def get_ocr_source(self, document_id: UUID) -> str | None:
+        """The S3 key OCR should read, or None if the document is gone."""
+        row = (
+            await self._session.execute(
+                text("SELECT s3_key FROM listing_documents WHERE id = :id"),
+                {"id": document_id},
+            )
+        ).first()
+        return row.s3_key if row is not None else None
+
+    async def store_ocr_result(self, document_id: UUID, data: dict[str, str]) -> None:
+        """Store extracted OCR fields as JSONB. Verification status is left
+        untouched — a successful read does not auto-verify the document."""
+        await self._session.execute(
+            text(
+                "UPDATE listing_documents "
+                "SET ocr_extracted_data = CAST(:data AS jsonb), updated_at = NOW() "
+                "WHERE id = :id"
+            ),
+            {"data": json.dumps(data), "id": document_id},
+        )
+
+    async def flag_for_manual_review(
+        self, document_id: UUID, *, note: str, data: dict[str, str] | None = None
+    ) -> None:
+        """OCR could not produce usable fields: store whatever was read and move
+        the document to 'under_review' so the legal team checks it by hand."""
+        await self._session.execute(
+            text(
+                "UPDATE listing_documents "
+                "SET verification_status = 'under_review', "
+                "    ocr_extracted_data = CAST(:data AS jsonb), "
+                "    verification_notes = :note, updated_at = NOW() "
+                "WHERE id = :id"
+            ),
+            {"data": json.dumps(data or {}), "note": note, "id": document_id},
+        )
 
     async def get_view(self, document_id: UUID) -> ViewDoc | None:
         """The S3 key + verification status + listing/seller of a document, for

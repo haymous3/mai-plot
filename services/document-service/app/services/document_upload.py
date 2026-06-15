@@ -18,6 +18,7 @@ from app.repositories.document_repo import DocumentRepository
 from app.repositories.listing_repo import ListingRepository
 from app.security import CurrentUser
 from app.services.document import build_document_key, detect_document_type, validate_size
+from app.services.ocr_dispatch import OcrDispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,13 @@ class DocumentUploadService:
         documents: DocumentRepository,
         storage: DocumentStorage,
         max_bytes: int,
+        ocr_dispatch: OcrDispatcher | None = None,
     ) -> None:
         self._listings = listings
         self._documents = documents
         self._storage = storage
         self._max_bytes = max_bytes
+        self._ocr_dispatch = ocr_dispatch
 
     async def upload(
         self, *, listing_id: UUID, caller: CurrentUser, document_type: str, data: bytes
@@ -86,4 +89,8 @@ class DocumentUploadService:
             "document.upload.ok",
             extra={"listing_id": str(listing_id), "document_id": str(document_id)},
         )
+        # Kick off OCR off the request path (Celery in prod, inline in dev/CI).
+        # Best-effort: dispatch never blocks or fails the upload.
+        if self._ocr_dispatch is not None:
+            await self._ocr_dispatch.enqueue(document_id)
         return DocumentUploadResult(document_id=document_id, verification_status="pending")

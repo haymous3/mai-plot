@@ -38,6 +38,14 @@ class _StubDocRepo:
         return uuid4()
 
 
+class _StubOcrDispatch:
+    def __init__(self) -> None:
+        self.enqueued: list[UUID] = []
+
+    async def enqueue(self, document_id: UUID) -> None:
+        self.enqueued.append(document_id)
+
+
 def _owner_status() -> ListingOwner:
     return ListingOwner(seller_id=_OWNER_ID, status="pending_review")
 
@@ -50,6 +58,7 @@ def _service(
     listings: _StubListingRepo,
     docs: _StubDocRepo | None = None,
     storage: InMemoryDocumentStorage | None = None,
+    ocr: _StubOcrDispatch | None = None,
 ) -> tuple[DocumentUploadService, _StubDocRepo, InMemoryDocumentStorage]:
     d = docs or _StubDocRepo()
     s = storage or InMemoryDocumentStorage()
@@ -58,6 +67,7 @@ def _service(
         documents=d,  # type: ignore[arg-type]
         storage=s,
         max_bytes=10_000,
+        ocr_dispatch=ocr,
     )
     return svc, d, s
 
@@ -72,6 +82,16 @@ async def test_owner_upload_stores_and_inserts() -> None:
     assert docs.inserted is not None
     assert docs.inserted["document_type"] == "c_of_o"
     assert storage.data  # bytes landed in the (fake) private bucket
+
+
+@pytest.mark.asyncio
+async def test_successful_upload_enqueues_ocr() -> None:
+    ocr = _StubOcrDispatch()
+    svc, docs, _ = _service(_StubListingRepo(_owner_status()), ocr=ocr)
+    result = await svc.upload(
+        listing_id=uuid4(), caller=_owner(), document_type="c_of_o", data=_PDF
+    )
+    assert ocr.enqueued == [result.document_id]
 
 
 @pytest.mark.asyncio

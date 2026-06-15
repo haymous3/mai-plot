@@ -8,6 +8,7 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.document_storage import DocumentStorage, build_document_storage
+from app.adapters.ocr import OcrEngine, build_ocr_engine
 from app.adapters.watermark import Watermarker, build_watermarker
 from app.config import Settings, get_settings
 from app.db import get_session
@@ -21,12 +22,14 @@ from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
 from app.services.document_view import DocumentViewService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
+from app.services.ocr_dispatch import OcrDispatcher, build_ocr_dispatcher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _document_storage: DocumentStorage | None = None
 _watermarker: Watermarker | None = None
+_ocr_engine: OcrEngine | None = None
 
 
 async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
@@ -51,8 +54,23 @@ async def get_watermarker(settings: SettingsDep) -> Watermarker:
     return _watermarker
 
 
+async def get_ocr_engine(settings: SettingsDep) -> OcrEngine:
+    """Process-wide OCR engine (fake for local/CI, real AWS Textract in
+    production)."""
+    global _ocr_engine
+    if _ocr_engine is None:
+        _ocr_engine = build_ocr_engine(
+            use_fake=settings.ocr_use_fake,
+            bucket=settings.doc_s3_bucket,
+            region=settings.doc_s3_region,
+            endpoint_url=settings.doc_s3_endpoint_url,
+        )
+    return _ocr_engine
+
+
 DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
 WatermarkerDep = Annotated[Watermarker, Depends(get_watermarker)]
+OcrEngineDep = Annotated[OcrEngine, Depends(get_ocr_engine)]
 
 
 def _jwt_verifier(settings: SettingsDep) -> JwtVerifier:
@@ -104,10 +122,23 @@ def get_document_review_service(
     return DocumentReviewService(documents=documents, audit=audit)
 
 
+def _ocr_dispatcher(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    engine: OcrEngineDep,
+    settings: SettingsDep,
+) -> OcrDispatcher:
+    """Dispatch OCR to Celery in prod (ocr_via_celery), inline in dev/CI. The
+    inline transport reuses this request's session + the fake engine."""
+    return build_ocr_dispatcher(
+        via_celery=settings.ocr_via_celery, engine=engine, documents=documents
+    )
+
+
 def get_document_upload_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
     storage: DocumentStorageDep,
+    ocr_dispatch: Annotated[OcrDispatcher, Depends(_ocr_dispatcher)],
     settings: SettingsDep,
 ) -> DocumentUploadService:
     return DocumentUploadService(
@@ -115,6 +146,7 @@ def get_document_upload_service(
         documents=documents,
         storage=storage,
         max_bytes=settings.max_document_bytes,
+        ocr_dispatch=ocr_dispatch,
     )
 
 

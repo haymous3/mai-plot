@@ -269,6 +269,22 @@ services:
     ports:
       - "8013:8000"
 
+  # Background worker for document-service (SCRUM-55). Same image, no HTTP
+  # port — runs the OCR Celery task (AWS Textract) on document upload. No beat.
+  document-celery-worker:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/document-service
+    container_name: maiplot-document-celery-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      OCR_VIA_CELERY: ${OCR_VIA_CELERY:-true}
+      OCR_USE_FAKE: ${OCR_USE_FAKE:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app worker --loglevel=INFO
+
   transaction-service:
     <<: *fastapi-defaults
     build:
