@@ -16,6 +16,12 @@ dependencies = [
     "pillow>=10.3",
     "pypdf>=4.2",
     "reportlab>=4.2",
+    "redis>=5.0",
+    # Plain celery (NOT celery[redis]): the [redis] extra pins redis <6.5 via
+    # kombu, which would downgrade the workspace from redis 8 and break mypy's
+    # typed `from_url` in the shared test conftest. The redis lib is already a
+    # direct dep, so kombu's redis:// transport uses it at runtime.
+    "celery>=5.3",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     # (dev/test default).
     admin_ip_allowlist: str = ""
 
+    # OCR pipeline (SCRUM-55). On document upload an async Celery task runs
+    # AWS Textract over the uploaded title document and stores the extracted
+    # fields in listing_documents.ocr_extracted_data. In production
+    # (ocr_via_celery=true) the upload enqueues the task — an OCR failure
+    # flags the doc for manual review and never blocks the upload. Local/CI
+    # (the default) run the same OCR inline against a fake engine, so no broker
+    # and no AWS Textract are needed.
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/1"
+    ocr_via_celery: bool = False
+    ocr_use_fake: bool = True
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
