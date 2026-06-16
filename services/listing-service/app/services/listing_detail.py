@@ -23,6 +23,7 @@ from app.schemas.listing import (
     SellerBlock,
 )
 from app.security import CurrentUser
+from app.services.view_count_dispatch import ViewCountDispatcher
 
 # Maximum loan = 50% of the asking price (business rule §5).
 _LOAN_FRACTION_DENOMINATOR = 2
@@ -40,11 +41,13 @@ class ListingDetailService:
         listings: ListingRepository,
         sellers: SellerRepository,
         ttl_seconds: int,
+        view_counter: ViewCountDispatcher | None = None,
     ) -> None:
         self._redis = redis
         self._listings = listings
         self._sellers = sellers
         self._ttl = ttl_seconds
+        self._view_counter = view_counter
 
     async def get_detail(
         self, *, listing_id: UUID, viewer: CurrentUser | None
@@ -60,6 +63,12 @@ class ListingDetailService:
             )
         except ListingNotFound:
             return None
+
+        # Every successful view counts (cache hit or miss; anonymous too). The
+        # bump is dispatched off the request path (Celery in prod, inline in
+        # dev/CI) and is best-effort — it never affects this read.
+        if self._view_counter is not None:
+            await self._view_counter.enqueue(listing_id)
 
         # Loan eligibility is viewer-specific, so it is applied after the
         # (viewer-independent) cache read. Only an authenticated buyer sees it.

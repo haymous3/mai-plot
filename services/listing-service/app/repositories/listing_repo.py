@@ -461,6 +461,17 @@ class ListingRepository:
             {"s": new_status, "r": rejection_reason, "id": listing_id},
         )
 
+    async def increment_view_count(self, listing_id: UUID) -> None:
+        """Bump a listing's view_count by one (SCRUM-114). Approximate by
+        design — a concurrent UPDATE is fine; no row lock, no dedup."""
+        await self._session.execute(
+            text(
+                "UPDATE property_listings SET view_count = view_count + 1, updated_at = NOW() "
+                "WHERE id = :id AND deleted_at IS NULL"
+            ),
+            {"id": listing_id},
+        )
+
     async def mark_es_indexed(self, listing_id: UUID) -> None:
         """Stamp es_indexed_at = NOW() after a successful ES sync (SCRUM-54).
         No deleted_at filter: a soft-deleted listing that was just removed from

@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     index_task_max_retries: int = 5
     index_task_retry_backoff_max_seconds: int = 600
 
+    # view_count increment (SCRUM-114). A listing detail view bumps view_count
+    # OFF the request path. In production (view_count_via_celery=true) the GET
+    # enqueues a Celery task; local/CI increment inline against the request
+    # session (no broker). Best-effort + approximate — a missed view is
+    # acceptable (exact-once not required).
+    view_count_via_celery: bool = False
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
