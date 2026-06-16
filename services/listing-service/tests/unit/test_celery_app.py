@@ -6,6 +6,7 @@ from __future__ import annotations
 # what the worker does for each entry in celery_app's `include` list.
 import app.tasks.listing_expiry  # noqa: F401  (import for registration side effect)
 import app.tasks.listing_index  # noqa: F401  (import for registration side effect)
+import app.tasks.view_count  # noqa: F401  (import for registration side effect)
 from app.celery_app import celery_app
 
 
@@ -15,6 +16,10 @@ def test_expiry_task_is_registered() -> None:
 
 def test_index_sync_task_is_registered() -> None:
     assert "app.tasks.listing_index.sync_listing_index" in celery_app.tasks
+
+
+def test_view_count_task_is_registered() -> None:
+    assert "app.tasks.view_count.increment_view_count" in celery_app.tasks
 
 
 def test_index_sync_task_retries_with_backoff() -> None:

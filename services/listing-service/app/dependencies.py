@@ -30,6 +30,7 @@ from app.services.listing_review import ListingReviewService
 from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
 from app.services.media_upload import MediaUploadService
+from app.services.view_count_dispatch import ViewCountDispatcher, build_view_count_dispatcher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -153,10 +154,20 @@ def get_listing_query_service(
     )
 
 
+def _view_count_dispatcher(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    settings: SettingsDep,
+) -> ViewCountDispatcher:
+    """Dispatch view_count bumps to Celery in prod (view_count_via_celery),
+    inline in dev/CI. The inline transport reuses this request's repo."""
+    return build_view_count_dispatcher(via_celery=settings.view_count_via_celery, listings=listings)
+
+
 def get_listing_detail_service(
     redis: RedisDep,
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     sellers: Annotated[SellerRepository, Depends(_seller_repo)],
+    view_counter: Annotated[ViewCountDispatcher, Depends(_view_count_dispatcher)],
     settings: SettingsDep,
 ) -> ListingDetailService:
     return ListingDetailService(
@@ -164,6 +175,7 @@ def get_listing_detail_service(
         listings=listings,
         sellers=sellers,
         ttl_seconds=settings.listing_cache_ttl_seconds,
+        view_counter=view_counter,
     )
 
 

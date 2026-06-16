@@ -56,17 +56,27 @@ class _StubSellerRepo:
         return self._seller
 
 
+class _StubViewCounter:
+    def __init__(self) -> None:
+        self.enqueued: list[UUID] = []
+
+    async def enqueue(self, listing_id: UUID) -> None:
+        self.enqueued.append(listing_id)
+
+
 def _service(
     detail: DetailRow | None,
     *,
     media: list[MediaRow] | None = None,
     seller: SellerPublic | None = SellerPublic(authority_type="owner", poa_owner_name=None),
+    view_counter: _StubViewCounter | None = None,
 ) -> ListingDetailService:
     return ListingDetailService(
         redis=None,
         listings=_StubListingRepo(detail, media),  # type: ignore[arg-type]
         sellers=_StubSellerRepo(seller),  # type: ignore[arg-type]
         ttl_seconds=300,
+        view_counter=view_counter,
     )
 
 
@@ -74,6 +84,21 @@ def _service(
 async def test_missing_listing_returns_none() -> None:
     result = await _service(None).get_detail(listing_id=uuid4(), viewer=None)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_successful_view_dispatches_view_count() -> None:
+    counter = _StubViewCounter()
+    lid = uuid4()
+    await _service(_detail_row(), view_counter=counter).get_detail(listing_id=lid, viewer=None)
+    assert counter.enqueued == [lid]
+
+
+@pytest.mark.asyncio
+async def test_missing_listing_does_not_dispatch_view_count() -> None:
+    counter = _StubViewCounter()
+    await _service(None, view_counter=counter).get_detail(listing_id=uuid4(), viewer=None)
+    assert counter.enqueued == []
 
 
 @pytest.mark.asyncio
