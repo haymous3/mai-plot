@@ -9,6 +9,38 @@ export function authServiceUrl(): string {
   return process.env.AUTH_SERVICE_URL ?? 'http://localhost:8011';
 }
 
+export function listingServiceUrl(): string {
+  return process.env.LISTING_SERVICE_URL ?? 'http://localhost:8012';
+}
+
+export interface Pagination {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+/** A row in the admin listing-review queue (GET /admin/listings/queue). */
+export interface AdminQueueItem {
+  id: string;
+  seller_id: string;
+  title: string;
+  state: string;
+  lga: string;
+  asking_price_kobo: number;
+  sale_type: string;
+  status: string;
+  seller_authority_type: string | null;
+  created_at: string;
+}
+
+export interface AdminQueueResponse {
+  data: AdminQueueItem[];
+  pagination: Pagination;
+}
+
+export type AuthorityFilter = 'owner' | 'power_of_attorney';
+
 export interface LoginSuccess {
   ok: true;
   accessToken: string;

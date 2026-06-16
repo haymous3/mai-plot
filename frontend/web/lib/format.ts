@@ -1,0 +1,24 @@
+/**
+ * Display formatters. Money is stored as BIGINT kobo (1 NGN = 100 kobo,
+ * CLAUDE.md) — never floats — so naira formatting divides by 100 only at the
+ * presentation edge. Pure + dependency-free for unit testing.
+ */
+
+/** Format kobo as Naira, e.g. 850_000_000 -> "₦8,500,000". Rounds to whole
+ * naira (listings are whole-naira amounts; the fractional kobo is noise here). */
+export function formatNaira(kobo: number): string {
+  const naira = Math.round(kobo / 100);
+  return `₦${naira.toLocaleString('en-NG')}`;
+}
+
+/** Format an ISO timestamp as a short, stable date, e.g. "15 Jun 2026". */
+export function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** True when the seller holds power-of-attorney authority (gets the PoA tag). */
+export function isPowerOfAttorney(authorityType: string | null | undefined): boolean {
+  return authorityType === 'power_of_attorney';
+}
