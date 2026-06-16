@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     elasticsearch_url: str = "http://localhost:9200"
     es_listings_index: str = "listings"
 
+    # Search relevance (SCRUM-115): distress listings are boosted in the default
+    # relevance ranking, weighted by how soon they expire (a Gaussian decay over
+    # expires_at). weight is the max boost added to a distress listing's score
+    # (at/near expiry); scale_days is the decay half-point (boost halves once a
+    # listing is this many days from expiry). Normal listings get no boost.
+    search_urgency_boost_weight: float = 3.0
+    search_urgency_scale_days: float = 7.0
+
     # Admin endpoints require admin JWT AND an IP whitelist (CLAUDE.md). Kong
     # enforces the IP allowlist at the edge; this app-level check is defence
     # in depth. Comma-separated IPs; empty = allow any (dev/test default —

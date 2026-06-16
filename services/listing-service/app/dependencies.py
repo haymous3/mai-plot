@@ -49,6 +49,8 @@ async def get_search_index(settings: SettingsDep) -> SearchIndex:
             use_fake=settings.search_use_fake,
             url=settings.elasticsearch_url,
             index=settings.es_listings_index,
+            urgency_boost_weight=settings.search_urgency_boost_weight,
+            urgency_scale_days=settings.search_urgency_scale_days,
         )
     return _search_index
 

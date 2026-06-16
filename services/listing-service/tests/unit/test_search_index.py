@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 
 from app.adapters.search_index import InMemorySearchIndex, SearchDoc, SearchParams
+
+_NOW = datetime.now(UTC)
+
+
+def _expires_in(days: float) -> datetime:
+    return _NOW + timedelta(days=days)
 
 
 def _doc(**overrides: object) -> SearchDoc:
@@ -103,6 +109,69 @@ async def test_pagination() -> None:
     hits, total = await idx.search(SearchParams(page=1, page_size=2))
     assert total == 5
     assert len(hits) == 2
+
+
+@pytest.mark.asyncio
+async def test_distress_is_boosted_above_normal_in_default_ranking() -> None:
+    # A distress listing expiring soon outranks a NEWER normal listing.
+    normal = _doc(title="Fresh Normal", sale_type="normal", created_at=_NOW)
+    distress = _doc(
+        title="Urgent Distress",
+        sale_type="distress",
+        expires_at=_expires_in(3),
+        created_at=_NOW - timedelta(days=10),
+    )
+    idx = await _index(normal, distress)
+    hits, _ = await idx.search(SearchParams())
+    assert [h.doc.title for h in hits] == ["Urgent Distress", "Fresh Normal"]
+
+
+@pytest.mark.asyncio
+async def test_soonest_expiring_distress_ranks_first() -> None:
+    soon = _doc(title="2 days", sale_type="distress", expires_at=_expires_in(2))
+    later = _doc(title="20 days", sale_type="distress", expires_at=_expires_in(20))
+    idx = await _index(later, soon)
+    hits, _ = await idx.search(SearchParams())
+    assert [h.doc.title for h in hits] == ["2 days", "20 days"]
+
+
+@pytest.mark.asyncio
+async def test_distress_without_expiry_gets_no_boost() -> None:
+    # No expiry -> no urgency boost; falls back to recency vs a newer normal.
+    distress = _doc(
+        title="No Expiry Distress",
+        sale_type="distress",
+        expires_at=None,
+        created_at=_NOW - timedelta(days=5),
+    )
+    normal = _doc(title="Newer Normal", sale_type="normal", created_at=_NOW)
+    idx = await _index(distress, normal)
+    hits, _ = await idx.search(SearchParams())
+    assert [h.doc.title for h in hits] == ["Newer Normal", "No Expiry Distress"]
+
+
+@pytest.mark.asyncio
+async def test_price_sort_ignores_urgency_boost() -> None:
+    cheap_normal = _doc(title="Cheap", sale_type="normal", asking_price_kobo=1_000_000_000)
+    pricey_distress = _doc(
+        title="Pricey",
+        sale_type="distress",
+        expires_at=_expires_in(1),
+        asking_price_kobo=9_000_000_000,
+    )
+    idx = await _index(pricey_distress, cheap_normal)
+    hits, _ = await idx.search(SearchParams(sort="price_asc"))
+    assert [h.doc.title for h in hits] == ["Cheap", "Pricey"]
+
+
+@pytest.mark.asyncio
+async def test_urgency_boost_applies_within_text_search() -> None:
+    # Both match the query; the soon-expiring distress one is lifted above.
+    normal = _doc(title="Lekki Normal", sale_type="normal", created_at=_NOW)
+    distress = _doc(title="Lekki Distress", sale_type="distress", expires_at=_expires_in(1))
+    idx = await _index(normal, distress)
+    hits, _ = await idx.search(SearchParams(q="lekki"))
+    assert [h.doc.title for h in hits] == ["Lekki Distress", "Lekki Normal"]
 
 
 @pytest.mark.asyncio
