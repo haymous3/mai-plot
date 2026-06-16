@@ -296,6 +296,20 @@ class UserRepository:
             has_document=row.poa_document_s3_key is not None,
         )
 
+    async def get_poa_document_key(self, user_id: UUID) -> str | None:
+        """The private-bucket key of a live user's PoA document, or None if the
+        user/doc is absent. Used to serve the document to the legal team."""
+        stmt = (
+            select(UserPii.poa_document_s3_key)
+            .join(User, User.id == UserPii.user_id)
+            .where(
+                UserPii.user_id == user_id,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+            )
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def set_poa_verification(self, user_id: UUID, *, status: str) -> None:
         """Apply a legal-team decision: move poa_verified_status to
         'verified' or 'rejected'."""

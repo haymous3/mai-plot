@@ -32,6 +32,7 @@ from app.services.login import LoginService
 from app.services.logout import LogoutService
 from app.services.nin_verification import NinVerificationService
 from app.services.otp_verification import OtpVerificationService
+from app.services.poa_document import PoaDocumentService
 from app.services.poa_queue import PoaQueueService
 from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
@@ -275,6 +276,14 @@ def get_poa_review_service(
     termii: TermiiDep,
 ) -> PoaReviewService:
     return PoaReviewService(users=users, audit=audit, termii=termii)
+
+
+def get_poa_document_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    storage: DocumentStorageDep,
+) -> PoaDocumentService:
+    return PoaDocumentService(users=users, audit=audit, storage=storage)
 
 
 async def get_current_user(

@@ -41,6 +41,18 @@ export interface AdminQueueResponse {
 
 export type AuthorityFilter = 'owner' | 'power_of_attorney';
 
+/** A row in the legal-team PoA review queue (GET /admin/poa/queue). */
+export interface PoaQueueItem {
+  user_id: string;
+  owner_name: string | null;
+  submitted_at: string;
+}
+
+export interface PoaQueueResponse {
+  items: PoaQueueItem[];
+  pagination: Pagination;
+}
+
 export interface LoginSuccess {
   ok: true;
   accessToken: string;
