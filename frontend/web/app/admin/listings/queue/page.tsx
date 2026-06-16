@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { SignOutButton } from '../../sign-out-button';
+import { AdminNav } from '../../admin-nav';
 import { QueueTable } from './queue-table';
 import type { AdminQueueResponse, AuthorityFilter } from '@/lib/api';
 import { listingServiceUrl } from '@/lib/api';
@@ -47,16 +47,7 @@ export default async function ListingQueuePage({
 
   return (
     <div className="min-h-screen bg-bone">
-      <header className="flex items-center justify-between border-b border-ink-300/30 bg-white px-6 py-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-emerald-deep font-display text-sm text-bone">
-            M
-          </span>
-          <span className="font-display text-lg tracking-tight text-ink-900">Maiplot</span>
-          <span className="ml-2 text-xs uppercase tracking-[0.18em] text-ink-300">Admin</span>
-        </div>
-        <SignOutButton />
-      </header>
+      <AdminNav active="listings" count={result.ok ? result.data.pagination.total : null} />
 
       <main className="mx-auto max-w-6xl px-6 py-12">
         <div className="flex flex-wrap items-end justify-between gap-4">

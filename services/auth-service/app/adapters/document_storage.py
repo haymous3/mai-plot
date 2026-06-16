@@ -37,10 +37,17 @@ class DocumentStorageError(RuntimeError):
     — distinct from a validation failure, which never reaches the adapter."""
 
 
+class DocumentObjectMissing(DocumentStorageError):
+    """The requested object key does not exist in the bucket."""
+
+
 class DocumentStorage(Protocol):
     async def put(
         self, *, key: str, data: bytes, content_type: str
     ) -> StoredObject:  # pragma: no cover - protocol
+        ...
+
+    async def get(self, key: str) -> bytes:  # pragma: no cover - protocol
         ...
 
     def presigned_get_url(
@@ -66,6 +73,11 @@ class InMemoryDocumentStorage:
         self.objects[key] = stored
         self.data[key] = data
         return stored
+
+    async def get(self, key: str) -> bytes:
+        if key not in self.data:
+            raise DocumentObjectMissing(key)
+        return self.data[key]
 
     def presigned_get_url(self, key: str, *, expires_seconds: int) -> str:
         # Deterministic fake URL — no real signing, just enough for callers
@@ -119,6 +131,18 @@ class S3DocumentStorage:
             extra={"key": key, "size": len(data), "duration_ms": duration_ms},
         )
         return StoredObject(key=key, content_type=content_type, size=len(data))
+
+    async def get(self, key: str) -> bytes:
+        try:
+            response = await asyncio.to_thread(
+                self._client.get_object, Bucket=self._bucket, Key=key
+            )
+            body: bytes = await asyncio.to_thread(response["Body"].read)
+        except self._client.exceptions.NoSuchKey as exc:
+            raise DocumentObjectMissing(key) from exc
+        except Exception as exc:  # boto3 ClientError/BotoCoreError
+            raise DocumentStorageError(str(exc)) from exc
+        return body
 
     def presigned_get_url(self, key: str, *, expires_seconds: int) -> str:
         url: str = self._client.generate_presigned_url(
