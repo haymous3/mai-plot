@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserPii
@@ -41,6 +41,25 @@ class UserAuthority:
 
     role: str
     seller_authority_type: str | None
+
+
+@dataclass(frozen=True)
+class PoaQueueRow:
+    """One pending PoA submission for the legal-team review queue."""
+
+    user_id: UUID
+    owner_name: str | None
+    submitted_at: datetime
+
+
+@dataclass(frozen=True)
+class PoaReviewTarget:
+    """What the review service needs: current status, the seller's phone (for
+    the decision SMS), and whether a document is actually on file."""
+
+    poa_verified_status: str
+    phone: str
+    has_document: bool
 
 
 @dataclass(frozen=True)
@@ -219,6 +238,71 @@ class UserRepository:
         user = await self._session.get(User, user_id)
         if user is not None:
             user.poa_verified_status = "pending"
+
+    async def list_poa_queue(self, *, page: int, page_size: int) -> tuple[list[PoaQueueRow], int]:
+        """Pending PoA submissions awaiting legal-team review (status='pending'
+        with a document on file), oldest-first. Returns (rows, total)."""
+        base = (
+            select(User.id, UserPii.poa_document_owner_name, UserPii.updated_at)
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                User.poa_verified_status == "pending",
+                UserPii.poa_document_s3_key.is_not(None),
+                User.deleted_at.is_(None),
+            )
+        )
+        total = (
+            await self._session.execute(select(func.count()).select_from(base.subquery()))
+        ).scalar_one()
+        rows = (
+            await self._session.execute(
+                base.order_by(UserPii.updated_at.asc())
+                .limit(page_size)
+                .offset((page - 1) * page_size)
+            )
+        ).all()
+        items = [
+            PoaQueueRow(
+                user_id=row.id,
+                owner_name=row.poa_document_owner_name,
+                submitted_at=row.updated_at,
+            )
+            for row in rows
+        ]
+        return items, int(total)
+
+    async def get_poa_review_target(self, user_id: UUID) -> PoaReviewTarget | None:
+        """Current PoA status + seller phone + whether a document exists, for a
+        live user. None if the user does not exist / is not live."""
+        stmt = (
+            select(
+                User.poa_verified_status,
+                UserPii.phone,
+                UserPii.poa_document_s3_key,
+            )
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+            )
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return PoaReviewTarget(
+            poa_verified_status=row.poa_verified_status,
+            phone=row.phone,
+            has_document=row.poa_document_s3_key is not None,
+        )
+
+    async def set_poa_verification(self, user_id: UUID, *, status: str) -> None:
+        """Apply a legal-team decision: move poa_verified_status to
+        'verified' or 'rejected'."""
+        user = await self._session.get(User, user_id)
+        if user is not None:
+            user.poa_verified_status = status
+            user.updated_at = datetime.now(UTC)
 
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
         """Return the user_id that already owns this NIN, or None."""

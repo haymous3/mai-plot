@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,13 +25,15 @@ from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
-from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.bvn_verification import BvnVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
 from app.services.nin_verification import NinVerificationService
 from app.services.otp_verification import OtpVerificationService
+from app.services.poa_queue import PoaQueueService
+from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
@@ -261,6 +263,20 @@ def get_poa_upload_service(
     )
 
 
+def get_poa_queue_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+) -> PoaQueueService:
+    return PoaQueueService(users=users)
+
+
+def get_poa_review_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    termii: TermiiDep,
+) -> PoaReviewService:
+    return PoaReviewService(users=users, audit=audit, termii=termii)
+
+
 async def get_current_user(
     jwt_service: Annotated[JwtService, Depends(_jwt_service)],
     authorization: Annotated[str | None, Header()] = None,
@@ -283,3 +299,24 @@ async def get_current_user(
     if claims.role is None:
         raise AuthenticationError("TOKEN_INVALID", "Access token is missing a role.")
     return CurrentUser(user_id=claims.user_id, role=claims.role)
+
+
+async def require_legal_team(
+    request: Request,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    settings: SettingsDep,
+) -> CurrentUser:
+    """Legal-team gate: a valid legal_team JWT AND (if configured) a whitelisted
+    IP. CLAUDE.md requires both for admin endpoints; Kong enforces the IP
+    allowlist at the edge and this app-level check is defence in depth. Raises
+    AuthorizationError -> 403."""
+    if caller.role != "legal_team":
+        raise AuthorizationError("LEGAL_TEAM_FORBIDDEN", "Legal-team access required.")
+    allowlist = [ip.strip() for ip in settings.legal_team_ip_allowlist.split(",") if ip.strip()]
+    if allowlist:
+        client_ip = request.client.host if request.client else None
+        if client_ip not in allowlist:
+            raise AuthorizationError(
+                "LEGAL_TEAM_IP_FORBIDDEN", "Your IP is not permitted for legal-team access."
+            )
+    return caller

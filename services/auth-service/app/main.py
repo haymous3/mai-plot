@@ -8,14 +8,16 @@ from fastapi.responses import JSONResponse
 
 from app.middleware.trace_id import HEADER as TRACE_HEADER
 from app.middleware.trace_id import TraceIdMiddleware
+from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
-from app.security import AuthenticationError
+from app.security import AuthenticationError, AuthorizationError
 from app.telemetry import setup_telemetry
 
 # FastAPI's status.HTTP_422_UNPROCESSABLE_ENTITY is being renamed; the
 # numeric literal sidesteps the deprecation warning across versions.
 _HTTP_422 = 422
 _HTTP_401 = 401
+_HTTP_403 = 403
 
 SERVICE_NAME = "auth-service"
 
@@ -23,6 +25,7 @@ app = FastAPI(title="Maiplot Auth Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.add_middleware(TraceIdMiddleware)
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -44,6 +47,16 @@ async def _auth_handler(request: Request, exc: AuthenticationError) -> JSONRespo
     """Map a failed bearer-token check to a 401 in the standard envelope."""
     return JSONResponse(
         status_code=_HTTP_401,
+        content={"error_code": exc.code, "message": exc.message, "details": {}},
+        headers={TRACE_HEADER: request.headers.get(TRACE_HEADER, "")},
+    )
+
+
+@app.exception_handler(AuthorizationError)
+async def _authz_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
+    """Map a permission failure (wrong role / non-whitelisted IP) to a 403."""
+    return JSONResponse(
+        status_code=_HTTP_403,
         content={"error_code": exc.code, "message": exc.message, "details": {}},
         headers={TRACE_HEADER: request.headers.get(TRACE_HEADER, "")},
     )
