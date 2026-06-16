@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID
@@ -142,6 +142,18 @@ def _text_score(doc: SearchDoc, q: str) -> float:
     return score
 
 
+def _urgency_boost(doc: SearchDoc, now: datetime, *, weight: float, scale_days: float) -> float:
+    """Relevance boost for a distress listing, weighted by how soon it expires
+    (SCRUM-115). Gaussian decay matching the real ES `gauss` function: full
+    `weight` at/after expiry, halving every `scale_days` from expiry, →0 far off.
+    Normal listings (or distress without an expiry) get 0."""
+    if doc.sale_type != "distress" or doc.expires_at is None or scale_days <= 0:
+        return 0.0
+    days_to_expiry = max(0.0, (doc.expires_at - now).total_seconds() / 86400.0)
+    decay: float = 0.5 ** ((days_to_expiry / scale_days) ** 2)
+    return weight * decay
+
+
 def _sort_key(doc: SearchDoc, sort: str) -> tuple[Any, ...]:
     if sort == "price_asc":
         return (doc.asking_price_kobo,)
@@ -160,6 +172,8 @@ class InMemorySearchIndex:
     """Test double. Filtering/scoring mirror the real index's semantics."""
 
     docs: dict[UUID, SearchDoc] | None = None
+    urgency_boost_weight: float = 3.0
+    urgency_scale_days: float = 7.0
 
     def __post_init__(self) -> None:
         if self.docs is None:
@@ -175,6 +189,7 @@ class InMemorySearchIndex:
 
     async def search(self, params: SearchParams) -> tuple[list[SearchHit], int]:
         assert self.docs is not None
+        now = datetime.now(UTC)
         matches: list[SearchHit] = []
         for doc in self.docs.values():
             if not _passes_filters(doc, params):
@@ -187,14 +202,27 @@ class InMemorySearchIndex:
                 score = 0.0
             matches.append(SearchHit(doc=doc, score=score))
 
-        if params.q:
-            matches.sort(key=lambda h: (-h.score, -h.doc.created_at.timestamp()))
-        else:
+        # Explicit price sorts ignore relevance; everything else (text query,
+        # default recency, urgency) ranks by score + the distress urgency boost
+        # (SCRUM-115). For match_all the text score is a uniform 0, so the boost
+        # alone floats soon-to-expire distress above normal listings; ties break
+        # by recency. Mirrors the real ES function_score path.
+        if params.sort in ("price_asc", "price_desc"):
             matches.sort(key=lambda h: _sort_key(h.doc, params.sort))
+        else:
+            matches.sort(key=lambda h: (-self._relevance(h, now), -h.doc.created_at.timestamp()))
 
         total = len(matches)
         start = (params.page - 1) * params.page_size
         return matches[start : start + params.page_size], total
+
+    def _relevance(self, hit: SearchHit, now: datetime) -> float:
+        return hit.score + _urgency_boost(
+            hit.doc,
+            now,
+            weight=self.urgency_boost_weight,
+            scale_days=self.urgency_scale_days,
+        )
 
 
 class ElasticsearchIndex:
@@ -202,12 +230,21 @@ class ElasticsearchIndex:
     its query shape mirrors InMemorySearchIndex. The index + mapping are
     created lazily on first upsert."""
 
-    def __init__(self, *, url: str, index: str) -> None:
+    def __init__(
+        self,
+        *,
+        url: str,
+        index: str,
+        urgency_boost_weight: float = 3.0,
+        urgency_scale_days: float = 7.0,
+    ) -> None:
         from elasticsearch import AsyncElasticsearch
 
         self._index = index
         self._client = AsyncElasticsearch(hosts=[url])
         self._ensured = False
+        self._urgency_boost_weight = urgency_boost_weight
+        self._urgency_scale_days = urgency_scale_days
 
     async def _ensure_index(self) -> None:
         if self._ensured:
@@ -272,6 +309,10 @@ class ElasticsearchIndex:
                 }
             )
 
+        # Explicit price sorts bypass relevance scoring; everything else (text
+        # query, default recency, urgency) ranks by _score and gets the distress
+        # urgency boost (SCRUM-115).
+        price_sort = params.sort in ("price_asc", "price_desc") and not params.q
         if params.q:
             must: dict[str, Any] = {
                 "multi_match": {
@@ -279,14 +320,20 @@ class ElasticsearchIndex:
                     "fields": ["title^2", "description", "address_text", "lga", "state"],
                 }
             }
-            sort: list[Any] = ["_score", {"created_at": "desc"}]
         else:
             must = {"match_all": {}}
-            sort = _es_sort(params.sort)
+
+        bool_query: dict[str, Any] = {"bool": {"must": must, "filter": filters}}
+        if price_sort:
+            query: dict[str, Any] = bool_query
+            sort: list[Any] = _es_sort(params.sort)
+        else:
+            query = self._with_urgency_boost(bool_query)
+            sort = ["_score", {"created_at": "desc"}]
 
         resp = await self._client.search(
             index=self._index,
-            query={"bool": {"must": must, "filter": filters}},
+            query=query,
             sort=sort,
             from_=(params.page - 1) * params.page_size,
             size=params.page_size,
@@ -297,6 +344,32 @@ class ElasticsearchIndex:
         ]
         total = int(resp["hits"]["total"]["value"])
         return hits, total
+
+    def _with_urgency_boost(self, bool_query: dict[str, Any]) -> dict[str, Any]:
+        """Wrap a bool query in a function_score that adds the distress urgency
+        boost (Gaussian decay over expires_at). boost_mode=sum so the boost is
+        ADDED to the base score (BM25, or a uniform 1.0 for match_all) — same
+        additive model as the in-memory fake's _relevance()."""
+        return {
+            "function_score": {
+                "query": bool_query,
+                "functions": [
+                    {
+                        "filter": {"term": {"sale_type": "distress"}},
+                        "gauss": {
+                            "expires_at": {
+                                "origin": "now",
+                                "scale": f"{self._urgency_scale_days}d",
+                                "decay": 0.5,
+                            }
+                        },
+                        "weight": self._urgency_boost_weight,
+                    }
+                ],
+                "boost_mode": "sum",
+                "score_mode": "sum",
+            }
+        }
 
 
 def _es_sort(sort: str) -> list[Any]:
@@ -359,8 +432,23 @@ def _from_source(src: dict[str, Any]) -> SearchDoc:
     )
 
 
-def build_search_index(*, use_fake: bool, url: str, index: str) -> SearchIndex:
+def build_search_index(
+    *,
+    use_fake: bool,
+    url: str,
+    index: str,
+    urgency_boost_weight: float = 3.0,
+    urgency_scale_days: float = 7.0,
+) -> SearchIndex:
     """Factory — in-memory fake for local/CI, real Elasticsearch in production."""
     if use_fake:
-        return InMemorySearchIndex()
-    return ElasticsearchIndex(url=url, index=index)
+        return InMemorySearchIndex(
+            urgency_boost_weight=urgency_boost_weight,
+            urgency_scale_days=urgency_scale_days,
+        )
+    return ElasticsearchIndex(
+        url=url,
+        index=index,
+        urgency_boost_weight=urgency_boost_weight,
+        urgency_scale_days=urgency_scale_days,
+    )

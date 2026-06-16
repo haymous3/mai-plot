@@ -65,6 +65,32 @@ async def test_search_returns_active_matches_with_score(
 
 
 @pytest.mark.asyncio
+async def test_default_search_boosts_soon_expiring_distress(
+    clean_listing_tables: None,
+    search_index_fake: Any,
+    http_client: AsyncClient,
+) -> None:
+    from datetime import timedelta
+
+    now = datetime.now(UTC)
+    await search_index_fake.upsert(_doc(title="Fresh Normal", sale_type="normal", created_at=now))
+    await search_index_fake.upsert(
+        _doc(
+            title="Urgent Distress",
+            sale_type="distress",
+            urgency_tag="7_days",
+            expires_at=now + timedelta(days=2),
+            created_at=now - timedelta(days=10),
+        )
+    )
+
+    response = await http_client.get("/listings/search")
+    assert response.status_code == 200, response.text
+    titles = [item["title"] for item in response.json()["data"]]
+    assert titles == ["Urgent Distress", "Fresh Normal"]
+
+
+@pytest.mark.asyncio
 async def test_search_geo_radius(
     clean_listing_tables: None,
     search_index_fake: Any,
