@@ -24,6 +24,20 @@ class AuthenticationError(RuntimeError):
         super().__init__(message)
 
 
+class AuthorizationError(RuntimeError):
+    """Raised when an authenticated caller lacks permission for an endpoint
+    (wrong role, or a non-whitelisted IP). main.py maps it to a 403 envelope."""
+
+    def __init__(
+        self,
+        code: str = "FORBIDDEN",
+        message: str = "You do not have permission to perform this action.",
+    ) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class CurrentUser:
     user_id: UUID

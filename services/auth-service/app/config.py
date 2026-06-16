@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     poa_max_upload_bytes: int = 10 * 1024 * 1024
     poa_presign_ttl_seconds: int = 900
 
+    # PoA review queue (SCRUM-56). The legal team reviews PoA documents via
+    # admin endpoints gated to the `legal_team` role AND an IP allowlist
+    # (CLAUDE.md: admin endpoints require JWT + IP whitelist). Kong enforces the
+    # allowlist at the edge; this app-level check is defence in depth.
+    # Comma-separated IPs; empty = allow any (dev/test default).
+    legal_team_ip_allowlist: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
