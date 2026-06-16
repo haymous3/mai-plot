@@ -337,6 +337,11 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      # Server-side calls from the admin dashboard (SCRUM-59/60). In-cluster the
+      # web server reaches the FastAPI services by their compose hostnames.
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:8000}
+      LISTING_SERVICE_URL: ${LISTING_SERVICE_URL:-http://listing-service:8000}
+      ADMIN_IP_ALLOWLIST: ${ADMIN_IP_ALLOWLIST:-}
     ports:
       - "3000:3000"   # per SCRUM-35 AC
     depends_on:
