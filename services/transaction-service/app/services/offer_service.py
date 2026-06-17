@@ -105,8 +105,7 @@ class OfferService:
         offer_id = await self._offers.create(
             listing_id=listing_id,
             buyer_id=buyer.user_id,
-            seller_id=listing.seller_id,
-            amount_kobo=amount_kobo,
+            offered_price_kobo=amount_kobo,
             expires_at=now + timedelta(hours=self._expiry_hours),
         )
         # NOTE: seller notification deferred to notification-service.
@@ -122,7 +121,9 @@ class OfferService:
         if offer.seller_id != seller.user_id:
             raise NotOfferSeller()
         await self._ensure_actionable(offer, allowed={"pending"})
-        return await self._accept(offer, accepter=seller.user_id, price_kobo=offer.amount_kobo)
+        return await self._accept(
+            offer, accepter=seller.user_id, price_kobo=offer.offered_price_kobo
+        )
 
     async def counter_offer(
         self, *, seller: CurrentUser, offer_id: UUID, counter_amount_kobo: int
@@ -131,7 +132,7 @@ class OfferService:
         if offer.seller_id != seller.user_id:
             raise NotOfferSeller()
         await self._ensure_actionable(offer, allowed={"pending"})
-        await self._offers.set_countered(offer_id, counter_amount_kobo=counter_amount_kobo)
+        await self._offers.set_countered(offer_id, counter_price_kobo=counter_amount_kobo)
         return await self._reload(offer_id)
 
     async def reject_offer(self, *, seller: CurrentUser, offer_id: UUID) -> OfferRow:
@@ -150,9 +151,9 @@ class OfferService:
             raise NotOfferBuyer()
         await self._ensure_actionable(offer, allowed={"countered"})
         if action == "accept":
-            assert offer.counter_amount_kobo is not None
+            assert offer.counter_price_kobo is not None
             return await self._accept(
-                offer, accepter=buyer.user_id, price_kobo=offer.counter_amount_kobo
+                offer, accepter=buyer.user_id, price_kobo=offer.counter_price_kobo
             )
         await self._offers.set_status(offer_id, status="rejected")
         return await self._reload(offer_id)
@@ -180,7 +181,7 @@ class OfferService:
             triggered_by=accepter,
             metadata={"offer_id": str(offer.id), "agreed_price_kobo": price_kobo},
         )
-        await self._offers.set_accepted(offer.id, transaction_id=transaction_id)
+        await self._offers.set_accepted(offer.id)
         await self._listings.mark_under_offer(offer.listing_id)
         logger.info(
             "offer.accepted",
@@ -200,10 +201,10 @@ class OfferService:
         return offer
 
     async def _ensure_actionable(self, offer: OfferRow, *, allowed: set[str]) -> None:
-        """Lazy 72h expiry + state guard. An offer past its window is marked
-        expired and refused; a wrong-state offer is refused."""
+        """Lazy 72h expiry + state guard. An offer past its window is refused
+        (logically expired). The status is NOT mutated — the offers table's CHECK
+        has no 'expired' value; a Celery sweep + schema change is the follow-up."""
         if offer.status in ("pending", "countered") and offer.expires_at <= datetime.now(UTC):
-            await self._offers.set_status(offer.id, status="expired")
             raise OfferExpired()
         if offer.status not in allowed:
             raise OfferNotActionable()

@@ -40,17 +40,17 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
     )
 
 
-def _offer_response(offer: OfferRow) -> OfferResponse:
+def _offer_response(offer: OfferRow, *, transaction_id: UUID | None = None) -> OfferResponse:
     return OfferResponse(
         id=offer.id,
         listing_id=offer.listing_id,
         buyer_id=offer.buyer_id,
         seller_id=offer.seller_id,
         status=offer.status,
-        amount_kobo=offer.amount_kobo,
-        counter_amount_kobo=offer.counter_amount_kobo,
+        amount_kobo=offer.offered_price_kobo,
+        counter_amount_kobo=offer.counter_price_kobo,
         expires_at=offer.expires_at,
-        transaction_id=offer.transaction_id,
+        transaction_id=transaction_id,
     )
 
 
@@ -109,7 +109,7 @@ async def accept_offer(
             "LISTING_NOT_AVAILABLE",
             "This listing is no longer available.",
         )
-    return _offer_response(result.offer)
+    return _offer_response(result.offer, transaction_id=result.transaction_id)
 
 
 @router.post("/{offer_id}/counter", response_model=OfferResponse)
@@ -178,5 +178,6 @@ async def respond_to_counter(
         return _error(
             status.HTTP_409_CONFLICT, "OFFER_NOT_ACTIONABLE", "There is no counter to respond to."
         )
-    offer = result.offer if isinstance(result, AcceptResult) else result
-    return _offer_response(offer)
+    if isinstance(result, AcceptResult):
+        return _offer_response(result.offer, transaction_id=result.transaction_id)
+    return _offer_response(result)

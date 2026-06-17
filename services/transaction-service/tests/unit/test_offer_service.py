@@ -56,10 +56,9 @@ class _StubOfferRepo:
             listing_id=_LISTING,
             buyer_id=_BUYER.user_id,
             seller_id=_SELLER.user_id,
-            amount_kobo=5_000_000_000,
-            counter_amount_kobo=None,
+            offered_price_kobo=5_000_000_000,
+            counter_price_kobo=None,
             status="pending",
-            transaction_id=None,
             expires_at=datetime.now(UTC) + timedelta(hours=72),
         )
         row = replace(row, **over)  # type: ignore[arg-type]
@@ -67,23 +66,16 @@ class _StubOfferRepo:
         return row
 
     async def create(
-        self,
-        *,
-        listing_id: UUID,
-        buyer_id: UUID,
-        seller_id: UUID,
-        amount_kobo: int,
-        expires_at: datetime,
+        self, *, listing_id: UUID, buyer_id: UUID, offered_price_kobo: int, expires_at: datetime
     ) -> UUID:
         row = OfferRow(
             id=uuid4(),
             listing_id=listing_id,
             buyer_id=buyer_id,
-            seller_id=seller_id,
-            amount_kobo=amount_kobo,
-            counter_amount_kobo=None,
+            seller_id=_SELLER.user_id,  # the join surfaces the listing's seller
+            offered_price_kobo=offered_price_kobo,
+            counter_price_kobo=None,
             status="pending",
-            transaction_id=None,
             expires_at=expires_at,
         )
         self.rows[row.id] = row
@@ -95,15 +87,13 @@ class _StubOfferRepo:
     async def set_status(self, offer_id: UUID, *, status: str) -> None:
         self.rows[offer_id] = replace(self.rows[offer_id], status=status)
 
-    async def set_countered(self, offer_id: UUID, *, counter_amount_kobo: int) -> None:
+    async def set_countered(self, offer_id: UUID, *, counter_price_kobo: int) -> None:
         self.rows[offer_id] = replace(
-            self.rows[offer_id], status="countered", counter_amount_kobo=counter_amount_kobo
+            self.rows[offer_id], status="countered", counter_price_kobo=counter_price_kobo
         )
 
-    async def set_accepted(self, offer_id: UUID, *, transaction_id: UUID) -> None:
-        self.rows[offer_id] = replace(
-            self.rows[offer_id], status="accepted", transaction_id=transaction_id
-        )
+    async def set_accepted(self, offer_id: UUID) -> None:
+        self.rows[offer_id] = replace(self.rows[offer_id], status="accepted")
 
 
 class _StubTxnRepo:
@@ -144,7 +134,7 @@ async def test_create_offer_happy_path() -> None:
     offer = await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=4_000_000_000)
     assert offer.status == "pending"
     assert offer.seller_id == _SELLER.user_id
-    assert offer.amount_kobo == 4_000_000_000
+    assert offer.offered_price_kobo == 4_000_000_000
 
 
 @pytest.mark.asyncio
@@ -189,10 +179,9 @@ async def test_accept_creates_transaction_and_locks_listing() -> None:
 
     assert isinstance(result, AcceptResult)
     assert offers.rows[offer.id].status == "accepted"
-    assert offers.rows[offer.id].transaction_id == result.transaction_id
     assert listings.under_offer == [_LISTING]
     assert txns.events == ["offer_accepted"]
-    assert txns.created[0]["agreed_price_kobo"] == offer.amount_kobo
+    assert txns.created[0]["agreed_price_kobo"] == offer.offered_price_kobo
 
 
 @pytest.mark.asyncio
@@ -214,20 +203,20 @@ async def test_accept_non_pending_offer_is_not_actionable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_accept_expired_offer_raises_and_marks_expired() -> None:
+async def test_accept_expired_offer_is_refused() -> None:
     offers = _StubOfferRepo()
     offer = offers.seed(expires_at=datetime.now(UTC) - timedelta(minutes=1))
     svc, _, _, _ = _service(_active_listing(), offers=offers)
     with pytest.raises(OfferExpired):
         await svc.accept_offer(seller=_SELLER, offer_id=offer.id)
-    assert offers.rows[offer.id].status == "expired"
+    # Status is not mutated (the offers CHECK has no 'expired' value).
+    assert offers.rows[offer.id].status == "pending"
 
 
 @pytest.mark.asyncio
 async def test_accept_when_listing_no_longer_active_is_conflict() -> None:
     offers = _StubOfferRepo()
     offer = offers.seed()
-    # Listing went under_offer (another offer won) between create and accept.
     svc, _, _, _ = _service(_active_listing(status="under_offer"), offers=offers)
     with pytest.raises(ListingNotAvailable):
         await svc.accept_offer(seller=_SELLER, offer_id=offer.id)
@@ -246,7 +235,7 @@ async def test_counter_then_buyer_accepts_uses_counter_price() -> None:
         seller=_SELLER, offer_id=offer.id, counter_amount_kobo=6_000_000_000
     )
     assert countered.status == "countered"
-    assert countered.counter_amount_kobo == 6_000_000_000
+    assert countered.counter_price_kobo == 6_000_000_000
 
     result = await svc.respond_to_counter(buyer=_BUYER, offer_id=offer.id, action="accept")
     assert isinstance(result, AcceptResult)
@@ -257,7 +246,7 @@ async def test_counter_then_buyer_accepts_uses_counter_price() -> None:
 @pytest.mark.asyncio
 async def test_buyer_rejects_counter() -> None:
     offers = _StubOfferRepo()
-    offer = offers.seed(status="countered", counter_amount_kobo=6_000_000_000)
+    offer = offers.seed(status="countered", counter_price_kobo=6_000_000_000)
     svc, _, _, _ = _service(_active_listing(), offers=offers)
     result = await svc.respond_to_counter(buyer=_BUYER, offer_id=offer.id, action="reject")
     assert not isinstance(result, AcceptResult)
@@ -267,7 +256,7 @@ async def test_buyer_rejects_counter() -> None:
 @pytest.mark.asyncio
 async def test_only_buyer_can_respond_to_counter() -> None:
     offers = _StubOfferRepo()
-    offer = offers.seed(status="countered", counter_amount_kobo=1)
+    offer = offers.seed(status="countered", counter_price_kobo=1)
     svc, _, _, _ = _service(_active_listing(), offers=offers)
     with pytest.raises(NotOfferBuyer):
         await svc.respond_to_counter(buyer=_SELLER, offer_id=offer.id, action="accept")
