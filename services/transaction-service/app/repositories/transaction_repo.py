@@ -8,15 +8,41 @@ first event records the acceptance. (Subsequent stage transitions are SCRUM-67.)
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+@dataclass(frozen=True)
+class TransactionStatus:
+    stage: str
+    buyer_id: UUID
+    seller_id: UUID
+
+
 class TransactionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
+        """Current stage + parties of a transaction (for transition authz)."""
+        row = (
+            await self._session.execute(
+                text("SELECT stage, buyer_id, seller_id FROM transactions WHERE id = :id"),
+                {"id": transaction_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return TransactionStatus(stage=row.stage, buyer_id=row.buyer_id, seller_id=row.seller_id)
+
+    async def update_stage(self, transaction_id: UUID, *, stage: str) -> None:
+        await self._session.execute(
+            text("UPDATE transactions SET stage = :s, updated_at = NOW() WHERE id = :id"),
+            {"s": stage, "id": transaction_id},
+        )
 
     async def create_at_offer_accepted(
         self,
