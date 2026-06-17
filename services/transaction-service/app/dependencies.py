@@ -9,12 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
+from app.services.transaction_status import TransactionStatusService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -36,6 +38,10 @@ def _transaction_repo(session: SessionDep) -> TransactionRepository:
     return TransactionRepository(session)
 
 
+def _audit_repo(session: SessionDep) -> AuditLogRepository:
+    return AuditLogRepository(session)
+
+
 def get_offer_service(
     offers: Annotated[OfferRepository, Depends(_offer_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
@@ -48,6 +54,13 @@ def get_offer_service(
         transactions=transactions,
         offer_expiry_hours=settings.offer_expiry_hours,
     )
+
+
+def get_transaction_status_service(
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> TransactionStatusService:
+    return TransactionStatusService(transactions=transactions, audit=audit)
 
 
 async def get_current_user(

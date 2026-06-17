@@ -10,12 +10,17 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_current_user, get_offer_service
+from app.dependencies import (
+    get_current_user,
+    get_offer_service,
+    get_transaction_status_service,
+)
 from app.repositories.offer_repo import OfferRow
 from app.schemas.offer import CounterRequest, CreateOfferRequest, OfferResponse, RespondRequest
+from app.schemas.transaction import StatusChangeRequest, StatusResponse
 from app.security import CurrentUser
 from app.services.offer_service import (
     AcceptResult,
@@ -28,6 +33,12 @@ from app.services.offer_service import (
     OfferNotActionable,
     OfferNotFound,
     OfferService,
+)
+from app.services.transaction_status import (
+    InvalidStateTransition,
+    NotTransactionParty,
+    TransactionNotFound,
+    TransactionStatusService,
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -56,6 +67,39 @@ def _offer_response(offer: OfferRow, *, transaction_id: UUID | None = None) -> O
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
+StatusServiceDep = Annotated[TransactionStatusService, Depends(get_transaction_status_service)]
+
+
+@router.patch("/{transaction_id}/status", response_model=StatusResponse)
+async def change_status(
+    transaction_id: UUID,
+    body: StatusChangeRequest,
+    request: Request,
+    caller: CurrentUserDep,
+    service: StatusServiceDep,
+) -> StatusResponse | JSONResponse:
+    """Move a transaction to a new stage. The state machine validates the
+    transition server-side (422 on an illegal one); the Literal request type
+    means a client cannot set an arbitrary stage value."""
+    try:
+        stage = await service.change_status(
+            transaction_id=transaction_id,
+            caller=caller,
+            target_stage=body.status,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except TransactionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "TRANSACTION_NOT_FOUND", "No transaction found.")
+    except NotTransactionParty:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_TRANSACTION_PARTY",
+            "You are not a party to this transaction.",
+        )
+    except InvalidStateTransition:
+        return _error(422, "INVALID_STATE_TRANSITION", "That stage transition is not allowed.")
+    return StatusResponse(transaction_id=transaction_id, stage=stage)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=OfferResponse)
