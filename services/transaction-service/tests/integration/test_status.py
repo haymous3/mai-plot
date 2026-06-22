@@ -12,7 +12,12 @@ from sqlalchemy.engine import Engine
 
 
 def _seed_transaction(
-    db_engine: Engine, *, buyer_id: UUID, seller_id: UUID, stage: str = "offer_accepted"
+    db_engine: Engine,
+    *,
+    buyer_id: UUID,
+    seller_id: UUID,
+    listing_id: UUID | None = None,
+    stage: str = "offer_accepted",
 ) -> UUID:
     txn_id = uuid4()
     with db_engine.begin() as conn:
@@ -24,7 +29,13 @@ def _seed_transaction(
                 VALUES (:id, :lid, :bid, :sid, 5000000000, :stage)
                 """
             ),
-            {"id": txn_id, "lid": uuid4(), "bid": buyer_id, "sid": seller_id, "stage": stage},
+            {
+                "id": txn_id,
+                "lid": listing_id or uuid4(),
+                "bid": buyer_id,
+                "sid": seller_id,
+                "stage": stage,
+            },
         )
     return txn_id
 
@@ -139,6 +150,66 @@ async def test_non_party_is_forbidden(
     )
     assert response.status_code == 403
     assert response.json()["error_code"] == "NOT_TRANSACTION_PARTY"
+
+
+@pytest.mark.asyncio
+async def test_cancel_reopens_the_listing(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    listing_id = seed_listing(seller_id=seller, status="under_offer")
+    txn_id = _seed_transaction(db_engine, buyer_id=buyer, seller_id=seller, listing_id=listing_id)
+
+    response = await http_client.patch(
+        f"/transactions/{txn_id}/status",
+        json={"status": "cancelled"},
+        headers=auth_header(mint_token(seller, "seller")),
+    )
+    assert response.status_code == 200, response.text
+
+    with db_engine.connect() as conn:
+        status = conn.execute(
+            text("SELECT status FROM property_listings WHERE id = :id"), {"id": listing_id}
+        ).scalar_one()
+        assert status == "active"  # lock released
+
+
+@pytest.mark.asyncio
+async def test_complete_marks_the_listing_sold(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    listing_id = seed_listing(seller_id=seller, status="under_offer")
+    txn_id = _seed_transaction(
+        db_engine, buyer_id=buyer, seller_id=seller, listing_id=listing_id, stage="title_held"
+    )
+
+    response = await http_client.patch(
+        f"/transactions/{txn_id}/status",
+        json={"status": "completed"},
+        headers=auth_header(mint_token(seller, "seller")),
+    )
+    assert response.status_code == 200, response.text
+
+    with db_engine.connect() as conn:
+        status = conn.execute(
+            text("SELECT status FROM property_listings WHERE id = :id"), {"id": listing_id}
+        ).scalar_one()
+        assert status == "sold"
 
 
 @pytest.mark.asyncio

@@ -46,10 +46,33 @@ class ListingRepository:
 
     async def mark_under_offer(self, listing_id: UUID) -> None:
         """Lock the listing to other buyers on offer acceptance (status →
-        under_offer). The 72h lock window/release is refined in SCRUM-68."""
+        under_offer). The 72h window is tracked on transactions.lock_expires_at;
+        release_lock / mark_sold end the lock (SCRUM-68)."""
         await self._session.execute(
             text(
                 "UPDATE property_listings SET status = 'under_offer', updated_at = NOW() "
+                "WHERE id = :id AND deleted_at IS NULL"
+            ),
+            {"id": listing_id},
+        )
+
+    async def release_lock(self, listing_id: UUID) -> None:
+        """Reopen a listing whose offer lock has ended (under_offer → active):
+        the 72h window lapsed without progress, or the deal was cancelled.
+        Guarded on under_offer so a sold/expired listing is never resurrected."""
+        await self._session.execute(
+            text(
+                "UPDATE property_listings SET status = 'active', updated_at = NOW() "
+                "WHERE id = :id AND status = 'under_offer' AND deleted_at IS NULL"
+            ),
+            {"id": listing_id},
+        )
+
+    async def mark_sold(self, listing_id: UUID) -> None:
+        """Close a listing when its deal completes (→ sold)."""
+        await self._session.execute(
+            text(
+                "UPDATE property_listings SET status = 'sold', updated_at = NOW() "
                 "WHERE id = :id AND deleted_at IS NULL"
             ),
             {"id": listing_id},

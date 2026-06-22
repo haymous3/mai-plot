@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository, OfferRow
 from app.repositories.transaction_repo import TransactionRepository
@@ -28,7 +29,7 @@ from app.security import CurrentUser
 logger = logging.getLogger(__name__)
 
 # Business rule §4 — the listing is locked to other buyers for 72h once an
-# offer is accepted. (SCRUM-68 refines the lock window/release.)
+# offer is accepted. The window is tracked on transactions.lock_expires_at.
 _LISTING_LOCK_SQL = "NOW() + INTERVAL '72 hours'"
 
 
@@ -81,11 +82,13 @@ class OfferService:
         offers: OfferRepository,
         listings: ListingRepository,
         transactions: TransactionRepository,
+        audit: AuditLogRepository,
         offer_expiry_hours: int = 72,
     ) -> None:
         self._offers = offers
         self._listings = listings
         self._transactions = transactions
+        self._audit = audit
         self._expiry_hours = offer_expiry_hours
 
     async def create_offer(
@@ -97,6 +100,11 @@ class OfferService:
         if listing.seller_id == buyer.user_id:
             raise CannotOfferOwnListing()
         now = datetime.now(UTC)
+        # A listing under_offer may have a 72h lock that has already lapsed with
+        # no progress — reopen it lazily so the new buyer can offer.
+        if listing.status == "under_offer" and await self._release_lapsed_lock(listing_id, now):
+            listing = await self._listings.get_for_offer(listing_id)
+            assert listing is not None
         if listing.status != "active":
             raise ListingNotAvailable()
         if listing.expires_at is not None and listing.expires_at <= now:
@@ -159,6 +167,48 @@ class OfferService:
         return await self._reload(offer_id)
 
     # -- internals ---------------------------------------------------------
+
+    async def _release_lapsed_lock(self, listing_id: UUID, now: datetime) -> bool:
+        """If a listing is under_offer but its 72h lock has lapsed with the deal
+        still parked at offer_accepted, cancel that abandoned transaction and
+        reopen the listing. Returns True if it released. A deal that has
+        progressed past offer_accepted is a live deal and stays locked.
+
+        This is the lazy path (mirrors the lazy offer-expiry pattern); a Celery
+        sweep that reopens lapsed locks off-request is the proactive follow-up.
+        """
+        lock = await self._transactions.get_lock_for_listing(listing_id)
+        if lock is None or lock.stage != "offer_accepted":
+            return False
+        if lock.lock_expires_at is None or lock.lock_expires_at > now:
+            return False  # lock still live
+        await self._transactions.update_stage(lock.transaction_id, stage="cancelled")
+        await self._transactions.append_event(
+            transaction_id=lock.transaction_id,
+            event_type="lock_expired",
+            from_stage="offer_accepted",
+            to_stage="cancelled",
+            triggered_by=None,
+            metadata={"reason": "listing_lock_expired"},
+        )
+        await self._audit.record(
+            actor_id=None,
+            actor_role="system",
+            action="transaction.cancelled",
+            entity_type="transaction",
+            entity_id=lock.transaction_id,
+            old_value={"stage": "offer_accepted"},
+            new_value={"stage": "cancelled", "reason": "listing_lock_expired"},
+        )
+        await self._listings.release_lock(listing_id)
+        logger.info(
+            "listing.lock_released",
+            extra={
+                "listing_id": str(listing_id),
+                "transaction_id": str(lock.transaction_id),
+            },
+        )
+        return True
 
     async def _accept(self, offer: OfferRow, *, accepter: UUID, price_kobo: int) -> AcceptResult:
         # Re-check the listing is still available so two offers can't both be

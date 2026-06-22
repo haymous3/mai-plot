@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import text
@@ -20,6 +21,17 @@ class TransactionStatus:
     stage: str
     buyer_id: UUID
     seller_id: UUID
+    listing_id: UUID
+
+
+@dataclass(frozen=True)
+class ListingLock:
+    """The latest transaction holding a listing's 72h lock — its stage and lock
+    window decide whether an under_offer listing can be reopened (SCRUM-68)."""
+
+    transaction_id: UUID
+    stage: str
+    lock_expires_at: datetime | None
 
 
 class TransactionRepository:
@@ -27,16 +39,43 @@ class TransactionRepository:
         self._session = session
 
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
-        """Current stage + parties of a transaction (for transition authz)."""
+        """Current stage + parties + listing of a transaction (transition authz
+        and the listing-status side effects on cancel/complete)."""
         row = (
             await self._session.execute(
-                text("SELECT stage, buyer_id, seller_id FROM transactions WHERE id = :id"),
+                text(
+                    "SELECT stage, buyer_id, seller_id, listing_id "
+                    "FROM transactions WHERE id = :id"
+                ),
                 {"id": transaction_id},
             )
         ).first()
         if row is None:
             return None
-        return TransactionStatus(stage=row.stage, buyer_id=row.buyer_id, seller_id=row.seller_id)
+        return TransactionStatus(
+            stage=row.stage,
+            buyer_id=row.buyer_id,
+            seller_id=row.seller_id,
+            listing_id=row.listing_id,
+        )
+
+    async def get_lock_for_listing(self, listing_id: UUID) -> ListingLock | None:
+        """The most recent transaction for a listing (its stage + lock window),
+        used to decide whether an under_offer listing's 72h lock has lapsed."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT id, stage, lock_expires_at FROM transactions "
+                    "WHERE listing_id = :lid ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"lid": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return ListingLock(
+            transaction_id=row.id, stage=row.stage, lock_expires_at=row.lock_expires_at
+        )
 
     async def update_stage(self, transaction_id: UUID, *, stage: str) -> None:
         await self._session.execute(
