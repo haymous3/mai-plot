@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # now; a Celery beat sweep is a follow-up.
     offer_expiry_hours: int = 72
 
+    # Escrow admin endpoints require admin JWT AND an IP whitelist (CLAUDE.md).
+    # Kong enforces the allowlist at the edge; this app-level check is defence
+    # in depth. Comma-separated IPs; empty = allow any (dev/test default).
+    admin_ip_allowlist: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
