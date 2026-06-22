@@ -44,8 +44,7 @@ class TransactionRepository:
         row = (
             await self._session.execute(
                 text(
-                    "SELECT stage, buyer_id, seller_id, listing_id "
-                    "FROM transactions WHERE id = :id"
+                    "SELECT stage, buyer_id, seller_id, listing_id FROM transactions WHERE id = :id"
                 ),
                 {"id": transaction_id},
             )
