@@ -10,6 +10,7 @@ import pytest
 
 from app.repositories.listing_repo import ListingForOffer
 from app.repositories.offer_repo import OfferRow
+from app.repositories.transaction_repo import ListingLock
 from app.security import CurrentUser
 from app.services.offer_service import (
     AcceptResult,
@@ -38,12 +39,22 @@ class _StubListingRepo:
     def __init__(self, listing: ListingForOffer | None) -> None:
         self._listing = listing
         self.under_offer: list[UUID] = []
+        self.released: list[UUID] = []
+        self.sold: list[UUID] = []
 
     async def get_for_offer(self, listing_id: UUID) -> ListingForOffer | None:
         return self._listing
 
     async def mark_under_offer(self, listing_id: UUID) -> None:
         self.under_offer.append(listing_id)
+
+    async def release_lock(self, listing_id: UUID) -> None:
+        self.released.append(listing_id)
+        if self._listing is not None:  # model the under_offer → active flip
+            self._listing = replace(self._listing, status="active")
+
+    async def mark_sold(self, listing_id: UUID) -> None:
+        self.sold.append(listing_id)
 
 
 class _StubOfferRepo:
@@ -97,9 +108,11 @@ class _StubOfferRepo:
 
 
 class _StubTxnRepo:
-    def __init__(self) -> None:
+    def __init__(self, lock: ListingLock | None = None) -> None:
         self.created: list[dict[str, object]] = []
         self.events: list[str] = []
+        self.updated: list[tuple[UUID, str]] = []
+        self._lock = lock
 
     async def create_at_offer_accepted(self, **kwargs: object) -> UUID:
         self.created.append(kwargs)
@@ -107,6 +120,20 @@ class _StubTxnRepo:
 
     async def append_event(self, **kwargs: object) -> None:
         self.events.append(str(kwargs["event_type"]))
+
+    async def get_lock_for_listing(self, listing_id: UUID) -> ListingLock | None:
+        return self._lock
+
+    async def update_stage(self, transaction_id: UUID, *, stage: str) -> None:
+        self.updated.append((transaction_id, stage))
+
+
+class _StubAudit:
+    def __init__(self) -> None:
+        self.actions: list[str] = []
+
+    async def record(self, **kwargs: object) -> None:
+        self.actions.append(str(kwargs["action"]))
 
 
 def _service(
@@ -121,6 +148,7 @@ def _service(
         offers=o,  # type: ignore[arg-type]
         listings=listings_repo,  # type: ignore[arg-type]
         transactions=t,  # type: ignore[arg-type]
+        audit=_StubAudit(),  # type: ignore[arg-type]
     )
     return svc, o, listings_repo, t
 
@@ -153,9 +181,60 @@ async def test_cannot_offer_on_own_listing() -> None:
 
 @pytest.mark.asyncio
 async def test_offer_on_under_offer_listing_is_conflict() -> None:
+    # No transaction lock on record → genuinely locked, refused.
     svc, _, _, _ = _service(_active_listing(status="under_offer"))
     with pytest.raises(ListingNotAvailable):
         await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=1)
+
+
+@pytest.mark.asyncio
+async def test_offer_reopens_listing_when_72h_lock_lapsed() -> None:
+    lock = ListingLock(
+        transaction_id=uuid4(),
+        stage="offer_accepted",
+        lock_expires_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+    txns = _StubTxnRepo(lock=lock)
+    svc, _, listings, _ = _service(_active_listing(status="under_offer"), txns=txns)
+
+    offer = await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=4_000_000_000)
+
+    assert offer.status == "pending"  # the new offer went through
+    assert listings.released == [_LISTING]  # listing reopened
+    assert txns.updated == [(lock.transaction_id, "cancelled")]  # stale deal cancelled
+
+
+@pytest.mark.asyncio
+async def test_offer_refused_while_72h_lock_still_live() -> None:
+    lock = ListingLock(
+        transaction_id=uuid4(),
+        stage="offer_accepted",
+        lock_expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    txns = _StubTxnRepo(lock=lock)
+    svc, _, listings, _ = _service(_active_listing(status="under_offer"), txns=txns)
+
+    with pytest.raises(ListingNotAvailable):
+        await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=1)
+    assert listings.released == []
+
+
+@pytest.mark.asyncio
+async def test_offer_refused_when_deal_progressed_past_offer_accepted() -> None:
+    # Lock window elapsed, but the deal is live (inspection scheduled) — the
+    # listing stays locked; an active deal is not abandoned.
+    lock = ListingLock(
+        transaction_id=uuid4(),
+        stage="inspection_scheduled",
+        lock_expires_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+    txns = _StubTxnRepo(lock=lock)
+    svc, _, listings, _ = _service(_active_listing(status="under_offer"), txns=txns)
+
+    with pytest.raises(ListingNotAvailable):
+        await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=1)
+    assert listings.released == []
+    assert txns.updated == []
 
 
 @pytest.mark.asyncio

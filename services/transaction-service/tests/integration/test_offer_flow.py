@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -108,6 +108,65 @@ async def test_offer_on_under_offer_listing_conflicts(
     )
     assert response.status_code == 409
     assert response.json()["error_code"] == "LISTING_NOT_AVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_new_offer_allowed_after_72h_lock_lapses(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    seller = seed_user(role="seller")
+    first_buyer = seed_user(role="buyer")
+    second_buyer = seed_user(role="buyer")
+    listing_id = seed_listing(seller_id=seller, status="under_offer")
+    # A transaction whose 72h lock has already lapsed, still parked at
+    # offer_accepted (the first buyer never progressed).
+    stale_txn = uuid4()
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO transactions
+                    (id, listing_id, buyer_id, seller_id, agreed_price_kobo, stage,
+                     lock_expires_at)
+                VALUES (:id, :lid, :bid, :sid, 5000000000, 'offer_accepted',
+                        NOW() - INTERVAL '1 hour')
+                """
+            ),
+            {"id": stale_txn, "lid": listing_id, "bid": first_buyer, "sid": seller},
+        )
+
+    response = await http_client.post(
+        "/transactions",
+        json={"listing_id": str(listing_id), "amount_kobo": 4_000_000_000},
+        headers=auth_header(mint_token(second_buyer, "buyer")),
+    )
+    assert response.status_code == 201, response.text  # lock lapsed → new offer allowed
+
+    with db_engine.connect() as conn:
+        stale_stage = conn.execute(
+            text("SELECT stage FROM transactions WHERE id = :id"), {"id": stale_txn}
+        ).scalar_one()
+        assert stale_stage == "cancelled"  # abandoned deal cancelled
+
+        listing_status = conn.execute(
+            text("SELECT status FROM property_listings WHERE id = :id"), {"id": listing_id}
+        ).scalar_one()
+        assert listing_status == "active"  # listing reopened (new offer is pending, not accepted)
+
+        audit = conn.execute(
+            text(
+                "SELECT actor_role FROM audit_log "
+                "WHERE entity_id = :id AND action = 'transaction.cancelled'"
+            ),
+            {"id": stale_txn},
+        ).first()
+        assert audit is not None and audit.actor_role == "system"
 
 
 @pytest.mark.asyncio

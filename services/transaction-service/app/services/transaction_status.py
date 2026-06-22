@@ -12,6 +12,7 @@ import logging
 from uuid import UUID
 
 from app.repositories.audit_repo import AuditLogRepository
+from app.repositories.listing_repo import ListingRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import CurrentUser
 from app.services import state_machine
@@ -41,9 +42,11 @@ class TransactionStatusService:
         *,
         transactions: TransactionRepository,
         audit: AuditLogRepository,
+        listings: ListingRepository,
     ) -> None:
         self._transactions = transactions
         self._audit = audit
+        self._listings = listings
 
     async def change_status(
         self,
@@ -81,6 +84,12 @@ class TransactionStatusService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        # End-of-deal side effects on the listing's 72h lock: a cancelled deal
+        # reopens the listing; a completed deal closes it as sold (SCRUM-68).
+        if target_stage == "cancelled":
+            await self._listings.release_lock(status.listing_id)
+        elif target_stage == "completed":
+            await self._listings.mark_sold(status.listing_id)
         logger.info(
             "transaction.stage_changed",
             extra={

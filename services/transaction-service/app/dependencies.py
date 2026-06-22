@@ -46,12 +46,14 @@ def get_offer_service(
     offers: Annotated[OfferRepository, Depends(_offer_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
     settings: SettingsDep,
 ) -> OfferService:
     return OfferService(
         offers=offers,
         listings=listings,
         transactions=transactions,
+        audit=audit,
         offer_expiry_hours=settings.offer_expiry_hours,
     )
 
@@ -59,8 +61,9 @@ def get_offer_service(
 def get_transaction_status_service(
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
 ) -> TransactionStatusService:
-    return TransactionStatusService(transactions=transactions, audit=audit)
+    return TransactionStatusService(transactions=transactions, audit=audit, listings=listings)
 
 
 async def get_current_user(
