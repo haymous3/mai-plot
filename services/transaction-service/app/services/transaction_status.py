@@ -13,9 +13,10 @@ from uuid import UUID
 
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
-from app.repositories.transaction_repo import TransactionRepository
+from app.repositories.transaction_repo import TransactionRepository, TransactionStatus
 from app.security import CurrentUser
 from app.services import state_machine
+from app.services.fees import compute_platform_fee_kobo
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,12 @@ class TransactionStatusService:
         transactions: TransactionRepository,
         audit: AuditLogRepository,
         listings: ListingRepository,
+        platform_fee_bps: int,
     ) -> None:
         self._transactions = transactions
         self._audit = audit
         self._listings = listings
+        self._platform_fee_bps = platform_fee_bps
 
     async def change_status(
         self,
@@ -85,11 +88,13 @@ class TransactionStatusService:
             user_agent=user_agent,
         )
         # End-of-deal side effects on the listing's 72h lock: a cancelled deal
-        # reopens the listing; a completed deal closes it as sold (SCRUM-68).
+        # reopens the listing; a completed deal closes it as sold (SCRUM-68) and
+        # carves out the platform fee (SCRUM-119).
         if target_stage == "cancelled":
             await self._listings.release_lock(status.listing_id)
         elif target_stage == "completed":
             await self._listings.mark_sold(status.listing_id)
+            await self._set_platform_fee(transaction_id, status, caller, ip_address, user_agent)
         logger.info(
             "transaction.stage_changed",
             extra={
@@ -99,3 +104,32 @@ class TransactionStatusService:
             },
         )
         return target_stage
+
+    async def _set_platform_fee(
+        self,
+        transaction_id: UUID,
+        status: TransactionStatus,
+        caller: CurrentUser,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Compute and persist Maiplot's platform fee at deal close (SCRUM-119).
+        No money moves here — this records the figure the M3 disbursement flow
+        (SCRUM-85) deducts from the seller's proceeds. Idempotent: skips if a fee
+        is already set, in DB or in memory."""
+        if status.platform_fee_kobo is not None:
+            return
+        fee_kobo = compute_platform_fee_kobo(status.agreed_price_kobo, self._platform_fee_bps)
+        if not await self._transactions.set_platform_fee(transaction_id, fee_kobo=fee_kobo):
+            return  # a concurrent close already set it
+        await self._audit.record(
+            actor_id=caller.user_id,
+            actor_role=caller.role,
+            action="transaction.platform_fee_set",
+            entity_type="transaction",
+            entity_id=transaction_id,
+            old_value={"platform_fee_kobo": None},
+            new_value={"platform_fee_kobo": fee_kobo, "fee_bps": self._platform_fee_bps},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )

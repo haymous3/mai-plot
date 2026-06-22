@@ -213,6 +213,47 @@ async def test_complete_marks_the_listing_sold(
 
 
 @pytest.mark.asyncio
+async def test_complete_persists_the_platform_fee(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    listing_id = seed_listing(seller_id=seller, status="under_offer")
+    txn_id = _seed_transaction(
+        db_engine, buyer_id=buyer, seller_id=seller, listing_id=listing_id, stage="title_held"
+    )
+
+    response = await http_client.patch(
+        f"/transactions/{txn_id}/status",
+        json={"status": "completed"},
+        headers=auth_header(mint_token(seller, "seller")),
+    )
+    assert response.status_code == 200, response.text
+
+    with db_engine.connect() as conn:
+        # Seeded agreed price is 5,000,000,000 kobo; default 2.5% = 125,000,000.
+        fee = conn.execute(
+            text("SELECT platform_fee_kobo FROM transactions WHERE id = :id"), {"id": txn_id}
+        ).scalar_one()
+        assert fee == 125_000_000
+
+        audit = conn.execute(
+            text(
+                "SELECT action FROM audit_log "
+                "WHERE entity_id = :id AND action = 'transaction.platform_fee_set'"
+            ),
+            {"id": txn_id},
+        ).first()
+        assert audit is not None
+
+
+@pytest.mark.asyncio
 async def test_status_requires_authentication(
     clean_tables: None,
     http_client: AsyncClient,
