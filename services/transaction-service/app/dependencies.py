@@ -75,8 +75,14 @@ def get_transaction_status_service(
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    settings: SettingsDep,
 ) -> TransactionStatusService:
-    return TransactionStatusService(transactions=transactions, audit=audit, listings=listings)
+    return TransactionStatusService(
+        transactions=transactions,
+        audit=audit,
+        listings=listings,
+        platform_fee_bps=settings.platform_fee_bps,
+    )
 
 
 async def get_current_user(

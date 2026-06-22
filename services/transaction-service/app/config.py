@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # now; a Celery beat sweep is a follow-up.
     offer_expiry_hours: int = 72
 
+    # Platform fee charged at deal close (SCRUM-119), in basis points
+    # (250 = 2.5%). CLAUDE.md fixes the realtor commission at 2% (rule §7) but
+    # never set Maiplot's own fee; this is admin/env tunable. The actual money
+    # movement (net disbursement to the seller) is M3 / SCRUM-85.
+    platform_fee_bps: int = 250
+
     # Escrow admin endpoints require admin JWT AND an IP whitelist (CLAUDE.md).
     # Kong enforces the allowlist at the edge; this app-level check is defence
     # in depth. Comma-separated IPs; empty = allow any (dev/test default).

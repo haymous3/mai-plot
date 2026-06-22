@@ -22,6 +22,9 @@ class TransactionStatus:
     buyer_id: UUID
     seller_id: UUID
     listing_id: UUID
+    agreed_price_kobo: int
+    # NULL until the platform fee is computed at deal close (SCRUM-119).
+    platform_fee_kobo: int | None
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,9 @@ class TransactionRepository:
         row = (
             await self._session.execute(
                 text(
-                    "SELECT stage, buyer_id, seller_id, listing_id FROM transactions WHERE id = :id"
+                    "SELECT stage, buyer_id, seller_id, listing_id, "
+                    "agreed_price_kobo, platform_fee_kobo "
+                    "FROM transactions WHERE id = :id"
                 ),
                 {"id": transaction_id},
             )
@@ -56,6 +61,8 @@ class TransactionRepository:
             buyer_id=row.buyer_id,
             seller_id=row.seller_id,
             listing_id=row.listing_id,
+            agreed_price_kobo=row.agreed_price_kobo,
+            platform_fee_kobo=row.platform_fee_kobo,
         )
 
     async def get_lock_for_listing(self, listing_id: UUID) -> ListingLock | None:
@@ -81,6 +88,22 @@ class TransactionRepository:
             text("UPDATE transactions SET stage = :s, updated_at = NOW() WHERE id = :id"),
             {"s": stage, "id": transaction_id},
         )
+
+    async def set_platform_fee(self, transaction_id: UUID, *, fee_kobo: int) -> bool:
+        """Persist the platform fee at deal close (SCRUM-119). Guarded on
+        platform_fee_kobo IS NULL so the figure is written exactly once; returns
+        False if a fee was already set (idempotent)."""
+        row = (
+            await self._session.execute(
+                text(
+                    "UPDATE transactions SET platform_fee_kobo = :fee, updated_at = NOW() "
+                    "WHERE id = :id AND platform_fee_kobo IS NULL "
+                    "RETURNING id"
+                ),
+                {"fee": fee_kobo, "id": transaction_id},
+            )
+        ).first()
+        return row is not None
 
     async def create_at_offer_accepted(
         self,

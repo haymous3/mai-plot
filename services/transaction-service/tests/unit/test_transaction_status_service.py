@@ -27,6 +27,7 @@ class _StubTxnRepo:
         self._status = status
         self.updated_to: str | None = None
         self.events: list[tuple[str, str]] = []
+        self.fee_set_to: int | None = None
 
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
         return self._status
@@ -38,6 +39,10 @@ class _StubTxnRepo:
         self, *, from_stage: str | None, to_stage: str, **kwargs: object
     ) -> None:
         self.events.append((from_stage or "", to_stage))
+
+    async def set_platform_fee(self, transaction_id: UUID, *, fee_kobo: int) -> bool:
+        self.fee_set_to = fee_kobo
+        return True
 
 
 class _StubAudit:
@@ -60,14 +65,26 @@ class _StubListingRepo:
         self.sold.append(listing_id)
 
 
-def _status(stage: str = "offer_accepted") -> TransactionStatus:
+def _status(
+    stage: str = "offer_accepted",
+    *,
+    agreed_price_kobo: int = 5_000_000_000,
+    platform_fee_kobo: int | None = None,
+) -> TransactionStatus:
     return TransactionStatus(
-        stage=stage, buyer_id=_BUYER.user_id, seller_id=_SELLER.user_id, listing_id=_LISTING
+        stage=stage,
+        buyer_id=_BUYER.user_id,
+        seller_id=_SELLER.user_id,
+        listing_id=_LISTING,
+        agreed_price_kobo=agreed_price_kobo,
+        platform_fee_kobo=platform_fee_kobo,
     )
 
 
 def _service(
     status: TransactionStatus | None,
+    *,
+    platform_fee_bps: int = 250,
 ) -> tuple[TransactionStatusService, _StubTxnRepo, _StubAudit, _StubListingRepo]:
     repo = _StubTxnRepo(status)
     audit = _StubAudit()
@@ -76,6 +93,7 @@ def _service(
         transactions=repo,  # type: ignore[arg-type]
         audit=audit,  # type: ignore[arg-type]
         listings=listings,  # type: ignore[arg-type]
+        platform_fee_bps=platform_fee_bps,
     )
     return svc, repo, audit, listings
 
@@ -116,6 +134,32 @@ async def test_complete_marks_the_listing_sold() -> None:
     await svc.change_status(transaction_id=uuid4(), caller=_SELLER, target_stage="completed")
     assert listings.sold == [_LISTING]
     assert listings.released == []
+
+
+@pytest.mark.asyncio
+async def test_complete_sets_platform_fee_and_audits() -> None:
+    # 2.5% of 5,000,000,000 kobo = 125,000,000 kobo.
+    svc, repo, audit, _ = _service(_status("title_held", agreed_price_kobo=5_000_000_000))
+    await svc.change_status(transaction_id=uuid4(), caller=_SELLER, target_stage="completed")
+    assert repo.fee_set_to == 125_000_000
+    assert "transaction.platform_fee_set" in audit.actions
+
+
+@pytest.mark.asyncio
+async def test_complete_does_not_recompute_an_existing_fee() -> None:
+    svc, repo, audit, _ = _service(_status("title_held", platform_fee_kobo=999))
+    await svc.change_status(transaction_id=uuid4(), caller=_SELLER, target_stage="completed")
+    assert repo.fee_set_to is None  # not touched
+    assert "transaction.platform_fee_set" not in audit.actions
+
+
+@pytest.mark.asyncio
+async def test_non_complete_transition_sets_no_fee() -> None:
+    svc, repo, _, _ = _service(_status("offer_accepted"))
+    await svc.change_status(
+        transaction_id=uuid4(), caller=_BUYER, target_stage="inspection_scheduled"
+    )
+    assert repo.fee_set_to is None
 
 
 @pytest.mark.asyncio
