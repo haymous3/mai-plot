@@ -43,8 +43,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX idx_push_sub_user ON push_subscriptions(user_id) "
-        "WHERE deleted_at IS NULL"
+        "CREATE INDEX idx_push_sub_user ON push_subscriptions(user_id) WHERE deleted_at IS NULL"
     )
 
 
