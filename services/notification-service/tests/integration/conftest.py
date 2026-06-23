@@ -20,6 +20,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import dispose_engine
@@ -86,7 +87,7 @@ def mint_token() -> Callable[[UUID, str], str]:
 
 @pytest.fixture
 def seed_user(db_engine: Engine) -> Callable[..., UUID]:
-    def _seed(*, role: str = "buyer") -> UUID:
+    def _seed(*, role: str = "buyer", phone: str | None = None) -> UUID:
         user_id = uuid4()
         with db_engine.begin() as conn:
             conn.execute(
@@ -96,9 +97,34 @@ def seed_user(db_engine: Engine) -> Callable[..., UUID]:
                 ),
                 {"id": user_id, "role": role},
             )
+            # user_pii holds the phone (owned by auth-service); seed it only when
+            # a test needs an SMS recipient. phone is UNIQUE, so each call mints
+            # a distinct number unless the test pins one.
+            if phone is not None:
+                conn.execute(
+                    text(
+                        "INSERT INTO user_pii (user_id, phone, full_name) "
+                        "VALUES (:uid, :phone, 'Test User')"
+                    ),
+                    {"uid": user_id, "phone": phone},
+                )
         return user_id
 
     return _seed
+
+
+@pytest_asyncio.fixture
+async def async_session() -> AsyncIterator[AsyncSession]:
+    """An async session bound to the test DB, for exercising service/repo code
+    directly (the dispatch path has no HTTP entrypoint yet). Named distinctly
+    from the sync `db_session` in the service-root conftest to avoid shadowing
+    it."""
+    from app.db import _ensure_engine
+
+    sm = _ensure_engine()
+    async with sm() as session:
+        yield session
+    await dispose_engine()
 
 
 @pytest.fixture

@@ -11,6 +11,15 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.4",
     "pyjwt>=2.9",
+    # SMS via Termii (SCRUM-80). httpx is the real Termii client's transport
+    # (runtime, not just tests). redis>=5.0 stays a direct dep; celery is plain
+    # (NOT celery[redis] — the [redis] extra pins redis <6.5 via kombu, which
+    # would downgrade the workspace from redis 8 and break mypy's typed from_url
+    # in the shared test conftest). kombu's redis:// transport uses the direct
+    # redis lib at runtime.
+    "httpx>=0.27",
+    "redis>=5.0",
+    "celery>=5.3",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
