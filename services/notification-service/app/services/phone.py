@@ -47,5 +47,7 @@ def normalize_ng_msisdn(raw: str | None) -> str:
         national = cleaned
 
     if not _NATIONAL_10.match(national):
-        raise InvalidPhoneNumber(f"not a valid Nigerian mobile number: {raw!r}")
+        # Never embed the raw number in the message — it would leak into any log
+        # that records the exception string (the number is PII).
+        raise InvalidPhoneNumber("not a valid Nigerian mobile number")
     return f"+234{national}"

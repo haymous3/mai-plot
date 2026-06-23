@@ -67,11 +67,15 @@ class SmsSendService:
         raw_phone = await self._users.get_phone(notification.user_id)
         try:
             phone = normalize_ng_msisdn(raw_phone)
-        except InvalidPhoneNumber as exc:
-            # Not retryable — a bad/absent number won't fix itself on retry.
+        except InvalidPhoneNumber:
+            # Not retryable — a bad/absent number won't fix itself on retry. Log a
+            # suffix only; the full number is PII and must not reach the logs.
             logger.warning(
                 "sms.send.invalid_number",
-                extra={"notification_id": str(notification_id), "error": str(exc)},
+                extra={
+                    "notification_id": str(notification_id),
+                    "phone_suffix": raw_phone[-4:] if raw_phone else "none",
+                },
             )
             return SmsOutcome.INVALID_NUMBER
 
