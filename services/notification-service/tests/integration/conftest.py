@@ -28,6 +28,7 @@ from app.db import dispose_engine
 # FK-safe truncation order (CASCADE covers the rest).
 _TABLES = (
     "notifications",
+    "push_subscriptions",
     "users",
 )
 
@@ -166,6 +167,35 @@ def seed_notification(db_engine: Engine) -> Callable[..., UUID]:
                 params,
             )
         return notif_id
+
+    return _seed
+
+
+@pytest.fixture
+def seed_push_subscription(db_engine: Engine) -> Callable[..., UUID]:
+    def _seed(
+        *,
+        user_id: UUID,
+        endpoint: str,
+        p256dh: str = "BPpublicKey",
+        auth: str = "authSecret",
+    ) -> UUID:
+        sub_id = uuid4()
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth) "
+                    "VALUES (:id, :uid, :endpoint, :p256dh, :auth)"
+                ),
+                {
+                    "id": sub_id,
+                    "uid": user_id,
+                    "endpoint": endpoint,
+                    "p256dh": p256dh,
+                    "auth": auth,
+                },
+            )
+        return sub_id
 
     return _seed
 

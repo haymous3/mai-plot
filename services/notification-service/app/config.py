@@ -45,6 +45,22 @@ class Settings(BaseSettings):
     sms_task_max_retries: int = 5
     sms_task_retry_backoff_max_seconds: int = 600
 
+    # Web Push (SCRUM-79). In-browser push via the Web Push Protocol + VAPID
+    # (replaces FCM in Phase 1). The in-memory fake is the default so local/CI
+    # never need real VAPID keys or a push service; production sets
+    # web_push_use_fake=false + a real VAPID keypair (base64url, generated once
+    # with py-vapid). vapid_subject is the contact mailto:/URL push services
+    # require. push_ttl_seconds is how long a push service holds an undelivered
+    # message for an offline browser.
+    web_push_use_fake: bool = True
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:ops@maiplot.ng"
+    push_ttl_seconds: int = 86400
+    push_via_celery: bool = False
+    push_task_max_retries: int = 5
+    push_task_retry_backoff_max_seconds: int = 600
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

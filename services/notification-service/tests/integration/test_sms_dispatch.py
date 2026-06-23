@@ -14,9 +14,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.web_push import InMemoryWebPushClient
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.services.notification_dispatch import NotificationDispatchService
+from app.services.push_dispatch import InlinePushDispatcher
+from app.services.push_send import PushSendService
 from app.services.sms_dispatch import InlineSmsDispatcher
 from app.services.sms_send import SmsSendService
 
@@ -27,9 +31,18 @@ def _service(
     session: AsyncSession, termii: InMemoryTermiiClient
 ) -> tuple[NotificationDispatchService, NotificationRepository]:
     notifications = NotificationRepository(session)
-    send = SmsSendService(notifications=notifications, users=UserRepository(session), termii=termii)
+    sms_send = SmsSendService(
+        notifications=notifications, users=UserRepository(session), termii=termii
+    )
+    push_send = PushSendService(
+        notifications=notifications,
+        subscriptions=PushSubscriptionRepository(session),
+        web_push=InMemoryWebPushClient(),
+    )
     service = NotificationDispatchService(
-        notifications=notifications, sms=InlineSmsDispatcher(send_service=send)
+        notifications=notifications,
+        sms=InlineSmsDispatcher(send_service=sms_send),
+        push=InlinePushDispatcher(send_service=push_send),
     )
     return service, notifications
 

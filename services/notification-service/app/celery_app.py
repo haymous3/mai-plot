@@ -22,7 +22,7 @@ celery_app = Celery(
     "notification-service",
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["app.tasks.sms"],
+    include=["app.tasks.sms", "app.tasks.push"],
 )
 
 celery_app.conf.update(
