@@ -20,6 +20,10 @@ dependencies = [
     "httpx>=0.27",
     "redis>=5.0",
     "celery>=5.3",
+    # Web Push (SCRUM-79). pywebpush handles VAPID signing + payload encryption
+    # (pulls in cryptography + py-vapid). Only the real client uses it; CI/dev
+    # default to the in-memory fake.
+    "pywebpush>=2.0",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

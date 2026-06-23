@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.notifications import router as notifications_router
+from app.routes.push import router as push_router
 from app.security import AuthenticationError
 from app.telemetry import setup_telemetry
 
@@ -18,6 +19,7 @@ SERVICE_NAME = "notification-service"
 app = FastAPI(title="Maiplot Notification Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(notifications_router)
+app.include_router(push_router)
 
 
 @app.exception_handler(RequestValidationError)

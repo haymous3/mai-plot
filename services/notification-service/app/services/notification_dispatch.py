@@ -29,11 +29,15 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.repositories.notification_repo import NotificationRepository
+from app.services.push_dispatch import PushDispatcher
 from app.services.sms_dispatch import SmsDispatcher
 
 IN_APP = "in_app"
 SMS = "sms"
-CRITICAL_CHANNELS: frozenset[str] = frozenset({IN_APP, SMS})
+PUSH = "push"
+# A critical alert reaches the in-app centre + SMS (the guaranteed fallback) +
+# Web Push (best-effort — a no-op if the user has no subscription).
+CRITICAL_CHANNELS: frozenset[str] = frozenset({IN_APP, SMS, PUSH})
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ class DispatchResult:
 
     in_app_id: UUID | None = None
     sms_id: UUID | None = None
+    push_id: UUID | None = None
 
 
 class NotificationDispatchService:
@@ -50,9 +55,11 @@ class NotificationDispatchService:
         *,
         notifications: NotificationRepository,
         sms: SmsDispatcher,
+        push: PushDispatcher,
     ) -> None:
         self._notifications = notifications
         self._sms = sms
+        self._push = push
 
     async def dispatch(
         self,
@@ -67,6 +74,7 @@ class NotificationDispatchService:
     ) -> DispatchResult:
         in_app_id: UUID | None = None
         sms_id: UUID | None = None
+        push_id: UUID | None = None
 
         if IN_APP in channels:
             row = await self._notifications.create(
@@ -95,7 +103,21 @@ class NotificationDispatchService:
             sms_id = row.id
             await self._sms.enqueue(sms_id)
 
-        return DispatchResult(in_app_id=in_app_id, sms_id=sms_id)
+        if PUSH in channels:
+            row = await self._notifications.create(
+                user_id=user_id,
+                channel=PUSH,
+                type=type,
+                title=title,
+                body=body,
+                reference_type=reference_type,
+                reference_id=reference_id,
+                sent_now=False,
+            )
+            push_id = row.id
+            await self._push.enqueue(push_id)
+
+        return DispatchResult(in_app_id=in_app_id, sms_id=sms_id, push_id=push_id)
 
     async def dispatch_critical_alert(
         self,
@@ -107,7 +129,7 @@ class NotificationDispatchService:
         reference_type: str | None = None,
         reference_id: UUID | None = None,
     ) -> DispatchResult:
-        """Raise a critical alert to both the in-app centre and SMS."""
+        """Raise a critical alert across the in-app centre, SMS, and Web Push."""
         return await self.dispatch(
             user_id=user_id,
             type=type,

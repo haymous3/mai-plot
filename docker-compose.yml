@@ -309,8 +309,9 @@ services:
     ports:
       - "8016:8000"
 
-  # Background worker for notification-service (SCRUM-80). Same image, no HTTP
-  # port — runs the SMS send Celery task (Termii) off the request path. No beat.
+  # Background worker for notification-service (SCRUM-80 SMS, SCRUM-79 Web Push).
+  # Same image, no HTTP port — runs the SMS (Termii) and push (Web Push/VAPID)
+  # send tasks off the request path. No beat.
   notification-celery-worker:
     <<: *fastapi-defaults
     build:
@@ -324,6 +325,11 @@ services:
       TERMII_USE_FAKE: ${TERMII_USE_FAKE:-false}
       TERMII_API_KEY: ${TERMII_API_KEY:-}
       TERMII_SENDER_ID: ${TERMII_SENDER_ID:-Maiplot}
+      PUSH_VIA_CELERY: ${PUSH_VIA_CELERY:-true}
+      WEB_PUSH_USE_FAKE: ${WEB_PUSH_USE_FAKE:-false}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:ops@maiplot.ng}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: celery -A app.celery_app worker --loglevel=INFO
 
