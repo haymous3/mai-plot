@@ -16,15 +16,10 @@ from app.repositories.notification_repo import NotificationRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
-from app.services.email_dispatch import build_email_dispatcher
-from app.services.email_send import EmailSendService
+from app.services.dispatch_factory import build_dispatch_service
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.notification_centre import NotificationCentreService
 from app.services.notification_dispatch import NotificationDispatchService
-from app.services.push_dispatch import build_push_dispatcher
-from app.services.push_send import PushSendService
-from app.services.sms_dispatch import build_sms_dispatcher
-from app.services.sms_send import SmsSendService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -110,23 +105,19 @@ def get_notification_dispatch_service(
     web_push: Annotated[WebPushClient, Depends(get_web_push)],
     email_client: Annotated[EmailClient, Depends(get_email_client)],
 ) -> NotificationDispatchService:
-    """The dispatch seam other services call to raise a notification. In dev/CI
-    the channel dispatchers run the send inline (no broker); in production they
-    enqueue Celery tasks (sms_via_celery / push_via_celery / email_via_celery)."""
-    sms_send = SmsSendService(notifications=notifications, users=users, termii=termii)
-    sms = build_sms_dispatcher(via_celery=settings.sms_via_celery, send_service=sms_send)
-    push_send = PushSendService(
-        notifications=notifications, subscriptions=subscriptions, web_push=web_push
-    )
-    push = build_push_dispatcher(via_celery=settings.push_via_celery, send_service=push_send)
-    email_send = EmailSendService(
+    """The dispatch seam used on the request path. Channel dispatchers run inline
+    in dev/CI (no broker) or enqueue Celery tasks in production (sms_via_celery /
+    push_via_celery / email_via_celery). Process-singleton clients are reused for
+    connection pooling."""
+    return build_dispatch_service(
+        settings=settings,
         notifications=notifications,
         users=users,
+        subscriptions=subscriptions,
+        termii=termii,
+        web_push=web_push,
         email_client=email_client,
-        unsubscribe_base_url=settings.unsubscribe_base_url,
     )
-    email = build_email_dispatcher(via_celery=settings.email_via_celery, send_service=email_send)
-    return NotificationDispatchService(notifications=notifications, sms=sms, push=push, email=email)
 
 
 async def get_current_user(

@@ -2868,6 +2868,7 @@ source = { editable = "services/transaction-service" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "celery" },
     { name = "fastapi" },
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-instrumentation-asyncpg" },
@@ -2877,6 +2878,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
+    { name = "redis" },
     { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
@@ -2894,6 +2896,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "asyncpg", specifier = ">=0.29" },
+    { name = "celery", specifier = ">=5.3" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
@@ -2903,6 +2906,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.27" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pyjwt", specifier = ">=2.9" },
+    { name = "redis", specifier = ">=5.0" },
     { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.10" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.1" },
