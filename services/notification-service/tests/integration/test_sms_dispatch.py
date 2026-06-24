@@ -13,11 +13,14 @@ from uuid import UUID
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.ses_email import InMemorySesClient
 from app.adapters.termii import InMemoryTermiiClient
 from app.adapters.web_push import InMemoryWebPushClient
 from app.repositories.notification_repo import NotificationRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
+from app.services.email_dispatch import InlineEmailDispatcher
+from app.services.email_send import EmailSendService
 from app.services.notification_dispatch import NotificationDispatchService
 from app.services.push_dispatch import InlinePushDispatcher
 from app.services.push_send import PushSendService
@@ -31,18 +34,24 @@ def _service(
     session: AsyncSession, termii: InMemoryTermiiClient
 ) -> tuple[NotificationDispatchService, NotificationRepository]:
     notifications = NotificationRepository(session)
-    sms_send = SmsSendService(
-        notifications=notifications, users=UserRepository(session), termii=termii
-    )
+    users = UserRepository(session)
+    sms_send = SmsSendService(notifications=notifications, users=users, termii=termii)
     push_send = PushSendService(
         notifications=notifications,
         subscriptions=PushSubscriptionRepository(session),
         web_push=InMemoryWebPushClient(),
     )
+    email_send = EmailSendService(
+        notifications=notifications,
+        users=users,
+        email_client=InMemorySesClient(),
+        unsubscribe_base_url="https://maiplot.ng/notifications/unsubscribe",
+    )
     service = NotificationDispatchService(
         notifications=notifications,
         sms=InlineSmsDispatcher(send_service=sms_send),
         push=InlinePushDispatcher(send_service=push_send),
+        email=InlineEmailDispatcher(send_service=email_send),
     )
     return service, notifications
 
