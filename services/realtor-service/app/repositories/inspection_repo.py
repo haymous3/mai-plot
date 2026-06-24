@@ -7,8 +7,10 @@ window; a lapsed window is reassigned by a follow-up sweep.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -30,11 +32,15 @@ class InspectionRow:
     status: str
     assignment_expires_at: datetime
     created_at: datetime
+    gps_lat: Decimal | None
+    gps_lng: Decimal | None
+    report_submitted_at: datetime | None
+    report_data: dict[str, Any] | None
 
 
 _COLUMNS = (
     "id, transaction_id, realtor_id, proposed_date, confirmed_date, status, "
-    "assignment_expires_at, created_at"
+    "assignment_expires_at, created_at, gps_lat, gps_lng, report_submitted_at, report_data"
 )
 
 
@@ -112,6 +118,55 @@ class InspectionRepository:
         ).first()
         return row is not None
 
+    async def submit_report(
+        self,
+        inspection_id: UUID,
+        *,
+        gps_lat: float,
+        gps_lng: float,
+        report_data: dict[str, Any],
+    ) -> bool:
+        """Store the report: status -> completed, report_submitted_at = now, GPS +
+        report_data persisted. Guarded on status='accepted' so it can only be
+        submitted once, on a confirmed inspection."""
+        row = (
+            await self._session.execute(
+                text(
+                    "UPDATE inspections SET status = 'completed', "
+                    "report_submitted_at = NOW(), gps_lat = :lat, gps_lng = :lng, "
+                    "report_data = CAST(:data AS jsonb), updated_at = NOW() "
+                    "WHERE id = :id AND status = 'accepted' RETURNING id"
+                ),
+                {
+                    "id": inspection_id,
+                    "lat": gps_lat,
+                    "lng": gps_lng,
+                    "data": json.dumps(report_data),
+                },
+            )
+        ).first()
+        return row is not None
+
+    async def is_point_within_property(
+        self, *, listing_id: UUID, lat: float, lng: float, meters: float
+    ) -> bool:
+        """Whether (lat,lng) is within `meters` of the listing's property point —
+        the GPS validation for report submission (AC: within 1km)."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT ST_DWithin(
+                        location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :meters
+                    ) AS within
+                    FROM property_listings WHERE id = :listing_id AND deleted_at IS NULL
+                    """
+                ),
+                {"listing_id": listing_id, "lat": lat, "lng": lng, "meters": meters},
+            )
+        ).first()
+        return bool(row.within) if row is not None else False
+
     @staticmethod
     def _to_row(r: Any) -> InspectionRow:
         return InspectionRow(
@@ -123,4 +178,8 @@ class InspectionRepository:
             status=r.status,
             assignment_expires_at=r.assignment_expires_at,
             created_at=r.created_at,
+            gps_lat=r.gps_lat,
+            gps_lng=r.gps_lng,
+            report_submitted_at=r.report_submitted_at,
+            report_data=r.report_data,
         )

@@ -51,6 +51,10 @@ def _inspection(
         status=status,
         assignment_expires_at=now + timedelta(hours=expires_in_h),
         created_at=now,
+        gps_lat=None,
+        gps_lng=None,
+        report_submitted_at=None,
+        report_data=None,
     )
 
 

@@ -21,6 +21,7 @@ from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.realtor_notifier import RealtorNotifier, build_realtor_notifier
 from app.services.realtor_onboarding import RealtorOnboardingService
 from app.services.realtor_review import RealtorReviewService
+from app.services.report_service import ReportService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -126,6 +127,25 @@ def get_inspection_service(
         notifier=notifier,
         radius_meters=settings.inspection_radius_meters,
         assignment_window_hours=settings.inspection_window_hours,
+    )
+
+
+def get_report_service(
+    settings: SettingsDep,
+    inspections: Annotated[InspectionRepository, Depends(_inspection_repo)],
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    storage: Annotated[DocumentStorage, Depends(get_storage)],
+) -> ReportService:
+    return ReportService(
+        inspections=inspections,
+        transactions=transactions,
+        audit=audit,
+        storage=storage,
+        gps_radius_meters=settings.inspection_gps_radius_meters,
+        min_photos=settings.inspection_min_photos,
+        photo_max_bytes=settings.inspection_photo_max_bytes,
+        presign_ttl_seconds=settings.gov_id_presign_ttl_seconds,
     )
 
 
