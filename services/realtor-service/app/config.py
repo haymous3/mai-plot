@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     notifications_enabled: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
 
+    # Inspection auto-assignment (SCRUM-72). The nearest approved realtor within
+    # the radius is assigned with an acceptance window; if none is in range the
+    # request fails and an admin alert is logged.
+    inspection_radius_meters: float = 50_000.0  # 50 km (AC)
+    inspection_window_hours: int = 2
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

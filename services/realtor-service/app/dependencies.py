@@ -11,8 +11,12 @@ from app.adapters.document_storage import DocumentStorage, build_document_storag
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
+from app.repositories.inspection_repo import InspectionRepository
 from app.repositories.realtor_repo import RealtorRepository
+from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.inspection_notifier import InspectionNotifier, build_inspection_notifier
+from app.services.inspection_service import InspectionService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.realtor_notifier import RealtorNotifier, build_realtor_notifier
 from app.services.realtor_onboarding import RealtorOnboardingService
@@ -21,10 +25,11 @@ from app.services.realtor_review import RealtorReviewService
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-# Process-singletons — the S3 client and the Celery producer build pooled
+# Process-singletons — the S3 client and the Celery producers build pooled
 # connections reused across requests rather than rebuilt each call.
 _storage: DocumentStorage | None = None
 _notifier: RealtorNotifier | None = None
+_inspection_notifier: InspectionNotifier | None = None
 
 
 def _jwt_verifier(settings: SettingsDep) -> JwtVerifier:
@@ -87,6 +92,41 @@ def get_realtor_repo(
     repo: Annotated[RealtorRepository, Depends(_realtor_repo)],
 ) -> RealtorRepository:
     return repo
+
+
+def _inspection_repo(session: SessionDep) -> InspectionRepository:
+    return InspectionRepository(session)
+
+
+def _transaction_repo(session: SessionDep) -> TransactionRepository:
+    return TransactionRepository(session)
+
+
+def get_inspection_notifier(settings: SettingsDep) -> InspectionNotifier:
+    global _inspection_notifier
+    if _inspection_notifier is None:
+        _inspection_notifier = build_inspection_notifier(
+            enabled=settings.notifications_enabled,
+            broker_url=settings.celery_broker_url,
+        )
+    return _inspection_notifier
+
+
+def get_inspection_service(
+    settings: SettingsDep,
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
+    inspections: Annotated[InspectionRepository, Depends(_inspection_repo)],
+    notifier: Annotated[InspectionNotifier, Depends(get_inspection_notifier)],
+) -> InspectionService:
+    return InspectionService(
+        transactions=transactions,
+        realtors=realtors,
+        inspections=inspections,
+        notifier=notifier,
+        radius_meters=settings.inspection_radius_meters,
+        assignment_window_hours=settings.inspection_window_hours,
+    )
 
 
 async def get_current_user(

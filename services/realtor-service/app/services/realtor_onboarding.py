@@ -20,6 +20,7 @@ from app.services.credentials import (
     build_id_object_key,
     detect_id_document_type,
     normalize_esvarbon_number,
+    validate_coordinates,
     validate_id_size,
 )
 
@@ -68,6 +69,8 @@ class RealtorOnboardingService:
         coverage_states: list[str],
         coverage_lgas: list[str],
         id_document: bytes,
+        base_lat: float | None = None,
+        base_lng: float | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> RealtorRow:
@@ -83,6 +86,9 @@ class RealtorOnboardingService:
         esvarbon = normalize_esvarbon_number(esvarbon_number)
         if not coverage_states:
             raise InvalidCredential("COVERAGE_REQUIRED", "At least one coverage state is required.")
+        has_location = base_lat is not None and base_lng is not None
+        if has_location:
+            validate_coordinates(base_lat, base_lng)  # type: ignore[arg-type]
         validate_id_size(id_document, max_bytes=self._max_upload_bytes)
         content_type, extension = detect_id_document_type(id_document)
 
@@ -111,6 +117,9 @@ class RealtorOnboardingService:
                 coverage_lgas=coverage_lgas,
                 government_id_s3_key=key,
             )
+
+        if has_location:
+            await self._realtors.set_base_location(user_id, lat=base_lat, lng=base_lng)  # type: ignore[arg-type]
 
         await self._audit.record(
             actor_id=user_id,
