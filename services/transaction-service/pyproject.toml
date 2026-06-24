@@ -11,6 +11,12 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.4",
     "pyjwt>=2.9",
+    # Cross-service notifications (SCRUM-117): a Celery producer enqueues the
+    # notification-service dispatch task on the shared Redis broker. Plain celery
+    # (NOT celery[redis]) + a direct redis dep, per the workspace's redis-version
+    # constraint; redis is used by kombu's redis:// transport at runtime.
+    "redis>=5.0",
+    "celery>=5.3",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

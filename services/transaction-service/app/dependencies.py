@@ -18,6 +18,7 @@ from app.security import AdminAccessError, AuthenticationError, CurrentUser, par
 from app.services.escrow_ledger import EscrowLedgerService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
+from app.services.seller_notifier import SellerNotifier, build_seller_notifier
 from app.services.transaction_status import TransactionStatusService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -55,12 +56,28 @@ def get_escrow_service(
     return EscrowLedgerService(ledger=ledger, audit=audit)
 
 
+# One seller notifier per process — the Celery producer app builds a broker
+# connection pool that is reused across requests rather than rebuilt each call.
+_seller_notifier: SellerNotifier | None = None
+
+
+def get_seller_notifier(settings: SettingsDep) -> SellerNotifier:
+    global _seller_notifier
+    if _seller_notifier is None:
+        _seller_notifier = build_seller_notifier(
+            enabled=settings.notifications_enabled,
+            broker_url=settings.celery_broker_url,
+        )
+    return _seller_notifier
+
+
 def get_offer_service(
     offers: Annotated[OfferRepository, Depends(_offer_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
     settings: SettingsDep,
+    notifier: Annotated[SellerNotifier, Depends(get_seller_notifier)],
 ) -> OfferService:
     return OfferService(
         offers=offers,
@@ -68,6 +85,7 @@ def get_offer_service(
         transactions=transactions,
         audit=audit,
         offer_expiry_hours=settings.offer_expiry_hours,
+        notifier=notifier,
     )
 
 

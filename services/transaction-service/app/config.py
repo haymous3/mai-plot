@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # in depth. Comma-separated IPs; empty = allow any (dev/test default).
     admin_ip_allowlist: str = ""
 
+    # Cross-service notifications (SCRUM-117). When a buyer makes an offer, the
+    # seller is alerted by enqueuing the notification-service `notifications.dispatch`
+    # Celery task on the shared broker (CLAUDE.md §3: async work via Celery). The
+    # send is best-effort — a broker hiccup never blocks or rolls back the offer.
+    # notifications_enabled=false (the test/dev default) wires a no-op notifier so
+    # no broker is needed; production sets it true + the broker URL.
+    notifications_enabled: bool = False
+    celery_broker_url: str = "redis://localhost:6379/1"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

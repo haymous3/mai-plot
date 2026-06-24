@@ -25,6 +25,7 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository, OfferRow
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import CurrentUser
+from app.services.seller_notifier import NullSellerNotifier, SellerNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +85,14 @@ class OfferService:
         transactions: TransactionRepository,
         audit: AuditLogRepository,
         offer_expiry_hours: int = 72,
+        notifier: SellerNotifier | None = None,
     ) -> None:
         self._offers = offers
         self._listings = listings
         self._transactions = transactions
         self._audit = audit
         self._expiry_hours = offer_expiry_hours
+        self._notifier = notifier or NullSellerNotifier()
 
     async def create_offer(
         self, *, buyer: CurrentUser, listing_id: UUID, amount_kobo: int
@@ -116,10 +119,24 @@ class OfferService:
             offered_price_kobo=amount_kobo,
             expires_at=now + timedelta(hours=self._expiry_hours),
         )
-        # NOTE: seller notification deferred to notification-service.
         logger.info(
             "offer.created", extra={"offer_id": str(offer_id), "listing_id": str(listing_id)}
         )
+        # Alert the seller (SCRUM-117) so they can respond in the 72h window.
+        # Best-effort + defensive: a notification failure must never block or roll
+        # back the offer (the offer is the source of truth).
+        try:
+            await self._notifier.offer_received(
+                seller_id=listing.seller_id,
+                offer_id=offer_id,
+                listing_id=listing_id,
+                amount_kobo=amount_kobo,
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never fail the offer
+            logger.warning(
+                "offer.notify_failed",
+                extra={"offer_id": str(offer_id), "error": str(exc)},
+            )
         offer = await self._offers.get(offer_id)
         assert offer is not None
         return offer

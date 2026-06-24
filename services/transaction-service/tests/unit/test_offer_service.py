@@ -136,10 +136,35 @@ class _StubAudit:
         self.actions.append(str(kwargs["action"]))
 
 
+class _RecordingNotifier:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def offer_received(
+        self, *, seller_id: UUID, offer_id: UUID, listing_id: UUID, amount_kobo: int
+    ) -> None:
+        self.calls.append(
+            {
+                "seller_id": seller_id,
+                "offer_id": offer_id,
+                "listing_id": listing_id,
+                "amount_kobo": amount_kobo,
+            }
+        )
+
+
+class _RaisingNotifier:
+    async def offer_received(
+        self, *, seller_id: UUID, offer_id: UUID, listing_id: UUID, amount_kobo: int
+    ) -> None:
+        raise RuntimeError("broker down")
+
+
 def _service(
     listing: ListingForOffer | None,
     offers: _StubOfferRepo | None = None,
     txns: _StubTxnRepo | None = None,
+    notifier: object | None = None,
 ) -> tuple[OfferService, _StubOfferRepo, _StubListingRepo, _StubTxnRepo]:
     o = offers or _StubOfferRepo()
     listings_repo = _StubListingRepo(listing)
@@ -149,6 +174,7 @@ def _service(
         listings=listings_repo,  # type: ignore[arg-type]
         transactions=t,  # type: ignore[arg-type]
         audit=_StubAudit(),  # type: ignore[arg-type]
+        notifier=notifier,  # type: ignore[arg-type]
     )
     return svc, o, listings_repo, t
 
@@ -170,6 +196,29 @@ async def test_create_offer_on_unknown_listing_raises() -> None:
     svc, _, _, _ = _service(None)
     with pytest.raises(ListingNotFound):
         await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=1)
+
+
+@pytest.mark.asyncio
+async def test_create_offer_notifies_seller() -> None:
+    notifier = _RecordingNotifier()
+    svc, _, _, _ = _service(_active_listing(), notifier=notifier)
+
+    offer = await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=4_000_000_000)
+
+    assert len(notifier.calls) == 1
+    call = notifier.calls[0]
+    assert call["seller_id"] == _SELLER.user_id
+    assert call["offer_id"] == offer.id
+    assert call["listing_id"] == _LISTING
+    assert call["amount_kobo"] == 4_000_000_000
+
+
+@pytest.mark.asyncio
+async def test_create_offer_survives_notifier_failure() -> None:
+    # A broker outage (notifier raising) must never block the offer.
+    svc, _, _, _ = _service(_active_listing(), notifier=_RaisingNotifier())
+    offer = await svc.create_offer(buyer=_BUYER, listing_id=_LISTING, amount_kobo=4_000_000_000)
+    assert offer.status == "pending"
 
 
 @pytest.mark.asyncio
