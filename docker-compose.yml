@@ -249,6 +249,9 @@ services:
       ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      # Send the 48h listing-expiry warning to sellers (SCRUM-112) — enqueues
+      # notifications.dispatch on the shared broker, best-effort.
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: celery -A app.celery_app worker --loglevel=INFO
 

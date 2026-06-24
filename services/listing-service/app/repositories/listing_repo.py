@@ -48,6 +48,14 @@ _SORT_SQL = {
 
 
 @dataclass(frozen=True)
+class ExpiryWarningTarget:
+    """A listing due for a 48h expiry warning + the seller to notify (SCRUM-112)."""
+
+    listing_id: UUID
+    seller_id: UUID
+
+
+@dataclass(frozen=True)
 class NewListing:
     """The fields a create needs. location is a PostGIS WKT string
     (SRID=4326;POINT(lng lat)); the service builds it from lat/lng."""
@@ -423,15 +431,16 @@ class ListingRepository:
 
     async def list_due_for_expiry_warning(
         self, *, window_hours: int, limit: int = 500
-    ) -> list[UUID]:
+    ) -> list[ExpiryWarningTarget]:
         """Active listings expiring within `window_hours` that have NOT already
         had an expiry warning recorded (the audit_log row is the idempotency
-        marker, so no extra column is needed)."""
+        marker, so no extra column is needed). Returns the listing + its seller
+        so the warning can be sent to the right user."""
         rows = (
             await self._session.execute(
                 text(
                     """
-                    SELECT pl.id FROM property_listings pl
+                    SELECT pl.id, pl.seller_id FROM property_listings pl
                     WHERE pl.status = 'active' AND pl.deleted_at IS NULL
                       AND pl.expires_at IS NOT NULL
                       AND pl.expires_at > NOW()
@@ -446,7 +455,7 @@ class ListingRepository:
                 {"hours": window_hours, "limit": limit},
             )
         ).all()
-        return [r.id for r in rows]
+        return [ExpiryWarningTarget(listing_id=r.id, seller_id=r.seller_id) for r in rows]
 
     async def set_review_status(
         self, listing_id: UUID, *, new_status: str, rejection_reason: str | None
