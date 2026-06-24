@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     expiry_beat_interval_seconds: float = 3600.0
     expiry_warning_window_hours: int = 48
 
+    # Seller expiry-warning notification (SCRUM-112). The expiry worker enqueues
+    # the notification-service `notifications.dispatch` task on the shared broker
+    # when a listing is 48h from expiry. notifications_enabled=false (dev/CI
+    # default) wires a no-op notifier so no broker is needed; production sets it
+    # true (the broker is celery_broker_url above).
+    notifications_enabled: bool = False
+
     # ES indexing (SCRUM-54). On create / edit / status change the listing is
     # synced to Elasticsearch off the request path. In production
     # (index_via_celery=true) the write path enqueues a Celery task — index

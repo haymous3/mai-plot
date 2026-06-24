@@ -16,6 +16,7 @@ from app.celery_app import celery_app
 from app.config import get_settings
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
+from app.services.expiry_notifier import build_expiry_notifier
 from app.services.listing_expiry import ListingExpiryService
 from app.services.listing_index_sync import ListingIndexSync
 
@@ -37,6 +38,10 @@ async def _run() -> dict[str, int]:
                 audit=AuditLogRepository(session),
                 index_sync=ListingIndexSync(index=index, listings=listings),
                 warning_window_hours=settings.expiry_warning_window_hours,
+                notifier=build_expiry_notifier(
+                    enabled=settings.notifications_enabled,
+                    broker_url=settings.celery_broker_url,
+                ),
             )
             result = await service.run()
             await session.commit()
