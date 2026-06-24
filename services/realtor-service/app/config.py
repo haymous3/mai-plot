@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     # (dev/CI default) wires a no-op notifier so no broker is needed.
     notifications_enabled: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
+    # Realtor commission (SCRUM-74). On a completed deal the realtor who did the
+    # inspection accrues a commission = commission_rate_bps/10_000 of the agreed
+    # price (default 200 bps = 2%, CLAUDE.md §8). It's held 'pending' for
+    # commission_available_business_days, then becomes 'available'. A Celery beat
+    # accrues + releases; NO money moves here (escrow debit + disbursement are M3
+    # / SCRUM-86). All amounts are BIGINT kobo.
+    commission_rate_bps: int = 200
+    commission_available_business_days: int = 3
+    commission_beat_interval_seconds: float = 3600.0
 
     # Inspection auto-assignment (SCRUM-72). The nearest approved realtor within
     # the radius is assigned with an acceptance window; if none is in range the

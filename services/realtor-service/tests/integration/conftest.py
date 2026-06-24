@@ -27,6 +27,7 @@ from app.db import dispose_engine
 _TABLES = (
     "realtors",
     "inspections",
+    "commissions",
     "audit_log",
     "users",
 )

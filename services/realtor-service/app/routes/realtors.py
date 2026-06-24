@@ -12,10 +12,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_current_user, get_onboarding_service, get_realtor_repo
+from app.dependencies import (
+    get_commission_service,
+    get_current_user,
+    get_onboarding_service,
+    get_realtor_repo,
+)
 from app.repositories.realtor_repo import RealtorRepository
+from app.schemas.commission import CommissionSummaryResponse
 from app.schemas.realtor import RealtorProfile
 from app.security import CurrentUser
+from app.services.commission_service import CommissionService
 from app.services.credentials import InvalidCredential
 from app.services.realtor_onboarding import (
     AlreadyRegistered,
@@ -29,6 +36,7 @@ router = APIRouter(prefix="/realtors", tags=["realtors"])
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 OnboardingDep = Annotated[RealtorOnboardingService, Depends(get_onboarding_service)]
 RealtorRepoDep = Annotated[RealtorRepository, Depends(get_realtor_repo)]
+CommissionServiceDep = Annotated[CommissionService, Depends(get_commission_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -99,3 +107,12 @@ async def get_my_profile(
             status.HTTP_404_NOT_FOUND, "REALTOR_NOT_FOUND", "No realtor profile for this account."
         )
     return RealtorProfile.from_row(realtor)
+
+
+@router.get("/me/commission", response_model=CommissionSummaryResponse)
+async def my_commission(
+    caller: CurrentUserDep, service: CommissionServiceDep
+) -> CommissionSummaryResponse:
+    """The caller's commission balance (pending + available + withdrawn), in kobo."""
+    totals = await service.summary(caller.user_id)
+    return CommissionSummaryResponse.from_totals(totals)
