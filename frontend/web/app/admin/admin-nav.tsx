@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { PushToggle } from './push-toggle';
 import { SignOutButton } from './sign-out-button';
 
 const TABS = [
@@ -52,7 +53,10 @@ export function AdminNav({
           })}
         </nav>
       </div>
-      <SignOutButton />
+      <div className="flex items-center gap-4">
+        <PushToggle />
+        <SignOutButton />
+      </div>
     </header>
   );
 }
