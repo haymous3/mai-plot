@@ -11,10 +11,12 @@ from app.adapters.document_storage import DocumentStorage, build_document_storag
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
+from app.repositories.commission_repo import CommissionRepository
 from app.repositories.inspection_repo import InspectionRepository
 from app.repositories.realtor_repo import RealtorRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.commission_service import CommissionService
 from app.services.inspection_notifier import InspectionNotifier, build_inspection_notifier
 from app.services.inspection_service import InspectionService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
@@ -101,6 +103,21 @@ def _inspection_repo(session: SessionDep) -> InspectionRepository:
 
 def _transaction_repo(session: SessionDep) -> TransactionRepository:
     return TransactionRepository(session)
+
+
+def _commission_repo(session: SessionDep) -> CommissionRepository:
+    return CommissionRepository(session)
+
+
+def get_commission_service(
+    settings: SettingsDep,
+    commissions: Annotated[CommissionRepository, Depends(_commission_repo)],
+) -> CommissionService:
+    return CommissionService(
+        commissions=commissions,
+        rate_bps=settings.commission_rate_bps,
+        available_business_days=settings.commission_available_business_days,
+    )
 
 
 def get_inspection_notifier(settings: SettingsDep) -> InspectionNotifier:
