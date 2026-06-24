@@ -172,6 +172,49 @@ class RealtorRepository:
         ).first()
         return row is not None
 
+    async def set_base_location(self, user_id: UUID, *, lat: float, lng: float) -> None:
+        """Set the realtor's base geolocation (SCRUM-72) used by auto-assignment."""
+        await self._session.execute(
+            text(
+                "UPDATE realtors SET "
+                "base_location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, "
+                "updated_at = NOW() WHERE id = :id"
+            ),
+            {"id": user_id, "lat": lat, "lng": lng},
+        )
+
+    async def find_nearest_approved(
+        self, *, listing_id: UUID, radius_m: float, exclude: list[UUID] | None = None
+    ) -> UUID | None:
+        """The nearest approved realtor (with a base_location) within `radius_m` of
+        the listing's property point, excluding any given ids. None if nobody is
+        in range (the assignment caller treats that as the admin-fallback case)."""
+        params: dict[str, object] = {"listing_id": listing_id, "radius": radius_m}
+        exclude_clause = ""
+        for i, rid in enumerate(exclude or []):
+            params[f"e{i}"] = rid
+            exclude_clause += f" AND r.id <> :e{i}"
+        row = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT r.id
+                    FROM realtors r,
+                         (SELECT location FROM property_listings
+                          WHERE id = :listing_id AND deleted_at IS NULL) pl
+                    WHERE r.approval_status = 'approved'
+                      AND r.base_location IS NOT NULL
+                      AND ST_DWithin(r.base_location, pl.location, :radius)
+                      {exclude_clause}
+                    ORDER BY ST_Distance(r.base_location, pl.location) ASC
+                    LIMIT 1
+                    """
+                ),
+                params,
+            )
+        ).first()
+        return row.id if row is not None else None
+
     @staticmethod
     def _to_row(r: Any) -> RealtorRow:
         return RealtorRow(

@@ -48,8 +48,12 @@ async def register_realtor(
     coverage_states: Annotated[list[str], Form()],
     years_of_experience: Annotated[int | None, Form()] = None,
     coverage_lgas: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI Form default
+    base_lat: Annotated[float | None, Form()] = None,
+    base_lng: Annotated[float | None, Form()] = None,
 ) -> RealtorProfile | JSONResponse:
-    """Complete the caller's realtor profile → approval_status 'pending'."""
+    """Complete the caller's realtor profile → approval_status 'pending'. An
+    optional base_lat/base_lng records the realtor's location for auto-assignment
+    (SCRUM-72)."""
     data = await file.read()
     try:
         realtor = await service.register(
@@ -60,6 +64,8 @@ async def register_realtor(
             coverage_states=coverage_states,
             coverage_lgas=coverage_lgas,
             id_document=data,
+            base_lat=base_lat,
+            base_lng=base_lng,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )

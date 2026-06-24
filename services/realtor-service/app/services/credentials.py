@@ -65,3 +65,9 @@ def validate_id_size(data: bytes, *, max_bytes: int) -> None:
 def build_id_object_key(user_id: UUID, *, extension: str) -> str:
     """Private-bucket key: realtor-id/{user_id}/{uuid}.{ext}."""
     return f"realtor-id/{user_id}/{uuid4()}.{extension}"
+
+
+def validate_coordinates(lat: float, lng: float) -> None:
+    """Reject out-of-range lat/lng (SCRUM-72 base location)."""
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
+        raise InvalidCredential("LOCATION_INVALID", "Base location coordinates are out of range.")

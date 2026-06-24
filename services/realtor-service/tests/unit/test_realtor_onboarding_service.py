@@ -43,6 +43,7 @@ class _StubRealtorRepo:
         self._existing = existing
         self.created = False
         self.resubmitted = False
+        self.base_location: tuple[float, float] | None = None
 
     async def get(self, user_id: UUID) -> RealtorRow | None:
         return self._existing
@@ -54,6 +55,9 @@ class _StubRealtorRepo:
     async def resubmit(self, **kwargs: object) -> RealtorRow:
         self.resubmitted = True
         return _row()
+
+    async def set_base_location(self, user_id: UUID, *, lat: float, lng: float) -> None:
+        self.base_location = (lat, lng)
 
 
 class _StubAudit:
@@ -143,3 +147,18 @@ async def test_resubmit_after_rejection() -> None:
 
     assert repo.resubmitted is True
     assert repo.created is False
+
+
+async def test_base_location_set_when_provided() -> None:
+    repo = _StubRealtorRepo()
+    svc, _, _ = _service(repo)
+
+    await _register(svc, base_lat=6.5, base_lng=3.4)
+
+    assert repo.base_location == (6.5, 3.4)
+
+
+async def test_base_location_out_of_range_rejected() -> None:
+    svc, _, _ = _service(_StubRealtorRepo())
+    with pytest.raises(InvalidCredential):
+        await _register(svc, base_lat=999.0, base_lng=3.4)
