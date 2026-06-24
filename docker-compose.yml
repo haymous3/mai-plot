@@ -365,6 +365,15 @@ services:
     container_name: maiplot-realtor-service
     ports:
       - "8017:8000"
+    environment:
+      # Notify realtors of approve/reject/suspend via notification-service
+      # (SCRUM-71) — enqueues notifications.dispatch on the shared broker.
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      # Government-ID upload goes to the private documents bucket in prod.
+      GOV_ID_STORAGE_USE_FAKE: ${GOV_ID_STORAGE_USE_FAKE:-false}
+      GOV_ID_S3_BUCKET: ${S3_BUCKET_DOCUMENTS:-maiplot-documents-prod}
+      GOV_ID_S3_REGION: ${AWS_REGION:-af-south-1}
 
   analytics-service:
     <<: *fastapi-defaults
