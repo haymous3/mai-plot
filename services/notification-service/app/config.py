@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     ses_region: str = "af-south-1"
     ses_endpoint_url: str = ""
     unsubscribe_base_url: str = "https://maiplot.ng/notifications/unsubscribe"
+    # Server secret for signing the email unsubscribe link (SCRUM-122). The link
+    # carries the user id + an HMAC of it so the unauthenticated unsubscribe
+    # endpoint can't be used to opt anyone out. MUST be set to a strong random
+    # value in every real environment.
+    unsubscribe_secret: str = "change-me-to-a-long-random-unsubscribe-secret"
     email_via_celery: bool = False
     email_task_max_retries: int = 5
     email_task_retry_backoff_max_seconds: int = 600

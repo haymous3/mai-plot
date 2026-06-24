@@ -17,6 +17,7 @@ from app.adapters.ses_email import InMemorySesClient
 from app.adapters.termii import InMemoryTermiiClient
 from app.adapters.web_push import InMemoryWebPushClient
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.preference_repo import PreferenceRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.services.email_dispatch import InlineEmailDispatcher
@@ -46,9 +47,11 @@ def _service(
         users=users,
         email_client=InMemorySesClient(),
         unsubscribe_base_url="https://maiplot.ng/notifications/unsubscribe",
+        unsubscribe_secret="test-secret",
     )
     service = NotificationDispatchService(
         notifications=notifications,
+        preferences=PreferenceRepository(session),
         sms=InlineSmsDispatcher(send_service=sms_send),
         push=InlinePushDispatcher(send_service=push_send),
         email=InlineEmailDispatcher(send_service=email_send),

@@ -20,6 +20,7 @@ from app.adapters.ses_email import EmailClient, EmailError
 from app.repositories.notification_repo import NotificationRepository
 from app.repositories.user_repo import UserRepository
 from app.services.email_templates import render_email
+from app.services.unsubscribe_token import make_unsubscribe_token
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,13 @@ class EmailSendService:
         users: UserRepository,
         email_client: EmailClient,
         unsubscribe_base_url: str,
+        unsubscribe_secret: str,
     ) -> None:
         self._notifications = notifications
         self._users = users
         self._email_client = email_client
         self._unsubscribe_base_url = unsubscribe_base_url
+        self._unsubscribe_secret = unsubscribe_secret
 
     async def send(self, notification_id: UUID) -> EmailOutcome:
         notification = await self._notifications.get_by_id(notification_id)
@@ -66,12 +69,15 @@ class EmailSendService:
             logger.info("email.send.no_email", extra={"notification_id": str(notification_id)})
             return EmailOutcome.NO_EMAIL
 
+        token = make_unsubscribe_token(notification.user_id, secret=self._unsubscribe_secret)
         message = render_email(
             to=email,
             type=notification.type,
             title=notification.title,
             body=notification.body,
-            unsubscribe_url=f"{self._unsubscribe_base_url}?uid={notification.user_id}",
+            unsubscribe_url=(
+                f"{self._unsubscribe_base_url}?uid={notification.user_id}&token={token}"
+            ),
         )
 
         try:

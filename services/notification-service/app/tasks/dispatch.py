@@ -25,6 +25,7 @@ from app.adapters.web_push import build_web_push_client
 from app.celery_app import celery_app
 from app.config import get_settings
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.preference_repo import PreferenceRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.services.dispatch_factory import build_dispatch_service
@@ -70,6 +71,7 @@ async def _run(
                 notifications=NotificationRepository(session),
                 users=UserRepository(session),
                 subscriptions=PushSubscriptionRepository(session),
+                preferences=PreferenceRepository(session),
                 termii=termii,
                 web_push=web_push,
                 email_client=email_client,

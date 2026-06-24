@@ -63,6 +63,7 @@ def _service(
         users=_StubUserRepo(email),  # type: ignore[arg-type]
         email_client=client,
         unsubscribe_base_url=_UNSUB_BASE,
+        unsubscribe_secret="test-secret",
     )
     return service, repo
 

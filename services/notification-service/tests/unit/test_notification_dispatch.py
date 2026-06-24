@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.repositories.notification_repo import NotificationRow
+from app.repositories.preference_repo import NotificationPreferences
 from app.services.notification_dispatch import NotificationDispatchService
 
 pytestmark = pytest.mark.asyncio
@@ -58,7 +59,17 @@ class _StubDispatcher:
         self.enqueued.append(notification_id)
 
 
-def _service() -> tuple[
+class _StubPreferences:
+    def __init__(self, prefs: NotificationPreferences | None = None) -> None:
+        self._prefs = prefs or NotificationPreferences()
+
+    async def get(self, user_id: UUID) -> NotificationPreferences:
+        return self._prefs
+
+
+def _service(
+    prefs: NotificationPreferences | None = None,
+) -> tuple[
     NotificationDispatchService, _StubNotifRepo, _StubDispatcher, _StubDispatcher, _StubDispatcher
 ]:
     repo = _StubNotifRepo()
@@ -67,6 +78,7 @@ def _service() -> tuple[
     email = _StubDispatcher()
     service = NotificationDispatchService(
         notifications=repo,  # type: ignore[arg-type]
+        preferences=_StubPreferences(prefs),  # type: ignore[arg-type]
         sms=sms,
         push=push,
         email=email,
@@ -122,3 +134,35 @@ async def test_email_channel_writes_row_and_enqueues_email() -> None:
     assert email.enqueued == [result.email_id]
     assert sms.enqueued == []
     assert push.enqueued == []
+
+
+async def test_dispatch_suppresses_a_disabled_channel() -> None:
+    # The user opted out of SMS — in_app + push still go, sms does not.
+    service, repo, sms, push, _ = _service(NotificationPreferences(sms_enabled=False))
+
+    result = await service.dispatch(
+        user_id=uuid4(),
+        type="offer_received",
+        body="New offer.",
+        channels={"in_app", "sms", "push"},
+    )
+
+    channels = {c["channel"] for c in repo.created}
+    assert channels == {"in_app", "push"}  # sms suppressed by preference
+    assert result.sms_id is None
+    assert sms.enqueued == []
+    assert push.enqueued == [result.push_id]
+
+
+async def test_critical_alert_bypasses_preferences() -> None:
+    # Even with everything opted out, a critical alert still goes (force).
+    all_off = NotificationPreferences(push_enabled=False, sms_enabled=False, email_enabled=False)
+    service, repo, sms, push, _ = _service(all_off)
+
+    result = await service.dispatch_critical_alert(
+        user_id=uuid4(), type="offer_accepted", body="Accepted."
+    )
+
+    assert {c["channel"] for c in repo.created} == {"in_app", "sms", "push"}
+    assert sms.enqueued == [result.sms_id]
+    assert push.enqueued == [result.push_id]
