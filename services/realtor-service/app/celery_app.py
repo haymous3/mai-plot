@@ -2,8 +2,9 @@
 
 CLAUDE.md non-negotiable: all background/async work goes through Celery (broker +
 result backend on Redis). The beat schedule runs the commission-accrual job
-hourly (record commissions for completed deals + release held ones). Celery task
-failures are reported to Sentry (review.md O8).
+hourly (record commissions for completed deals + release held ones) and the
+inspection-reassignment sweep (SCRUM-123: hand lapsed pending inspections to the
+next-nearest realtor). Celery task failures are reported to Sentry (review.md O8).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ celery_app = Celery(
     "realtor-service",
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["app.tasks.commission"],
+    include=["app.tasks.commission", "app.tasks.reassignment"],
 )
 
 celery_app.conf.update(
@@ -32,6 +33,10 @@ celery_app.conf.update(
         "accrue-commissions-hourly": {
             "task": "app.tasks.commission.run_commission_accrual",
             "schedule": _settings.commission_beat_interval_seconds,
+        },
+        "reassign-lapsed-inspections": {
+            "task": "app.tasks.reassignment.run_inspection_reassignment",
+            "schedule": _settings.reassignment_beat_interval_seconds,
         },
     },
 )
