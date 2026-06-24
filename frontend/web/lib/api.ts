@@ -13,6 +13,10 @@ export function listingServiceUrl(): string {
   return process.env.LISTING_SERVICE_URL ?? 'http://localhost:8012';
 }
 
+export function realtorServiceUrl(): string {
+  return process.env.REALTOR_SERVICE_URL ?? 'http://localhost:8017';
+}
+
 export interface Pagination {
   page: number;
   page_size: number;
@@ -51,6 +55,21 @@ export interface PoaQueueItem {
 export interface PoaQueueResponse {
   items: PoaQueueItem[];
   pagination: Pagination;
+}
+
+/** A row in the admin realtor onboarding queue (GET /admin/realtors/queue).
+ * This endpoint returns the pending list only — no pagination envelope. */
+export interface RealtorQueueItem {
+  id: string;
+  esvarbon_number: string | null;
+  years_of_experience: number | null;
+  coverage_states: string[];
+  coverage_lgas: string[];
+  created_at: string;
+}
+
+export interface RealtorQueueResponse {
+  items: RealtorQueueItem[];
 }
 
 export interface LoginSuccess {

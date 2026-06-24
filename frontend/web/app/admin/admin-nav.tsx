@@ -5,14 +5,21 @@ import { SignOutButton } from './sign-out-button';
 const TABS = [
   { key: 'listings', label: 'Listings', href: '/admin/listings/queue' },
   { key: 'poa', label: 'Power of Attorney', href: '/admin/poa/queue' },
+  { key: 'realtors', label: 'Realtors', href: '/admin/realtors/queue' },
 ] as const;
 
 /**
  * Shared admin header: brand, queue navigation, and the count of the active
- * queue (SCRUM-60/61). The count sits next to the active tab so it's always
+ * queue (SCRUM-60/61/62). The count sits next to the active tab so it's always
  * visible in the navigation.
  */
-export function AdminNav({ active, count }: { active: 'listings' | 'poa'; count: number | null }) {
+export function AdminNav({
+  active,
+  count,
+}: {
+  active: 'listings' | 'poa' | 'realtors';
+  count: number | null;
+}) {
   return (
     <header className="flex items-center justify-between border-b border-ink-300/30 bg-white px-6 py-3.5">
       <div className="flex items-center gap-7">

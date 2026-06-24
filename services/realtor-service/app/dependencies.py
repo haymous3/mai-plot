@@ -17,6 +17,7 @@ from app.repositories.realtor_repo import RealtorRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.commission_service import CommissionService
+from app.services.credential_service import CredentialAccessService
 from app.services.inspection_notifier import InspectionNotifier, build_inspection_notifier
 from app.services.inspection_service import InspectionService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
@@ -95,6 +96,20 @@ def get_realtor_repo(
     repo: Annotated[RealtorRepository, Depends(_realtor_repo)],
 ) -> RealtorRepository:
     return repo
+
+
+def get_credential_service(
+    settings: SettingsDep,
+    realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    storage: Annotated[DocumentStorage, Depends(get_storage)],
+) -> CredentialAccessService:
+    return CredentialAccessService(
+        realtors=realtors,
+        audit=audit,
+        storage=storage,
+        presign_ttl_seconds=settings.gov_id_presign_ttl_seconds,
+    )
 
 
 def _inspection_repo(session: SessionDep) -> InspectionRepository:
