@@ -44,6 +44,17 @@ _COLUMNS = (
 )
 
 
+@dataclass(frozen=True)
+class LapsedInspection:
+    """A pending inspection whose acceptance window has lapsed, with the data the
+    reassignment sweep needs (SCRUM-123)."""
+
+    inspection_id: UUID
+    realtor_id: UUID
+    listing_id: UUID
+    declined_realtor_ids: list[UUID]
+
+
 class InspectionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -143,6 +154,78 @@ class InspectionRepository:
                     "lng": gps_lng,
                     "data": json.dumps(report_data),
                 },
+            )
+        ).first()
+        return row is not None
+
+    async def list_lapsed_pending(self, *, limit: int = 500) -> list[LapsedInspection]:
+        """Pending inspections whose acceptance window has elapsed, with the
+        listing (for proximity) + who has already declined/lapsed (SCRUM-123)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids
+                    FROM inspections i
+                    JOIN transactions t ON t.id = i.transaction_id
+                    WHERE i.status = 'pending' AND i.assignment_expires_at <= NOW()
+                    ORDER BY i.assignment_expires_at ASC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [
+            LapsedInspection(
+                inspection_id=r.id,
+                realtor_id=r.realtor_id,
+                listing_id=r.listing_id,
+                declined_realtor_ids=list(r.declined_realtor_ids or []),
+            )
+            for r in rows
+        ]
+
+    async def reassign(
+        self, inspection_id: UUID, *, old_realtor_id: UUID, new_realtor_id: UUID, window_hours: int
+    ) -> bool:
+        """Reassign a lapsed pending inspection to a new realtor: reset the
+        acceptance window and record the old realtor in declined_realtor_ids so
+        they're never re-offered it. Guarded on status='pending'."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE inspections SET
+                        realtor_id = :new,
+                        assignment_expires_at = NOW() + make_interval(hours => :hours),
+                        declined_realtor_ids = array_append(declined_realtor_ids, :old),
+                        updated_at = NOW()
+                    WHERE id = :id AND status = 'pending'
+                    RETURNING id
+                    """
+                ),
+                {
+                    "id": inspection_id,
+                    "new": new_realtor_id,
+                    "old": old_realtor_id,
+                    "hours": window_hours,
+                },
+            )
+        ).first()
+        return row is not None
+
+    async def defer_assignment(self, inspection_id: UUID, *, hours: int) -> bool:
+        """Push the acceptance window out (no realtor available now) so the sweep
+        doesn't re-process it every tick. The current realtor stays assigned."""
+        row = (
+            await self._session.execute(
+                text(
+                    "UPDATE inspections SET "
+                    "assignment_expires_at = NOW() + make_interval(hours => :hours), "
+                    "updated_at = NOW() WHERE id = :id AND status = 'pending' RETURNING id"
+                ),
+                {"id": inspection_id, "hours": hours},
             )
         ).first()
         return row is not None

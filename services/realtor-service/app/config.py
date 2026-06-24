@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     inspection_radius_meters: float = 50_000.0  # 50 km (AC)
     inspection_window_hours: int = 2
 
+    # Inspection reassignment sweep (SCRUM-123). A Celery beat periodically finds
+    # pending inspections whose acceptance window has lapsed and reassigns them to
+    # the next-nearest approved realtor (excluding anyone who already declined),
+    # resetting the window. When nobody else is in range the assignment is deferred
+    # (window pushed out) and an admin alert is logged, so the sweep doesn't spin
+    # on it every tick. Reuses inspection_radius_meters + inspection_window_hours.
+    reassignment_beat_interval_seconds: float = 600.0  # every 10 min
+    reassignment_batch_limit: int = 500
+    reassignment_defer_hours: int = 2
+
     # Inspection report (SCRUM-73). The realtor's submitted GPS must be within
     # this radius of the property; at least min_photos photos are required.
     inspection_gps_radius_meters: float = 1_000.0  # 1 km (AC)
