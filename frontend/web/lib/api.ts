@@ -17,6 +17,10 @@ export function realtorServiceUrl(): string {
   return process.env.REALTOR_SERVICE_URL ?? 'http://localhost:8017';
 }
 
+export function notificationServiceUrl(): string {
+  return process.env.NOTIFICATION_SERVICE_URL ?? 'http://localhost:8016';
+}
+
 export interface Pagination {
   page: number;
   page_size: number;
