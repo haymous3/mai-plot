@@ -69,3 +69,9 @@ class RealtorQueueItem(BaseModel):
 
 class RealtorQueueResponse(BaseModel):
     items: list[RealtorQueueItem]
+
+
+class GovernmentIdUrlResponse(BaseModel):
+    """A short-TTL pre-signed URL for a realtor's uploaded ID document."""
+
+    url: str
