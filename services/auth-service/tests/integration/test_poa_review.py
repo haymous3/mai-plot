@@ -122,7 +122,7 @@ async def test_queue_requires_authentication(
 
 
 @pytest.mark.asyncio
-async def test_approve_verifies_and_notifies_seller(
+async def test_approve_verifies_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
     termii_fake: InMemoryTermiiClient,
@@ -132,7 +132,6 @@ async def test_approve_verifies_and_notifies_seller(
 ) -> None:
     user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
     token = _legal_team_token(db_engine)
-    sent_before = len(termii_fake.sent)
 
     response = await http_client.post(
         f"/admin/poa/{user_id}/review", json={"action": "approve"}, headers=_auth(token)
@@ -154,9 +153,10 @@ async def test_approve_verifies_and_notifies_seller(
         ).first()
         assert audit is not None and audit.entity_type == "user"
 
-    # Seller notified by SMS (the decision message, after the upload OTP).
-    assert len(termii_fake.sent) == sent_before + 1
-    assert "verified" in termii_fake.sent[-1].message.lower()
+    # The seller decision notification (in-app + SMS + email) is routed through
+    # notification-service via notifications.dispatch — not auth-service's Termii.
+    # Notifications are disabled in tests (no broker); the producer is covered in
+    # the PoaReviewService unit tests.
 
 
 @pytest.mark.asyncio
@@ -209,7 +209,6 @@ async def test_reject_with_reason_sets_rejected(
             text("SELECT poa_verified_status FROM users WHERE id = :id"), {"id": user_id}
         ).first()
         assert row is not None and row.poa_verified_status == "rejected"
-    assert "illegible" in termii_fake.sent[-1].message
 
 
 @pytest.mark.asyncio

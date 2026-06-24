@@ -1,4 +1,4 @@
-"""PoaReviewService — approve/reject, mandatory reason, status guards, SMS."""
+"""PoaReviewService — approve/reject, mandatory reason, status guards, notify."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.termii import InMemoryTermiiClient
 from app.repositories.user_repo import PoaReviewTarget
 from app.security import CurrentUser
 from app.services.poa_review import (
@@ -40,6 +39,19 @@ class _StubAudit:
         self.records.append(kwargs)
 
 
+class _RecordingNotifier:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def poa_decision(self, *, user_id: UUID, status: str, reason: str | None) -> None:
+        self.calls.append({"user_id": user_id, "status": status, "reason": reason})
+
+
+class _RaisingNotifier:
+    async def poa_decision(self, *, user_id: UUID, status: str, reason: str | None) -> None:
+        raise RuntimeError("broker down")
+
+
 def _pending() -> PoaReviewTarget:
     return PoaReviewTarget(poa_verified_status="pending", phone=_PHONE, has_document=True)
 
@@ -47,22 +59,22 @@ def _pending() -> PoaReviewTarget:
 def _service(
     repo: _StubUserRepo,
     audit: _StubAudit | None = None,
-    termii: InMemoryTermiiClient | None = None,
-) -> tuple[PoaReviewService, _StubAudit, InMemoryTermiiClient]:
+    notifier: object | None = None,
+) -> tuple[PoaReviewService, _StubAudit, _RecordingNotifier]:
     a = audit or _StubAudit()
-    t = termii or InMemoryTermiiClient()
+    n = notifier or _RecordingNotifier()
     svc = PoaReviewService(
         users=repo,  # type: ignore[arg-type]
         audit=a,  # type: ignore[arg-type]
-        termii=t,
+        notifier=n,  # type: ignore[arg-type]
     )
-    return svc, a, t
+    return svc, a, n  # type: ignore[return-value]
 
 
 @pytest.mark.asyncio
 async def test_approve_sets_verified_audits_and_notifies() -> None:
     repo = _StubUserRepo(_pending())
-    svc, audit, termii = _service(repo)
+    svc, audit, notifier = _service(repo)
     uid = uuid4()
 
     result = await svc.review(user_id=uid, reviewer=_REVIEWER, action="approve", reason=None)
@@ -70,28 +82,28 @@ async def test_approve_sets_verified_audits_and_notifies() -> None:
     assert result.poa_verified_status == "verified"
     assert repo.set_to == "verified"
     assert audit.records[0]["action"] == "poa.verified"
-    assert len(termii.sent) == 1
-    assert "verified" in termii.sent[0].message.lower()
+    assert notifier.calls == [{"user_id": uid, "status": "verified", "reason": None}]
 
 
 @pytest.mark.asyncio
 async def test_reject_requires_reason() -> None:
     repo = _StubUserRepo(_pending())
-    svc, audit, termii = _service(repo)
+    svc, audit, notifier = _service(repo)
     with pytest.raises(ReasonRequired):
         await svc.review(user_id=uuid4(), reviewer=_REVIEWER, action="reject", reason="  ")
     assert repo.set_to is None
     assert audit.records == []
-    assert termii.sent == []
+    assert notifier.calls == []
 
 
 @pytest.mark.asyncio
 async def test_reject_with_reason_sets_rejected_and_notifies() -> None:
     repo = _StubUserRepo(_pending())
-    svc, audit, termii = _service(repo)
+    svc, audit, notifier = _service(repo)
+    uid = uuid4()
 
     result = await svc.review(
-        user_id=uuid4(), reviewer=_REVIEWER, action="reject", reason="blurry scan"
+        user_id=uid, reviewer=_REVIEWER, action="reject", reason="blurry scan"
     )
 
     assert result.poa_verified_status == "rejected"
@@ -101,7 +113,7 @@ async def test_reject_with_reason_sets_rejected_and_notifies() -> None:
         "poa_verified_status": "rejected",
         "reason": "blurry scan",
     }
-    assert "blurry scan" in termii.sent[0].message
+    assert notifier.calls == [{"user_id": uid, "status": "rejected", "reason": "blurry scan"}]
 
 
 @pytest.mark.asyncio
@@ -128,12 +140,11 @@ async def test_non_pending_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sms_failure_does_not_roll_back_decision() -> None:
+async def test_notify_failure_does_not_roll_back_decision() -> None:
     repo = _StubUserRepo(_pending())
-    termii = InMemoryTermiiClient(fail_next=True)
-    svc, audit, _ = _service(repo, termii=termii)
+    svc, audit, _ = _service(repo, notifier=_RaisingNotifier())
 
-    # The Termii outage is swallowed — the decision still commits.
+    # A broker outage (notifier raising) is swallowed — the decision still commits.
     result = await svc.review(user_id=uuid4(), reviewer=_REVIEWER, action="approve", reason=None)
     assert result.poa_verified_status == "verified"
     assert repo.set_to == "verified"
