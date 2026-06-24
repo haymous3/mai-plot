@@ -37,3 +37,14 @@ class UserRepository:
             )
         ).first()
         return row.phone if row is not None else None
+
+    async def get_email(self, user_id: UUID) -> str | None:
+        """The user's email, or None if absent/soft-deleted or never set (email
+        is nullable — phone-only registrations have none)."""
+        row = (
+            await self._session.execute(
+                text("SELECT email FROM users WHERE id = :uid AND deleted_at IS NULL"),
+                {"uid": user_id},
+            )
+        ).first()
+        return row.email if row is not None else None

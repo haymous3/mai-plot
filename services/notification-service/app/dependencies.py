@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.ses_email import EmailClient, build_email_client
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.adapters.web_push import WebPushClient, build_web_push_client
 from app.config import Settings, get_settings
@@ -15,6 +16,8 @@ from app.repositories.notification_repo import NotificationRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
+from app.services.email_dispatch import build_email_dispatcher
+from app.services.email_send import EmailSendService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.notification_centre import NotificationCentreService
 from app.services.notification_dispatch import NotificationDispatchService
@@ -26,10 +29,11 @@ from app.services.sms_send import SmsSendService
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-# One client per process — httpx (Termii) and the Web Push client pool/reuse
-# under the hood, so they are built once rather than per request.
+# One client per process — the Termii (httpx), Web Push, and SES (boto3) clients
+# pool/reuse under the hood, so they are built once rather than per request.
 _termii: TermiiClient | None = None
 _web_push: WebPushClient | None = None
+_email_client: EmailClient | None = None
 
 
 def _jwt_verifier(settings: SettingsDep) -> JwtVerifier:
@@ -79,6 +83,18 @@ def get_web_push(settings: SettingsDep) -> WebPushClient:
     return _web_push
 
 
+def get_email_client(settings: SettingsDep) -> EmailClient:
+    global _email_client
+    if _email_client is None:
+        _email_client = build_email_client(
+            use_fake=settings.ses_use_fake,
+            from_email=settings.ses_from_email,
+            region=settings.ses_region,
+            endpoint_url=settings.ses_endpoint_url,
+        )
+    return _email_client
+
+
 def get_notification_centre_service(
     notifications: Annotated[NotificationRepository, Depends(_notification_repo)],
 ) -> NotificationCentreService:
@@ -92,17 +108,25 @@ def get_notification_dispatch_service(
     subscriptions: Annotated[PushSubscriptionRepository, Depends(_push_subscription_repo)],
     termii: Annotated[TermiiClient, Depends(get_termii)],
     web_push: Annotated[WebPushClient, Depends(get_web_push)],
+    email_client: Annotated[EmailClient, Depends(get_email_client)],
 ) -> NotificationDispatchService:
     """The dispatch seam other services call to raise a notification. In dev/CI
-    the SMS and push dispatchers run the send inline (no broker); in production
-    they enqueue Celery tasks (sms_via_celery / push_via_celery = true)."""
+    the channel dispatchers run the send inline (no broker); in production they
+    enqueue Celery tasks (sms_via_celery / push_via_celery / email_via_celery)."""
     sms_send = SmsSendService(notifications=notifications, users=users, termii=termii)
     sms = build_sms_dispatcher(via_celery=settings.sms_via_celery, send_service=sms_send)
     push_send = PushSendService(
         notifications=notifications, subscriptions=subscriptions, web_push=web_push
     )
     push = build_push_dispatcher(via_celery=settings.push_via_celery, send_service=push_send)
-    return NotificationDispatchService(notifications=notifications, sms=sms, push=push)
+    email_send = EmailSendService(
+        notifications=notifications,
+        users=users,
+        email_client=email_client,
+        unsubscribe_base_url=settings.unsubscribe_base_url,
+    )
+    email = build_email_dispatcher(via_celery=settings.email_via_celery, send_service=email_send)
+    return NotificationDispatchService(notifications=notifications, sms=sms, push=push, email=email)
 
 
 async def get_current_user(

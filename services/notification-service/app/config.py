@@ -61,6 +61,22 @@ class Settings(BaseSettings):
     push_task_max_retries: int = 5
     push_task_retry_backoff_max_seconds: int = 600
 
+    # Email via AWS SES (SCRUM-81). For document actions + transaction milestones
+    # (informational, not the critical path). The in-memory fake is the default
+    # so local/CI never hit AWS; production sets ses_use_fake=false + a verified
+    # ses_from_email on the maiplot.ng domain. unsubscribe_base_url is the page a
+    # recipient's unsubscribe link points at (NDPR); the link carries the user id
+    # — the unsubscribe endpoint + preference honouring are the preferences-API
+    # follow-up.
+    ses_use_fake: bool = True
+    ses_from_email: str = "noreply@maiplot.ng"
+    ses_region: str = "af-south-1"
+    ses_endpoint_url: str = ""
+    unsubscribe_base_url: str = "https://maiplot.ng/notifications/unsubscribe"
+    email_via_celery: bool = False
+    email_task_max_retries: int = 5
+    email_task_retry_backoff_max_seconds: int = 600
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

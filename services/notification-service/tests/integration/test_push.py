@@ -132,20 +132,31 @@ def _dispatch_service(
 ) -> tuple[NotificationDispatchService, NotificationRepository, PushSubscriptionRepository]:
     notifications = NotificationRepository(session)
     subscriptions = PushSubscriptionRepository(session)
-    # SMS isn't exercised here; an unused inline dispatcher with no recipient is fine.
+    # SMS + email aren't exercised here; unused inline dispatchers with fakes are fine.
+    from app.adapters.ses_email import InMemorySesClient
     from app.adapters.termii import InMemoryTermiiClient
     from app.repositories.user_repo import UserRepository
+    from app.services.email_dispatch import InlineEmailDispatcher
+    from app.services.email_send import EmailSendService
 
+    users = UserRepository(session)
     sms_send = SmsSendService(
-        notifications=notifications, users=UserRepository(session), termii=InMemoryTermiiClient()
+        notifications=notifications, users=users, termii=InMemoryTermiiClient()
     )
     push_send = PushSendService(
         notifications=notifications, subscriptions=subscriptions, web_push=web_push
+    )
+    email_send = EmailSendService(
+        notifications=notifications,
+        users=users,
+        email_client=InMemorySesClient(),
+        unsubscribe_base_url="https://maiplot.ng/notifications/unsubscribe",
     )
     service = NotificationDispatchService(
         notifications=notifications,
         sms=InlineSmsDispatcher(send_service=sms_send),
         push=InlinePushDispatcher(send_service=push_send),
+        email=InlineEmailDispatcher(send_service=email_send),
     )
     return service, notifications, subscriptions
 

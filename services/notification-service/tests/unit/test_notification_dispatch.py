@@ -1,7 +1,7 @@
-"""Unit tests for NotificationDispatchService (SCRUM-80/79) — channel fan-out.
+"""Unit tests for NotificationDispatchService (SCRUM-80/79/81) — channel fan-out.
 
-The repo + SMS/push dispatchers are stubbed so we assert which rows get written
-and whether each send is handed off, without a DB, Termii, or a push service.
+The repo + channel dispatchers are stubbed so we assert which rows get written
+and whether each send is handed off, without a DB or any external client.
 """
 
 from __future__ import annotations
@@ -59,36 +59,43 @@ class _StubDispatcher:
 
 
 def _service() -> tuple[
-    NotificationDispatchService, _StubNotifRepo, _StubDispatcher, _StubDispatcher
+    NotificationDispatchService, _StubNotifRepo, _StubDispatcher, _StubDispatcher, _StubDispatcher
 ]:
     repo = _StubNotifRepo()
     sms = _StubDispatcher()
     push = _StubDispatcher()
-    service = NotificationDispatchService(notifications=repo, sms=sms, push=push)  # type: ignore[arg-type]
-    return service, repo, sms, push
+    email = _StubDispatcher()
+    service = NotificationDispatchService(
+        notifications=repo,  # type: ignore[arg-type]
+        sms=sms,
+        push=push,
+        email=email,
+    )
+    return service, repo, sms, push, email
 
 
-async def test_critical_alert_writes_all_channels_and_enqueues_sends() -> None:
-    service, repo, sms, push = _service()
+async def test_critical_alert_writes_core_channels_not_email() -> None:
+    service, repo, sms, push, email = _service()
 
     result = await service.dispatch_critical_alert(
         user_id=uuid4(), type="offer_accepted", title="Offer accepted", body="Accepted."
     )
 
     channels = {c["channel"] for c in repo.created}
-    assert channels == {"in_app", "sms", "push"}
+    assert channels == {"in_app", "sms", "push"}  # email is opt-in, not critical
     assert result.in_app_id is not None
     assert result.sms_id is not None
     assert result.push_id is not None
-    # in_app is delivered on write; sms + push wait for their send to confirm.
+    assert result.email_id is None
     by_channel = {c["channel"]: c["sent_now"] for c in repo.created}
     assert by_channel == {"in_app": True, "sms": False, "push": False}
     assert sms.enqueued == [result.sms_id]
     assert push.enqueued == [result.push_id]
+    assert email.enqueued == []
 
 
 async def test_in_app_only_does_not_enqueue_any_send() -> None:
-    service, repo, sms, push = _service()
+    service, repo, sms, push, email = _service()
 
     result = await service.dispatch(
         user_id=uuid4(), type="listing_approved", body="Live.", channels={"in_app"}
@@ -97,20 +104,21 @@ async def test_in_app_only_does_not_enqueue_any_send() -> None:
     assert [c["channel"] for c in repo.created] == ["in_app"]
     assert result.sms_id is None
     assert result.push_id is None
+    assert result.email_id is None
     assert sms.enqueued == []
     assert push.enqueued == []
+    assert email.enqueued == []
 
 
-async def test_push_only_enqueues_push_without_in_app_or_sms() -> None:
-    service, repo, sms, push = _service()
+async def test_email_channel_writes_row_and_enqueues_email() -> None:
+    service, repo, sms, push, email = _service()
 
     result = await service.dispatch(
-        user_id=uuid4(), type="inspection_scheduled", body="Booked.", channels={"push"}
+        user_id=uuid4(), type="document_verified", body="Verified.", channels={"email"}
     )
 
-    assert [c["channel"] for c in repo.created] == ["push"]
-    assert result.in_app_id is None
-    assert result.sms_id is None
-    assert result.push_id is not None
+    assert [c["channel"] for c in repo.created] == ["email"]
+    assert result.email_id is not None
+    assert email.enqueued == [result.email_id]
     assert sms.enqueued == []
-    assert push.enqueued == [result.push_id]
+    assert push.enqueued == []

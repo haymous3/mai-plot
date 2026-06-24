@@ -29,14 +29,18 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.repositories.notification_repo import NotificationRepository
+from app.services.email_dispatch import EmailDispatcher
 from app.services.push_dispatch import PushDispatcher
 from app.services.sms_dispatch import SmsDispatcher
 
 IN_APP = "in_app"
 SMS = "sms"
 PUSH = "push"
+EMAIL = "email"
 # A critical alert reaches the in-app centre + SMS (the guaranteed fallback) +
-# Web Push (best-effort — a no-op if the user has no subscription).
+# Web Push (best-effort — a no-op if the user has no subscription). Email is an
+# opt-in channel (document actions / transaction milestones), not part of the
+# critical path, so callers request it explicitly.
 CRITICAL_CHANNELS: frozenset[str] = frozenset({IN_APP, SMS, PUSH})
 
 
@@ -47,6 +51,7 @@ class DispatchResult:
     in_app_id: UUID | None = None
     sms_id: UUID | None = None
     push_id: UUID | None = None
+    email_id: UUID | None = None
 
 
 class NotificationDispatchService:
@@ -56,10 +61,12 @@ class NotificationDispatchService:
         notifications: NotificationRepository,
         sms: SmsDispatcher,
         push: PushDispatcher,
+        email: EmailDispatcher,
     ) -> None:
         self._notifications = notifications
         self._sms = sms
         self._push = push
+        self._email = email
 
     async def dispatch(
         self,
@@ -75,6 +82,7 @@ class NotificationDispatchService:
         in_app_id: UUID | None = None
         sms_id: UUID | None = None
         push_id: UUID | None = None
+        email_id: UUID | None = None
 
         if IN_APP in channels:
             row = await self._notifications.create(
@@ -117,7 +125,23 @@ class NotificationDispatchService:
             push_id = row.id
             await self._push.enqueue(push_id)
 
-        return DispatchResult(in_app_id=in_app_id, sms_id=sms_id, push_id=push_id)
+        if EMAIL in channels:
+            row = await self._notifications.create(
+                user_id=user_id,
+                channel=EMAIL,
+                type=type,
+                title=title,
+                body=body,
+                reference_type=reference_type,
+                reference_id=reference_id,
+                sent_now=False,
+            )
+            email_id = row.id
+            await self._email.enqueue(email_id)
+
+        return DispatchResult(
+            in_app_id=in_app_id, sms_id=sms_id, push_id=push_id, email_id=email_id
+        )
 
     async def dispatch_critical_alert(
         self,

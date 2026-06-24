@@ -330,6 +330,11 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:ops@maiplot.ng}
+      EMAIL_VIA_CELERY: ${EMAIL_VIA_CELERY:-true}
+      SES_USE_FAKE: ${SES_USE_FAKE:-false}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@maiplot.ng}
+      SES_REGION: ${SES_REGION:-af-south-1}
+      UNSUBSCRIBE_BASE_URL: ${UNSUBSCRIBE_BASE_URL:-https://maiplot.ng/notifications/unsubscribe}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: celery -A app.celery_app worker --loglevel=INFO
 

@@ -88,15 +88,15 @@ def mint_token() -> Callable[[UUID, str], str]:
 
 @pytest.fixture
 def seed_user(db_engine: Engine) -> Callable[..., UUID]:
-    def _seed(*, role: str = "buyer", phone: str | None = None) -> UUID:
+    def _seed(*, role: str = "buyer", phone: str | None = None, email: str | None = None) -> UUID:
         user_id = uuid4()
         with db_engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO users (id, role, verified_status, is_active) "
-                    "VALUES (:id, :role, 'id_verified', TRUE)"
+                    "INSERT INTO users (id, role, email, verified_status, is_active) "
+                    "VALUES (:id, :role, :email, 'id_verified', TRUE)"
                 ),
-                {"id": user_id, "role": role},
+                {"id": user_id, "role": role, "email": email},
             )
             # user_pii holds the phone (owned by auth-service); seed it only when
             # a test needs an SMS recipient. phone is UNIQUE, so each call mints

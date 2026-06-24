@@ -24,6 +24,9 @@ dependencies = [
     # (pulls in cryptography + py-vapid). Only the real client uses it; CI/dev
     # default to the in-memory fake.
     "pywebpush>=2.0",
+    # Email (SCRUM-81). boto3 SES client; only the real client uses it, CI/dev
+    # default to the in-memory fake.
+    "boto3>=1.34",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
