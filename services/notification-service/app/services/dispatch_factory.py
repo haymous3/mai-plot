@@ -20,6 +20,7 @@ from app.adapters.termii import TermiiClient
 from app.adapters.web_push import WebPushClient
 from app.config import Settings
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.preference_repo import PreferenceRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.services.email_dispatch import build_email_dispatcher
@@ -37,6 +38,7 @@ def build_dispatch_service(
     notifications: NotificationRepository,
     users: UserRepository,
     subscriptions: PushSubscriptionRepository,
+    preferences: PreferenceRepository,
     termii: TermiiClient,
     web_push: WebPushClient,
     email_client: EmailClient,
@@ -52,6 +54,13 @@ def build_dispatch_service(
         users=users,
         email_client=email_client,
         unsubscribe_base_url=settings.unsubscribe_base_url,
+        unsubscribe_secret=settings.unsubscribe_secret,
     )
     email = build_email_dispatcher(via_celery=settings.email_via_celery, send_service=email_send)
-    return NotificationDispatchService(notifications=notifications, sms=sms, push=push, email=email)
+    return NotificationDispatchService(
+        notifications=notifications,
+        preferences=preferences,
+        sms=sms,
+        push=push,
+        email=email,
+    )

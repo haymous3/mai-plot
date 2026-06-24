@@ -29,6 +29,7 @@ from app.db import dispose_engine
 _TABLES = (
     "notifications",
     "push_subscriptions",
+    "notification_preferences",
     "users",
 )
 

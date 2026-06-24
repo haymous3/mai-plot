@@ -13,6 +13,7 @@ from app.adapters.web_push import WebPushClient, build_web_push_client
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.preference_repo import PreferenceRepository
 from app.repositories.push_subscription_repo import PushSubscriptionRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, CurrentUser, parse_bearer
@@ -50,6 +51,16 @@ def _push_subscription_repo(session: SessionDep) -> PushSubscriptionRepository:
 def get_push_subscription_repo(
     repo: Annotated[PushSubscriptionRepository, Depends(_push_subscription_repo)],
 ) -> PushSubscriptionRepository:
+    return repo
+
+
+def _preference_repo(session: SessionDep) -> PreferenceRepository:
+    return PreferenceRepository(session)
+
+
+def get_preference_repo(
+    repo: Annotated[PreferenceRepository, Depends(_preference_repo)],
+) -> PreferenceRepository:
     return repo
 
 
@@ -101,6 +112,7 @@ def get_notification_dispatch_service(
     notifications: Annotated[NotificationRepository, Depends(_notification_repo)],
     users: Annotated[UserRepository, Depends(_user_repo)],
     subscriptions: Annotated[PushSubscriptionRepository, Depends(_push_subscription_repo)],
+    preferences: Annotated[PreferenceRepository, Depends(_preference_repo)],
     termii: Annotated[TermiiClient, Depends(get_termii)],
     web_push: Annotated[WebPushClient, Depends(get_web_push)],
     email_client: Annotated[EmailClient, Depends(get_email_client)],
@@ -114,6 +126,7 @@ def get_notification_dispatch_service(
         notifications=notifications,
         users=users,
         subscriptions=subscriptions,
+        preferences=preferences,
         termii=termii,
         web_push=web_push,
         email_client=email_client,

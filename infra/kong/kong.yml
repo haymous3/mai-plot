@@ -278,6 +278,20 @@ services:
   - name: notification-service
     url: http://notification-service:8000
     routes:
+      # Public, token-signed email unsubscribe (SCRUM-122) — NO jwt plugin, since
+      # it's clicked from an email. The HMAC token in the link is the auth. This
+      # exact-path route is more specific than /notifications, so it wins. Still
+      # rate-limited.
+      - name: notifications-unsubscribe
+        paths:
+          - /notifications/unsubscribe
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
       - name: notifications
         paths:
           - /notifications

@@ -321,6 +321,10 @@ services:
     container_name: maiplot-notification-service
     ports:
       - "8016:8000"
+    environment:
+      # Must match the worker's value — it signs the email unsubscribe link, the
+      # API verifies it (SCRUM-122).
+      UNSUBSCRIBE_SECRET: ${UNSUBSCRIBE_SECRET:-change-me-to-a-long-random-unsubscribe-secret}
 
   # Background worker for notification-service (SCRUM-80 SMS, SCRUM-79 Web Push).
   # Same image, no HTTP port — runs the SMS (Termii) and push (Web Push/VAPID)
@@ -348,6 +352,9 @@ services:
       SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@maiplot.ng}
       SES_REGION: ${SES_REGION:-af-south-1}
       UNSUBSCRIBE_BASE_URL: ${UNSUBSCRIBE_BASE_URL:-https://maiplot.ng/notifications/unsubscribe}
+      # Must match the API's value (SCRUM-122) so the email's signed unsubscribe
+      # token verifies.
+      UNSUBSCRIBE_SECRET: ${UNSUBSCRIBE_SECRET:-change-me-to-a-long-random-unsubscribe-secret}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: celery -A app.celery_app worker --loglevel=INFO
 

@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.preference_repo import PreferenceRepository
 from app.services.email_dispatch import EmailDispatcher
 from app.services.push_dispatch import PushDispatcher
 from app.services.sms_dispatch import SmsDispatcher
@@ -59,11 +60,13 @@ class NotificationDispatchService:
         self,
         *,
         notifications: NotificationRepository,
+        preferences: PreferenceRepository,
         sms: SmsDispatcher,
         push: PushDispatcher,
         email: EmailDispatcher,
     ) -> None:
         self._notifications = notifications
+        self._preferences = preferences
         self._sms = sms
         self._push = push
         self._email = email
@@ -78,7 +81,14 @@ class NotificationDispatchService:
         channels: Collection[str] = CRITICAL_CHANNELS,
         reference_type: str | None = None,
         reference_id: UUID | None = None,
+        force: bool = False,
     ) -> DispatchResult:
+        # Honour the recipient's channel preferences (SCRUM-122). in_app is always
+        # delivered (it's their notification-centre record); push/sms/email are
+        # suppressed if opted out — unless `force` (genuinely critical messages).
+        prefs = await self._preferences.get(user_id)
+        channels = {c for c in channels if c == IN_APP or force or prefs.allows(c)}
+
         in_app_id: UUID | None = None
         sms_id: UUID | None = None
         push_id: UUID | None = None
@@ -153,7 +163,9 @@ class NotificationDispatchService:
         reference_type: str | None = None,
         reference_id: UUID | None = None,
     ) -> DispatchResult:
-        """Raise a critical alert across the in-app centre, SMS, and Web Push."""
+        """Raise a critical alert across the in-app centre, SMS, and Web Push.
+        Critical alerts bypass channel preferences (`force`) — the user can't opt
+        out of a guaranteed delivery."""
         return await self.dispatch(
             user_id=user_id,
             type=type,
@@ -162,4 +174,5 @@ class NotificationDispatchService:
             channels=CRITICAL_CHANNELS,
             reference_type=reference_type,
             reference_id=reference_id,
+            force=True,
         )

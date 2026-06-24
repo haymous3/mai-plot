@@ -43,6 +43,7 @@ async def _run(notification_id: UUID) -> str:
                 users=UserRepository(session),
                 email_client=email_client,
                 unsubscribe_base_url=settings.unsubscribe_base_url,
+                unsubscribe_secret=settings.unsubscribe_secret,
             )
             outcome = await service.send(notification_id)
             await session.commit()
