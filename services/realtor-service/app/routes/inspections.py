@@ -1,7 +1,8 @@
-"""/inspections routes — request + accept (SCRUM-72).
+"""/inspections routes — request/accept (SCRUM-72) + report submit/view (SCRUM-73).
 
 A transaction party requests an inspection (auto-assigned to the nearest approved
-realtor); the assigned realtor accepts within the 2-hour window.
+realtor); the assigned realtor accepts within the 2-hour window, then submits a
+GPS-stamped report with photos. The report is viewable by the parties + admin.
 """
 
 from __future__ import annotations
@@ -9,12 +10,18 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Form, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_current_user, get_inspection_service
+from app.dependencies import (
+    get_current_user,
+    get_inspection_service,
+    get_report_service,
+)
 from app.schemas.inspection import InspectionRequest, InspectionResponse
+from app.schemas.report import ReportResponse, ReportSubmitResponse
 from app.security import CurrentUser
+from app.services.credentials import InvalidCredential
 from app.services.inspection_service import (
     AssignmentExpired,
     InspectionAlreadyActive,
@@ -26,11 +33,21 @@ from app.services.inspection_service import (
     NotTransactionParty,
     TransactionNotFound,
 )
+from app.services.report_service import (
+    GpsOutOfRange,
+    NotAuthorizedForReport,
+    ReportError,
+    ReportNotFound,
+    ReportNotSubmittable,
+    ReportService,
+    ReportTooEarly,
+)
 
 router = APIRouter(prefix="/inspections", tags=["inspections"])
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 InspectionServiceDep = Annotated[InspectionService, Depends(get_inspection_service)]
+ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -102,3 +119,88 @@ async def accept_inspection(
             "The 2-hour acceptance window has elapsed.",
         )
     return InspectionResponse.from_row(inspection)
+
+
+@router.post("/{inspection_id}/report", response_model=None, status_code=status.HTTP_201_CREATED)
+async def submit_report(
+    inspection_id: UUID,
+    request: Request,
+    caller: CurrentUserDep,
+    service: ReportServiceDep,
+    photos: list[UploadFile],
+    gps_lat: Annotated[float, Form()],
+    gps_lng: Annotated[float, Form()],
+    property_condition: Annotated[str, Form()],
+    amenities: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI Form default
+    discrepancies: Annotated[str | None, Form()] = None,
+    remarks: Annotated[str | None, Form()] = None,
+) -> ReportSubmitResponse | JSONResponse:
+    """The assigned realtor submits a GPS-stamped report with >=3 photos."""
+    photo_bytes = [await p.read() for p in photos]
+    try:
+        inspection = await service.submit(
+            caller=caller,
+            inspection_id=inspection_id,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            property_condition=property_condition,
+            amenities=amenities,
+            discrepancies=discrepancies,
+            remarks=remarks,
+            photos=photo_bytes,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except InspectionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "INSPECTION_NOT_FOUND", "No such inspection.")
+    except NotAssignedRealtor:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_ASSIGNED_REALTOR",
+            "This inspection is not assigned to you.",
+        )
+    except ReportNotSubmittable:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "REPORT_NOT_SUBMITTABLE",
+            "The inspection must be accepted and not already reported.",
+        )
+    except ReportTooEarly:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "REPORT_TOO_EARLY",
+            "The report cannot be submitted before the confirmed inspection date.",
+        )
+    except GpsOutOfRange:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "GPS_OUT_OF_RANGE",
+            "The GPS location is not within range of the property.",
+        )
+    except InvalidCredential as exc:
+        return _error(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.code, str(exc))
+    except ReportError:
+        return _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "STORAGE_UNAVAILABLE",
+            "Photo storage is temporarily unavailable. Please retry.",
+        )
+    return ReportSubmitResponse.from_row(inspection)
+
+
+@router.get("/{inspection_id}/report", response_model=None)
+async def view_report(
+    inspection_id: UUID, caller: CurrentUserDep, service: ReportServiceDep
+) -> ReportResponse | JSONResponse:
+    """View a submitted report (buyer, seller, admin, or the assigned realtor)."""
+    try:
+        view = await service.get_report(caller=caller, inspection_id=inspection_id)
+    except InspectionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "INSPECTION_NOT_FOUND", "No such inspection.")
+    except NotAuthorizedForReport:
+        return _error(status.HTTP_403_FORBIDDEN, "NOT_AUTHORIZED", "You may not view this report.")
+    except ReportNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND, "REPORT_NOT_FOUND", "No report has been submitted yet."
+        )
+    return ReportResponse.from_view(view)

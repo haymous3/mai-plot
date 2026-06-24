@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     inspection_radius_meters: float = 50_000.0  # 50 km (AC)
     inspection_window_hours: int = 2
 
+    # Inspection report (SCRUM-73). The realtor's submitted GPS must be within
+    # this radius of the property; at least min_photos photos are required.
+    inspection_gps_radius_meters: float = 1_000.0  # 1 km (AC)
+    inspection_min_photos: int = 3
+    inspection_photo_max_bytes: int = 5 * 1024 * 1024
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
