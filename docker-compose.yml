@@ -222,6 +222,11 @@ services:
     container_name: maiplot-auth-service
     ports:
       - "8011:8000"
+    environment:
+      # Announce PoA decisions to the seller via notification-service (SCRUM-113)
+      # — enqueues notifications.dispatch on the shared broker, best-effort.
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
 
   listing-service:
     <<: *fastapi-defaults

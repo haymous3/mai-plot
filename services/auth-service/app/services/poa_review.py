@@ -4,12 +4,11 @@ A pending PoA submission is moved to 'verified' or 'rejected'. A rejection
 requires a reason (422 otherwise). Every decision writes an append-only
 audit_log row, and the seller is notified of the outcome.
 
-Notification: the decision SMS is sent now via the existing Termii adapter
-(CLAUDE.md: SMS is the critical-path channel). Sending is BEST-EFFORT — a
-Termii outage is logged but never rolls back a completed legal decision (the
-status change is the source of truth). The EMAIL half of the notification is
-deferred to notification-service (a follow-up ticket) — there is no SES adapter
-in auth-service and notification orchestration belongs in that service.
+Notification (SCRUM-113): the decision is announced to the seller across in-app +
+SMS + email by enqueuing the notification-service `notifications.dispatch` task
+(both channels orchestrated there, not via Termii inline). Sending is BEST-EFFORT
+— a notification failure is logged but never rolls back a completed legal
+decision (the status change is the source of truth).
 """
 
 from __future__ import annotations
@@ -18,10 +17,10 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.adapters.termii import TermiiClient, TermiiError
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.user_repo import UserRepository
 from app.security import CurrentUser
+from app.services.poa_notifier import PoaNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +54,11 @@ class PoaReviewService:
         *,
         users: UserRepository,
         audit: AuditLogRepository,
-        termii: TermiiClient,
+        notifier: PoaNotifier,
     ) -> None:
         self._users = users
         self._audit = audit
-        self._termii = termii
+        self._notifier = notifier
 
     async def review(
         self,
@@ -96,28 +95,18 @@ class PoaReviewService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        await self._notify(phone=target.phone, status=new_status, reason=clean_reason)
+        await self._notify(user_id=user_id, status=new_status, reason=clean_reason)
         return PoaReviewResult(user_id=user_id, poa_verified_status=new_status)
 
-    async def _notify(self, *, phone: str, status: str, reason: str | None) -> None:
-        """Best-effort decision SMS. Email is deferred to notification-service."""
-        if status == "verified":
-            message = (
-                "Maiplot: your Power-of-Attorney document has been verified. "
-                "You can now publish listings."
-            )
-        else:
-            message = (
-                "Maiplot: your Power-of-Attorney document was not approved. "
-                f"Reason: {reason}. You may re-submit a corrected document."
-            )
+    async def _notify(self, *, user_id: UUID, status: str, reason: str | None) -> None:
+        """Best-effort decision notification (in-app + SMS + email) via
+        notification-service. The decision is already committed; a notification
+        failure must never undo it, so this is defensively wrapped on top of the
+        notifier's own best-effort guarantee."""
         try:
-            await self._termii.send_sms(phone, message)
-        except TermiiError as exc:
-            # The decision is already committed; a notification failure must not
-            # undo it. Log for follow-up (a retry/reconcile belongs in
-            # notification-service when it lands).
+            await self._notifier.poa_decision(user_id=user_id, status=status, reason=reason)
+        except Exception as exc:  # noqa: BLE001 — never fail a committed decision
             logger.warning(
-                "poa.review.sms_failed",
-                extra={"phone_suffix": phone[-4:], "status": status, "error": str(exc)},
+                "poa.review.notify_failed",
+                extra={"user_id": str(user_id), "status": status, "error": str(exc)},
             )

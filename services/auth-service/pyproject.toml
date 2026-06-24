@@ -14,6 +14,11 @@ dependencies = [
     "bcrypt>=4.2",
     "httpx>=0.27",
     "redis>=5.0",
+    # Cross-service notifications (SCRUM-113): a Celery producer enqueues the
+    # notification-service dispatch task on the shared broker. Plain celery (NOT
+    # celery[redis]) per the workspace redis-version constraint; redis (above) is
+    # used by kombu's redis:// transport at runtime.
+    "celery>=5.3",
     "boto3>=1.34",
     "python-multipart>=0.0.9",
     "opentelemetry-sdk>=1.27",

@@ -75,6 +75,16 @@ class Settings(BaseSettings):
     # Comma-separated IPs; empty = allow any (dev/test default).
     legal_team_ip_allowlist: str = ""
 
+    # PoA decision notifications (SCRUM-113). The legal team's approve/reject is
+    # announced to the seller (in-app + SMS + email) via notification-service —
+    # auth-service enqueues the `notifications.dispatch` Celery task on the shared
+    # broker rather than calling Termii inline (CLAUDE.md §3: cross-service async
+    # via Celery). Best-effort: a notification failure never rolls back the
+    # committed decision. notifications_enabled=false (dev/CI default) wires a
+    # no-op notifier so no broker is needed.
+    notifications_enabled: bool = False
+    celery_broker_url: str = "redis://localhost:6379/1"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

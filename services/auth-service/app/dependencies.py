@@ -33,6 +33,7 @@ from app.services.logout import LogoutService
 from app.services.nin_verification import NinVerificationService
 from app.services.otp_verification import OtpVerificationService
 from app.services.poa_document import PoaDocumentService
+from app.services.poa_notifier import PoaNotifier, build_poa_notifier
 from app.services.poa_queue import PoaQueueService
 from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
@@ -48,6 +49,7 @@ _termii: TermiiClient | None = None
 _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
 _document_storage: DocumentStorage | None = None
+_poa_notifier: PoaNotifier | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -270,12 +272,22 @@ def get_poa_queue_service(
     return PoaQueueService(users=users)
 
 
+def get_poa_notifier(settings: SettingsDep) -> PoaNotifier:
+    global _poa_notifier
+    if _poa_notifier is None:
+        _poa_notifier = build_poa_notifier(
+            enabled=settings.notifications_enabled,
+            broker_url=settings.celery_broker_url,
+        )
+    return _poa_notifier
+
+
 def get_poa_review_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
-    termii: TermiiDep,
+    notifier: Annotated[PoaNotifier, Depends(get_poa_notifier)],
 ) -> PoaReviewService:
-    return PoaReviewService(users=users, audit=audit, termii=termii)
+    return PoaReviewService(users=users, audit=audit, notifier=notifier)
 
 
 def get_poa_document_service(
