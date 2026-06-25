@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { NotificationBell } from './notification-bell';
 import { PushToggle } from './push-toggle';
 import { SignOutButton } from './sign-out-button';
 
@@ -53,8 +54,9 @@ export function AdminNav({
           })}
         </nav>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <PushToggle />
+        <NotificationBell />
         <SignOutButton />
       </div>
     </header>
