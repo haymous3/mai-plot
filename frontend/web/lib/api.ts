@@ -76,6 +76,26 @@ export interface RealtorQueueResponse {
   items: RealtorQueueItem[];
 }
 
+/** A row in the in-app notification centre (GET /notifications, SCRUM-82). */
+export interface NotificationItem {
+  id: string;
+  channel: string;
+  type: string;
+  title: string | null;
+  body: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  next_cursor: string | null;
+  unread_count: number;
+}
+
 export interface LoginSuccess {
   ok: true;
   accessToken: string;
