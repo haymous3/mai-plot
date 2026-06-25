@@ -44,6 +44,26 @@ class Settings(BaseSettings):
     # no broker is needed; production sets it true + the broker URL.
     notifications_enabled: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
+    # Realtor commission disbursement (SCRUM-86). §11 — moves real money out of
+    # escrow. The escrow debit is initiated by a system actor (this user id must
+    # exist in `users`; seeded at deploy). A debit STRICTLY ABOVE ₦10M still
+    # escalates to dual admin approval via the existing escrow flow.
+    disbursement_actor_id: str = "00000000-0000-0000-0000-000000000001"
+
+    # Paystack payout rail. Unbuilt (SCRUM-83/M3) — paystack_enabled=false wires a
+    # FAKE transfer client (synthetic reference, no network) so the disbursement
+    # flow runs end-to-end in dev/CI. Production sets it true + the secret.
+    paystack_enabled: bool = False
+    paystack_secret_key: str = ""
+
+    # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
+    # local/CI never reach S3; production sets receipts_storage_use_fake=false.
+    receipts_storage_use_fake: bool = True
+    receipts_s3_bucket: str = "maiplot-receipts-local"
+    receipts_s3_region: str = "af-south-1"
+    receipts_s3_endpoint_url: str = ""
 
 
 @lru_cache(maxsize=1)

@@ -306,6 +306,24 @@ services:
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
 
+  # Background worker for transaction-service (SCRUM-86). Consumes the
+  # payments.disburse_commission task realtor-service enqueues. No HTTP port.
+  transaction-celery-worker:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/transaction-service
+    container_name: maiplot-transaction-celery-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      # Paystack payout rail is unbuilt (SCRUM-83) — keep the fake transfer client.
+      PAYSTACK_ENABLED: ${PAYSTACK_ENABLED:-false}
+      RECEIPTS_STORAGE_USE_FAKE: ${RECEIPTS_STORAGE_USE_FAKE:-true}
+      DISBURSEMENT_ACTOR_ID: ${DISBURSEMENT_ACTOR_ID:-00000000-0000-0000-0000-000000000001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app worker --loglevel=INFO
+
   loan-service:
     <<: *fastapi-defaults
     build:
