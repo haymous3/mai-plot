@@ -21,6 +21,10 @@ export function notificationServiceUrl(): string {
   return process.env.NOTIFICATION_SERVICE_URL ?? 'http://localhost:8016';
 }
 
+export function analyticsServiceUrl(): string {
+  return process.env.ANALYTICS_SERVICE_URL ?? 'http://localhost:8018';
+}
+
 export interface Pagination {
   page: number;
   page_size: number;
@@ -102,6 +106,27 @@ export interface NotificationPreferences {
   push_enabled: boolean;
   sms_enabled: boolean;
   email_enabled: boolean;
+}
+
+/** A row in the admin audit-log viewer (GET /admin/analytics/audit-log,
+ * SCRUM-126). old_value/new_value are arbitrary JSON snapshots. */
+export interface AuditLogEntry {
+  id: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogEntry[];
+  pagination: Pagination;
 }
 
 export interface LoginSuccess {

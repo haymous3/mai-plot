@@ -18,6 +18,23 @@ export function formatDate(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** Format an ISO timestamp as a precise UTC date+time, e.g.
+ * "15 Jun 2026, 09:30" — used by the audit log where the exact moment matters.
+ * Fixed to UTC so it's deterministic regardless of the runner's timezone. */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  });
+}
+
 /** True when the seller holds power-of-attorney authority (gets the PoA tag). */
 export function isPowerOfAttorney(authorityType: string | null | undefined): boolean {
   return authorityType === 'power_of_attorney';
