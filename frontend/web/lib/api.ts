@@ -96,6 +96,14 @@ export interface NotificationListResponse {
   unread_count: number;
 }
 
+/** Per-channel notification preferences (GET/PATCH /notifications/preferences,
+ * SCRUM-122). in_app has no flag — it's always delivered. Defaults all-true. */
+export interface NotificationPreferences {
+  push_enabled: boolean;
+  sms_enabled: boolean;
+  email_enabled: boolean;
+}
+
 export interface LoginSuccess {
   ok: true;
   accessToken: string;
