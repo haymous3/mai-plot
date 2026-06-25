@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatNaira, isPowerOfAttorney } from './format';
+import { formatDate, formatDateTime, formatNaira, isPowerOfAttorney } from './format';
 
 describe('formatNaira', () => {
   it('converts kobo to naira with thousands separators', () => {
@@ -21,6 +21,16 @@ describe('formatDate', () => {
 
   it('returns an em dash for an invalid date', () => {
     expect(formatDate('not-a-date')).toBe('—');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('formats an ISO timestamp as a precise UTC date+time', () => {
+    expect(formatDateTime('2026-06-15T09:30:00Z')).toBe('15 Jun 2026, 09:30');
+  });
+
+  it('returns an em dash for an invalid date', () => {
+    expect(formatDateTime('nope')).toBe('—');
   });
 });
 
