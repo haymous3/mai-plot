@@ -61,6 +61,12 @@ class _StubNotifier:
     async def title_released(self, **kwargs: object) -> None:
         self.title_released_calls.append(kwargs)
 
+    async def account_opened(self, **kwargs: object) -> None:
+        return None
+
+    async def disbursed(self, **kwargs: object) -> None:
+        return None
+
 
 def _service(
     loans: _StubLoans, milestones: _StubMilestones, notifier: _StubNotifier

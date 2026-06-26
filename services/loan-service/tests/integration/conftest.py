@@ -145,6 +145,7 @@ def seed_loan(db_engine: Engine) -> Callable[..., UUID]:
         partner_id: UUID,
         reference: str = "BANK-REF",
         status: str = "repaying",
+        approved_amount_kobo: int | None = None,
     ) -> UUID:
         loan_id = uuid4()
         with db_engine.begin() as conn:
@@ -153,8 +154,9 @@ def seed_loan(db_engine: Engine) -> Callable[..., UUID]:
                     """
                     INSERT INTO loans
                         (id, transaction_id, buyer_id, bank_partner_id,
-                         requested_amount_kobo, tenure_months, status, bank_reference_id)
-                    VALUES (:id, :tx, :buyer, :partner, 250000000, 12, :status, :ref)
+                         requested_amount_kobo, tenure_months, status, bank_reference_id,
+                         approved_amount_kobo)
+                    VALUES (:id, :tx, :buyer, :partner, 250000000, 12, :status, :ref, :approved)
                     """
                 ),
                 {
@@ -164,6 +166,7 @@ def seed_loan(db_engine: Engine) -> Callable[..., UUID]:
                     "partner": partner_id,
                     "status": status,
                     "ref": reference,
+                    "approved": approved_amount_kobo,
                 },
             )
         return loan_id

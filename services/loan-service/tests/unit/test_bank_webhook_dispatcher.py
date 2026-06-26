@@ -10,6 +10,7 @@ import pytest
 
 from app.services.bank_webhook import BankWebhookDispatcher
 from app.services.loan_decision import DecisionOutcome
+from app.services.loan_disbursement_webhook import DisbursementOutcome
 from app.services.loan_repayment import RepaymentOutcome
 
 pytestmark = pytest.mark.asyncio
@@ -40,19 +41,35 @@ class _StubRepayment:
         return RepaymentOutcome.released
 
 
-def _dispatcher() -> tuple[BankWebhookDispatcher, _StubDecision, _StubRepayment]:
+class _StubDisbursement:
+    def __init__(self) -> None:
+        self.opened: list[dict[str, Any]] = []
+        self.disbursed: list[dict[str, Any]] = []
+
+    async def handle_account_opened(self, payload: dict[str, Any]) -> DisbursementOutcome:
+        self.opened.append(payload)
+        return DisbursementOutcome.account_opened
+
+    async def handle_disbursed(self, payload: dict[str, Any]) -> DisbursementOutcome:
+        self.disbursed.append(payload)
+        return DisbursementOutcome.disbursed
+
+
+def _dispatcher() -> tuple[BankWebhookDispatcher, _StubDecision, _StubRepayment, _StubDisbursement]:
     decision = _StubDecision()
     repayment = _StubRepayment()
+    disbursement = _StubDisbursement()
     dispatcher = BankWebhookDispatcher(
         secret=_SECRET,
         decision=decision,  # type: ignore[arg-type]
         repayment=repayment,  # type: ignore[arg-type]
+        disbursement=disbursement,  # type: ignore[arg-type]
     )
-    return dispatcher, decision, repayment
+    return dispatcher, decision, repayment, disbursement
 
 
 async def test_verify_signature() -> None:
-    dispatcher, _, _ = _dispatcher()
+    dispatcher, _, _, _ = _dispatcher()
     raw = b'{"event":"x"}'
     sig = hmac.new(_SECRET.encode(), raw, hashlib.sha256).hexdigest()
     assert dispatcher.verify_signature(raw, sig) is True
@@ -61,7 +78,7 @@ async def test_verify_signature() -> None:
 
 
 async def test_routes_decision_event() -> None:
-    dispatcher, decision, repayment = _dispatcher()
+    dispatcher, decision, repayment, _ = _dispatcher()
     out = await dispatcher.handle({"event": "loan.decision_ready", "data": {}})
     assert out == "decided"
     assert len(decision.calls) == 1
@@ -69,7 +86,7 @@ async def test_routes_decision_event() -> None:
 
 
 async def test_routes_milestone_event() -> None:
-    dispatcher, decision, repayment = _dispatcher()
+    dispatcher, decision, repayment, _ = _dispatcher()
     out = await dispatcher.handle({"event": "repayment.milestone", "data": {}})
     assert out == "recorded"
     assert len(repayment.milestones) == 1
@@ -77,14 +94,28 @@ async def test_routes_milestone_event() -> None:
 
 
 async def test_routes_fully_repaid_event() -> None:
-    dispatcher, _, repayment = _dispatcher()
+    dispatcher, _, repayment, _ = _dispatcher()
     out = await dispatcher.handle({"event": "loan.fully_repaid", "data": {}})
     assert out == "released"
     assert len(repayment.repaids) == 1
 
 
+async def test_routes_account_opened_event() -> None:
+    dispatcher, _, _, disbursement = _dispatcher()
+    out = await dispatcher.handle({"event": "account.opened", "data": {}})
+    assert out == "account_opened"
+    assert len(disbursement.opened) == 1
+
+
+async def test_routes_disbursed_event() -> None:
+    dispatcher, _, _, disbursement = _dispatcher()
+    out = await dispatcher.handle({"event": "loan.disbursed", "data": {}})
+    assert out == "disbursed"
+    assert len(disbursement.disbursed) == 1
+
+
 async def test_unknown_event_ignored() -> None:
-    dispatcher, decision, repayment = _dispatcher()
+    dispatcher, decision, repayment, _ = _dispatcher()
     out = await dispatcher.handle({"event": "loan.something", "data": {}})
     assert out == "ignored"
     assert decision.calls == [] and repayment.milestones == [] and repayment.repaids == []

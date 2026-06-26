@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     notifications_enabled: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
 
+    # Cross-service money/state triggers (SCRUM-129). On loan.disbursed we enqueue
+    # transaction-service's `payments.credit_loan_disbursement`; on a decision we
+    # enqueue `transactions.advance_loan_decision` (SCRUM-128). tx_tasks_enabled=
+    # false (dev/CI default) wires a no-op producer so no broker is needed. Reuses
+    # celery_broker_url — the same shared broker as the notifier.
+    tx_tasks_enabled: bool = False
+
     # Loan business rules (CLAUDE.md §8). Max loan = 50% of the agreed price;
     # a buyer may submit at most a few applications per day (Kong only rate-limits
     # 30/min — this is the per-buyer daily cap).
