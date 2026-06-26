@@ -53,6 +53,9 @@ class _StubNotifier:
     async def loan_decision(self, **kwargs: object) -> None:
         self.sent.append(kwargs)
 
+    async def title_released(self, **kwargs: object) -> None:
+        return None
+
 
 def _service(loans: _StubLoans, notifier: _StubNotifier) -> LoanDecisionWebhookService:
     return LoanDecisionWebhookService(

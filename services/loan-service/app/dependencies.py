@@ -12,12 +12,16 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.bank_partner_repo import BankPartnerRepository
 from app.repositories.loan_repo import LoanRepository
+from app.repositories.repayment_repo import RepaymentMilestoneRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.bank_webhook import BankWebhookDispatcher
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.loan_application import LoanApplicationService
 from app.services.loan_decision import LoanDecisionWebhookService
 from app.services.loan_notifier import LoanNotifier, build_loan_notifier
+from app.services.loan_repayment import LoanRepaymentWebhookService
+from app.services.repayment_query import RepaymentQueryService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -37,6 +41,10 @@ def _bank_partner_repo(session: SessionDep) -> BankPartnerRepository:
 
 def _loan_repo(session: SessionDep) -> LoanRepository:
     return LoanRepository(session)
+
+
+def _milestone_repo(session: SessionDep) -> RepaymentMilestoneRepository:
+    return RepaymentMilestoneRepository(session)
 
 
 # Process-singleton adapter registry (memoises per-partner adapters).
@@ -93,6 +101,31 @@ def get_loan_decision_service(
     return LoanDecisionWebhookService(
         loans=loans, notifier=notifier, secret=settings.bank_webhook_secret
     )
+
+
+def get_loan_repayment_service(
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+    milestones: Annotated[RepaymentMilestoneRepository, Depends(_milestone_repo)],
+    notifier: Annotated[LoanNotifier, Depends(get_loan_notifier)],
+) -> LoanRepaymentWebhookService:
+    return LoanRepaymentWebhookService(loans=loans, milestones=milestones, notifier=notifier)
+
+
+def get_bank_webhook_dispatcher(
+    settings: SettingsDep,
+    decision: Annotated[LoanDecisionWebhookService, Depends(get_loan_decision_service)],
+    repayment: Annotated[LoanRepaymentWebhookService, Depends(get_loan_repayment_service)],
+) -> BankWebhookDispatcher:
+    return BankWebhookDispatcher(
+        secret=settings.bank_webhook_secret, decision=decision, repayment=repayment
+    )
+
+
+def get_repayment_query_service(
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+    milestones: Annotated[RepaymentMilestoneRepository, Depends(_milestone_repo)],
+) -> RepaymentQueryService:
+    return RepaymentQueryService(loans=loans, milestones=milestones)
 
 
 async def get_current_user(

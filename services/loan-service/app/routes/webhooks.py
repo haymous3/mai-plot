@@ -1,10 +1,11 @@
-"""Bank decision webhook (SCRUM-76). POST /webhooks/bank — public, HMAC-verified.
+"""Bank webhooks (SCRUM-76 + SCRUM-77). POST /webhooks/bank — public, HMAC-verified.
 
 Kong routes /webhooks/bank with NO jwt plugin; authenticity is the
-x-bank-signature HMAC verified here (review.md §5). Returns 200 for every
-business outcome (decided / duplicate / ignored / unknown_loan) so the bank
-doesn't retry on a no-op; only a bad signature (401) or unparseable body (400)
-is an error.
+x-bank-signature HMAC verified here (review.md §5). One endpoint, event-dispatched
+by BankWebhookDispatcher (loan.decision_ready / repayment.milestone /
+loan.fully_repaid). Returns 200 for every business outcome (decided / recorded /
+updated / released / duplicate / ignored / unknown_loan) so the bank doesn't retry
+on a no-op; only a bad signature (401) or unparseable body (400) is an error.
 """
 
 from __future__ import annotations
@@ -15,12 +16,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_loan_decision_service
-from app.services.loan_decision import LoanDecisionWebhookService
+from app.dependencies import get_bank_webhook_dispatcher
+from app.services.bank_webhook import BankWebhookDispatcher
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
-ServiceDep = Annotated[LoanDecisionWebhookService, Depends(get_loan_decision_service)]
+ServiceDep = Annotated[BankWebhookDispatcher, Depends(get_bank_webhook_dispatcher)]
 
 
 @router.post("/bank")
@@ -51,4 +52,4 @@ async def bank_webhook(request: Request, service: ServiceDep) -> JSONResponse:
         )
 
     outcome = await service.handle(payload)
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"status": outcome.value})
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"status": outcome})
