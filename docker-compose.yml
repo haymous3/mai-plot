@@ -328,6 +328,23 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: celery -A app.celery_app worker --loglevel=INFO
 
+  # Beat for transaction-service (SCRUM-85) — schedules the seller-disbursement
+  # sweep (settle platform fee + seller proceeds 48h after a deal completes).
+  transaction-celery-beat:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/transaction-service
+    container_name: maiplot-transaction-celery-beat
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      PAYSTACK_ENABLED: ${PAYSTACK_ENABLED:-false}
+      RECEIPTS_STORAGE_USE_FAKE: ${RECEIPTS_STORAGE_USE_FAKE:-true}
+      DISBURSEMENT_ACTOR_ID: ${DISBURSEMENT_ACTOR_ID:-00000000-0000-0000-0000-000000000001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app beat --loglevel=INFO
+
   loan-service:
     <<: *fastapi-defaults
     build:

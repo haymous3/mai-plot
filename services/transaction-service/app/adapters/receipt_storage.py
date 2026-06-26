@@ -21,9 +21,40 @@ class ReceiptStorageError(RuntimeError):
     """The storage backend itself failed."""
 
 
+def render_receipt_pdf(title: str, fields: dict[str, Any]) -> bytes:
+    """Render a simple one-page PDF receipt (reportlab — pure Python). Returns
+    the PDF bytes (start with b'%PDF')."""
+    import io
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 80
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(60, y, "Maiplot")
+    pdf.setFont("Helvetica", 13)
+    pdf.drawString(60, y - 24, title)
+    y -= 70
+    pdf.setFont("Helvetica", 11)
+    for key, value in fields.items():
+        pdf.drawString(60, y, f"{key}: {value}")
+        y -= 20
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
 class ReceiptStorage(Protocol):
     async def write_receipt(
         self, payment_event_id: UUID, data: dict[str, Any]
+    ) -> str:  # pragma: no cover - protocol
+        ...
+
+    async def write_pdf_receipt(
+        self, payment_event_id: UUID, *, title: str, fields: dict[str, Any]
     ) -> str:  # pragma: no cover - protocol
         ...
 
@@ -37,6 +68,13 @@ class InMemoryReceiptStorage:
     async def write_receipt(self, payment_event_id: UUID, data: dict[str, Any]) -> str:
         key = f"receipts/{payment_event_id}.json"
         self.receipts[key] = json.dumps(data, separators=(",", ":")).encode()
+        return key
+
+    async def write_pdf_receipt(
+        self, payment_event_id: UUID, *, title: str, fields: dict[str, Any]
+    ) -> str:
+        key = f"receipts/{payment_event_id}.pdf"
+        self.receipts[key] = render_receipt_pdf(title, fields)
         return key
 
 
@@ -62,6 +100,24 @@ class S3ReceiptStorage:
                 ContentType="application/json",
             )
         except Exception as exc:  # boto3 ClientError/BotoCoreError
+            logger.error("receipt.storage.put_failed", extra={"key": key})
+            raise ReceiptStorageError(str(exc)) from exc
+        return key
+
+    async def write_pdf_receipt(
+        self, payment_event_id: UUID, *, title: str, fields: dict[str, Any]
+    ) -> str:
+        key = f"receipts/{payment_event_id}.pdf"
+        body = render_receipt_pdf(title, fields)
+        try:
+            await asyncio.to_thread(
+                self._client.put_object,
+                Bucket=self._bucket,
+                Key=key,
+                Body=body,
+                ContentType="application/pdf",
+            )
+        except Exception as exc:
             logger.error("receipt.storage.put_failed", extra={"key": key})
             raise ReceiptStorageError(str(exc)) from exc
         return key

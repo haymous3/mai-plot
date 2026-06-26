@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     # /webhooks/paystack handler rejects any body whose signature doesn't match.
     paystack_webhook_secret: str = "change-me-paystack-webhook-secret"
 
+    # Seller disbursement (SCRUM-85). §11 — at settlement the escrow pays out
+    # platform_fee + seller_net (= agreed_price − platform_fee − realtor_commission)
+    # + (separately) the realtor commission. A beat sweeps deals that reached
+    # 'completed' at least seller_disbursement_hold_hours ago.
+    seller_disbursement_hold_hours: int = 48
+    seller_disbursement_beat_interval_seconds: float = 3600.0  # hourly
+
     # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
     # local/CI never reach S3; production sets receipts_storage_use_fake=false.
     receipts_storage_use_fake: bool = True

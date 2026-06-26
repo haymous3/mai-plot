@@ -23,6 +23,8 @@ dependencies = [
     # Paystack charge client (SCRUM-83). Imported lazily inside the real HTTP
     # client; the fake (dev/CI default) never touches it.
     "httpx>=0.27",
+    # PDF payment receipts (SCRUM-85). Pure-Python, no system deps.
+    "reportlab>=4.0",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

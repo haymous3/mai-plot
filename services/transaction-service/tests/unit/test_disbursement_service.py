@@ -78,6 +78,12 @@ class _StubReceipts:
         self.written.append(payment_event_id)
         return f"receipts/{payment_event_id}.json"
 
+    async def write_pdf_receipt(
+        self, payment_event_id: UUID, *, title: str, fields: dict[str, object]
+    ) -> str:
+        self.written.append(payment_event_id)
+        return f"receipts/{payment_event_id}.pdf"
+
 
 class _StubTransfer:
     def __init__(self) -> None:
