@@ -123,6 +123,26 @@ class TransactionRepository:
             has_completed_inspection=bool(row.has_inspection),
         )
 
+    async def get_approved_loan_amount(self, transaction_id: UUID) -> int | None:
+        """The approved loan amount for a deal, if a loan has been approved
+        (cross-service read of loan-service's loans, like the commission joins).
+        Used to reduce the buyer's required escrow deposit to price − loan
+        (SCRUM-128). None when there is no approved loan → buyer pays full price
+        (the cash path). 'rejected' loans null their approved amount, so filtering
+        on approved_amount_kobo IS NOT NULL already excludes them."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT approved_amount_kobo FROM loans "
+                    "WHERE transaction_id = :id AND deleted_at IS NULL "
+                    "AND approved_amount_kobo IS NOT NULL "
+                    "ORDER BY bank_decision_at DESC NULLS LAST LIMIT 1"
+                ),
+                {"id": transaction_id},
+            )
+        ).first()
+        return row.approved_amount_kobo if row is not None else None
+
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
         """Current stage + parties + listing of a transaction (transition authz
         and the listing-status side effects on cancel/complete)."""
