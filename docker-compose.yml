@@ -352,6 +352,10 @@ services:
     container_name: maiplot-loan-service
     ports:
       - "8015:8000"
+    environment:
+      # Bank partner adapter is unbuilt (SCRUM-76) — keep the fake adapter. Real
+      # partner credentials come from BANK_<SHORT_CODE>_API_URL / _API_KEY.
+      BANK_ADAPTER_ENABLED: ${BANK_ADAPTER_ENABLED:-false}
 
   notification-service:
     <<: *fastapi-defaults
