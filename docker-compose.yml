@@ -361,6 +361,9 @@ services:
       # Buyer loan-decision notification via the shared broker (best-effort).
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      # Enqueue transaction-service money/state tasks on disbursal/decision
+      # (SCRUM-129). false wires a no-op producer (no broker needed for dev/CI).
+      TX_TASKS_ENABLED: ${TX_TASKS_ENABLED:-true}
 
   notification-service:
     <<: *fastapi-defaults

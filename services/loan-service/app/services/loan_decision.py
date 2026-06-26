@@ -23,6 +23,7 @@ from typing import Any
 
 from app.repositories.loan_repo import LoanRepository
 from app.services.loan_notifier import LoanNotifier
+from app.services.tx_tasks import TxTaskProducer
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,12 @@ class LoanDecisionWebhookService:
         *,
         loans: LoanRepository,
         notifier: LoanNotifier,
+        tx_tasks: TxTaskProducer,
         secret: str,
     ) -> None:
         self._loans = loans
         self._notifier = notifier
+        self._tx_tasks = tx_tasks
         self._secret = secret
 
     def verify_signature(self, raw_body: bytes, signature: str | None) -> bool:
@@ -86,6 +89,23 @@ class LoanDecisionWebhookService:
         )
         if not updated:  # raced with a concurrent identical webhook
             return DecisionOutcome.duplicate
+
+        # Advance the deal loan_applied → loan_approved/loan_rejected (SCRUM-128
+        # task in tx-service). BEST-EFFORT: a broker outage is logged, never
+        # raised — the decision is already recorded and the buyer is notified, and
+        # the advance is idempotent (no-op off loan_applied), so a future
+        # reconciliation can re-fire it. We do NOT roll back a recorded decision
+        # just because the deal stage couldn't be nudged.
+        try:
+            self._tx_tasks.advance_loan_decision(
+                transaction_id=loan.transaction_id,
+                decision="approved" if approved else "rejected",
+            )
+        except Exception as exc:  # broker down etc.
+            logger.warning(
+                "loan.advance_enqueue_failed",
+                extra={"loan_id": str(loan.id), "error": str(exc)},
+            )
 
         await self._notifier.loan_decision(
             buyer_id=loan.buyer_id,

@@ -19,9 +19,11 @@ from app.services.bank_webhook import BankWebhookDispatcher
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.loan_application import LoanApplicationService
 from app.services.loan_decision import LoanDecisionWebhookService
+from app.services.loan_disbursement_webhook import LoanDisbursementWebhookService
 from app.services.loan_notifier import LoanNotifier, build_loan_notifier
 from app.services.loan_repayment import LoanRepaymentWebhookService
 from app.services.repayment_query import RepaymentQueryService
+from app.services.tx_tasks import TxTaskProducer, build_tx_task_producer
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -93,14 +95,36 @@ def get_loan_notifier(settings: SettingsDep) -> LoanNotifier:
     return _notifier
 
 
+# Process-singleton tx-service task producer (Celery producer or no-op).
+_tx_tasks: TxTaskProducer | None = None
+
+
+def get_tx_task_producer(settings: SettingsDep) -> TxTaskProducer:
+    global _tx_tasks
+    if _tx_tasks is None:
+        _tx_tasks = build_tx_task_producer(
+            enabled=settings.tx_tasks_enabled, broker_url=settings.celery_broker_url
+        )
+    return _tx_tasks
+
+
 def get_loan_decision_service(
     settings: SettingsDep,
     loans: Annotated[LoanRepository, Depends(_loan_repo)],
     notifier: Annotated[LoanNotifier, Depends(get_loan_notifier)],
+    tx_tasks: Annotated[TxTaskProducer, Depends(get_tx_task_producer)],
 ) -> LoanDecisionWebhookService:
     return LoanDecisionWebhookService(
-        loans=loans, notifier=notifier, secret=settings.bank_webhook_secret
+        loans=loans, notifier=notifier, tx_tasks=tx_tasks, secret=settings.bank_webhook_secret
     )
+
+
+def get_loan_disbursement_service(
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+    notifier: Annotated[LoanNotifier, Depends(get_loan_notifier)],
+    tx_tasks: Annotated[TxTaskProducer, Depends(get_tx_task_producer)],
+) -> LoanDisbursementWebhookService:
+    return LoanDisbursementWebhookService(loans=loans, notifier=notifier, tx_tasks=tx_tasks)
 
 
 def get_loan_repayment_service(
@@ -115,9 +139,13 @@ def get_bank_webhook_dispatcher(
     settings: SettingsDep,
     decision: Annotated[LoanDecisionWebhookService, Depends(get_loan_decision_service)],
     repayment: Annotated[LoanRepaymentWebhookService, Depends(get_loan_repayment_service)],
+    disbursement: Annotated[LoanDisbursementWebhookService, Depends(get_loan_disbursement_service)],
 ) -> BankWebhookDispatcher:
     return BankWebhookDispatcher(
-        secret=settings.bank_webhook_secret, decision=decision, repayment=repayment
+        secret=settings.bank_webhook_secret,
+        decision=decision,
+        repayment=repayment,
+        disbursement=disbursement,
     )
 
 

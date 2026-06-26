@@ -45,6 +45,21 @@ _TITLE_RELEASED_BODY = (
     "Congratulations, the property is fully yours."
 )
 
+_ACCOUNT_OPENED_BODY = (
+    "The bank has opened your loan account. Your title documents are held there "
+    "as collateral until the loan is fully repaid."
+)
+
+
+def _disbursed_body(amount_kobo: int | None) -> str:
+    if amount_kobo is not None:
+        naira = amount_kobo // 100
+        return (
+            f"The bank has disbursed your ₦{naira:,} loan into escrow for this "
+            "purchase. The deal can now proceed to closing."
+        )
+    return "The bank has disbursed your loan into escrow. The deal can now proceed to closing."
+
 
 class LoanNotifier(Protocol):
     async def loan_decision(
@@ -59,6 +74,16 @@ class LoanNotifier(Protocol):
 
     async def title_released(
         self, *, buyer_id: UUID, loan_id: UUID
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def account_opened(
+        self, *, buyer_id: UUID, loan_id: UUID
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def disbursed(
+        self, *, buyer_id: UUID, loan_id: UUID, amount_kobo: int | None
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -77,6 +102,12 @@ class NullLoanNotifier:
         return None
 
     async def title_released(self, *, buyer_id: UUID, loan_id: UUID) -> None:
+        return None
+
+    async def account_opened(self, *, buyer_id: UUID, loan_id: UUID) -> None:
+        return None
+
+    async def disbursed(self, *, buyer_id: UUID, loan_id: UUID, amount_kobo: int | None) -> None:
         return None
 
 
@@ -130,6 +161,24 @@ class CeleryLoanNotifier:
             type_="title_released",
             title="Title documents released",
             body=_TITLE_RELEASED_BODY,
+        )
+
+    async def account_opened(self, *, buyer_id: UUID, loan_id: UUID) -> None:
+        self._dispatch(
+            buyer_id=buyer_id,
+            loan_id=loan_id,
+            type_="loan_account_opened",
+            title="Loan account opened",
+            body=_ACCOUNT_OPENED_BODY,
+        )
+
+    async def disbursed(self, *, buyer_id: UUID, loan_id: UUID, amount_kobo: int | None) -> None:
+        self._dispatch(
+            buyer_id=buyer_id,
+            loan_id=loan_id,
+            type_="loan_disbursed",
+            title="Loan disbursed",
+            body=_disbursed_body(amount_kobo),
         )
 
 

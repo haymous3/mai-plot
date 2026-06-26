@@ -7,6 +7,8 @@ event to the right handler:
   * loan.decision_ready  → LoanDecisionWebhookService (SCRUM-76)
   * repayment.milestone  → LoanRepaymentWebhookService.handle_milestone
   * loan.fully_repaid    → LoanRepaymentWebhookService.handle_fully_repaid
+  * account.opened       → LoanDisbursementWebhookService.handle_account_opened (SCRUM-129)
+  * loan.disbursed       → LoanDisbursementWebhookService.handle_disbursed (SCRUM-129)
 
 Unknown events return "ignored" (HTTP 200) so the bank doesn't retry a no-op.
 """
@@ -18,6 +20,7 @@ import hmac
 from typing import Any
 
 from app.services.loan_decision import LoanDecisionWebhookService
+from app.services.loan_disbursement_webhook import LoanDisbursementWebhookService
 from app.services.loan_repayment import LoanRepaymentWebhookService
 
 
@@ -28,10 +31,12 @@ class BankWebhookDispatcher:
         secret: str,
         decision: LoanDecisionWebhookService,
         repayment: LoanRepaymentWebhookService,
+        disbursement: LoanDisbursementWebhookService,
     ) -> None:
         self._secret = secret
         self._decision = decision
         self._repayment = repayment
+        self._disbursement = disbursement
 
     def verify_signature(self, raw_body: bytes, signature: str | None) -> bool:
         """HMAC-SHA256 of the raw body, constant-time compared to the header."""
@@ -48,4 +53,8 @@ class BankWebhookDispatcher:
             return (await self._repayment.handle_milestone(payload)).value
         if event == "loan.fully_repaid":
             return (await self._repayment.handle_fully_repaid(payload)).value
+        if event == "account.opened":
+            return (await self._disbursement.handle_account_opened(payload)).value
+        if event == "loan.disbursed":
+            return (await self._disbursement.handle_disbursed(payload)).value
         return "ignored"

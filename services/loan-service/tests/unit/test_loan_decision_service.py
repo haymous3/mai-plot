@@ -56,11 +56,34 @@ class _StubNotifier:
     async def title_released(self, **kwargs: object) -> None:
         return None
 
+    async def account_opened(self, **kwargs: object) -> None:
+        return None
 
-def _service(loans: _StubLoans, notifier: _StubNotifier) -> LoanDecisionWebhookService:
+    async def disbursed(self, **kwargs: object) -> None:
+        return None
+
+
+class _StubTxTasks:
+    def __init__(self, *, raises: bool = False) -> None:
+        self.advances: list[dict[str, object]] = []
+        self._raises = raises
+
+    def credit_loan_disbursement(self, **kwargs: object) -> None:
+        return None
+
+    def advance_loan_decision(self, **kwargs: object) -> None:
+        if self._raises:
+            raise RuntimeError("broker down")
+        self.advances.append(kwargs)
+
+
+def _service(
+    loans: _StubLoans, notifier: _StubNotifier, tx_tasks: _StubTxTasks | None = None
+) -> LoanDecisionWebhookService:
     return LoanDecisionWebhookService(
         loans=loans,  # type: ignore[arg-type]
         notifier=notifier,
+        tx_tasks=tx_tasks or _StubTxTasks(),
         secret=_SECRET,
     )
 
@@ -116,6 +139,34 @@ async def test_rejected_records_null_terms() -> None:
     assert loans.recorded[0]["status"] == "rejected"
     assert loans.recorded[0]["approved_amount_kobo"] is None
     assert notifier.sent[0]["decision"] == "rejected"
+
+
+async def test_decided_enqueues_stage_advance() -> None:
+    loan = _loan()
+    tx_tasks = _StubTxTasks()
+    outcome = await _service(_StubLoans(loan=loan), _StubNotifier(), tx_tasks).handle(
+        {
+            "event": "loan.decision_ready",
+            "data": {"reference": "BANK-REF-9", "decision": "approved"},
+        }
+    )
+    assert outcome is DecisionOutcome.decided
+    assert tx_tasks.advances[0]["transaction_id"] == loan.transaction_id
+    assert tx_tasks.advances[0]["decision"] == "approved"
+
+
+async def test_advance_broker_failure_is_swallowed() -> None:
+    # A broker outage on the stage advance must NOT roll back a recorded decision.
+    loans = _StubLoans(loan=_loan())
+    notifier = _StubNotifier()
+    outcome = await _service(loans, notifier, _StubTxTasks(raises=True)).handle(
+        {
+            "event": "loan.decision_ready",
+            "data": {"reference": "BANK-REF-9", "decision": "rejected"},
+        }
+    )
+    assert outcome is DecisionOutcome.decided
+    assert notifier.sent[0]["decision"] == "rejected"  # still recorded + notified
 
 
 async def test_already_decided_loan_is_duplicate() -> None:

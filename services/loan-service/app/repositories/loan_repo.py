@@ -22,11 +22,13 @@ class LoanRow:
     bank_reference_id: str | None
     created_at: datetime
     title_released_at: datetime | None = None
+    approved_amount_kobo: int | None = None
 
 
 _COLUMNS = (
     "id, transaction_id, buyer_id, bank_partner_id, requested_amount_kobo, "
-    "tenure_months, status, bank_reference_id, created_at, title_released_at"
+    "tenure_months, status, bank_reference_id, created_at, title_released_at, "
+    "approved_amount_kobo"
 )
 
 
@@ -190,6 +192,51 @@ class LoanRepository:
         ).first()
         return row is not None
 
+    async def mark_account_opened(self, loan_id: UUID) -> bool:
+        """Apply a bank `account.opened` event: flip bank_account_opened TRUE
+        (CLAUDE.md §8 rule 6 — the bank opens the collateral account that holds
+        the title). Guarded on bank_account_opened = FALSE so a duplicate webhook
+        is a silent no-op. Returns True iff this call opened it (first wins). No
+        money/state-machine here."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE loans
+                       SET bank_account_opened = TRUE, updated_at = NOW()
+                     WHERE id = :id
+                       AND deleted_at IS NULL
+                       AND bank_account_opened = FALSE
+                    RETURNING id
+                    """
+                ),
+                {"id": loan_id},
+            )
+        ).first()
+        return row is not None
+
+    async def mark_disbursed(self, loan_id: UUID) -> bool:
+        """Apply a bank `loan.disbursed` event: approved → disbursed. Guarded on
+        status = 'approved' so a duplicate webhook (or one for a not-yet-approved
+        loan) is a silent no-op. Returns True iff this call disbursed it (first
+        wins) — the caller then enqueues the escrow credit (SCRUM-128)."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE loans
+                       SET status = 'disbursed', updated_at = NOW()
+                     WHERE id = :id
+                       AND deleted_at IS NULL
+                       AND status = 'approved'
+                    RETURNING id
+                    """
+                ),
+                {"id": loan_id},
+            )
+        ).first()
+        return row is not None
+
     async def list_active(self, *, limit: int, offset: int) -> list[LoanRow]:
         """Decided loans for the admin repayment view — everything that became a
         real loan (excludes never-decided 'submitted'/'under_review'/'info_required'
@@ -257,4 +304,5 @@ class LoanRepository:
             bank_reference_id=r.bank_reference_id,  # type: ignore[attr-defined]
             created_at=r.created_at,  # type: ignore[attr-defined]
             title_released_at=r.title_released_at,  # type: ignore[attr-defined]
+            approved_amount_kobo=r.approved_amount_kobo,  # type: ignore[attr-defined]
         )
