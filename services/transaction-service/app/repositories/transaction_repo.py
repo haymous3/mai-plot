@@ -37,9 +37,91 @@ class ListingLock:
     lock_expires_at: datetime | None
 
 
+@dataclass(frozen=True)
+class SettleableDeal:
+    """A completed deal whose seller-disbursement hold has elapsed (SCRUM-85)."""
+
+    transaction_id: UUID
+    buyer_id: UUID
+    seller_id: UUID
+    agreed_price_kobo: int
+    platform_fee_kobo: int
+
+
+@dataclass(frozen=True)
+class CommissionGate:
+    """What's known about a deal's realtor commission at settlement time —
+    decides whether the seller disbursement can proceed yet (SCRUM-85)."""
+
+    amount_kobo: int | None  # the accrued commission, or None if not recorded
+    has_completed_inspection: bool  # a realtor was involved (commission expected)
+
+
 class TransactionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def list_settleable(self, *, hold_hours: int, limit: int = 500) -> list[SettleableDeal]:
+        """Completed deals whose platform fee is computed, whose hold has elapsed
+        since they reached 'completed' (transaction_events), and which have no
+        completed seller_disbursement yet."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT t.id, t.buyer_id, t.seller_id, t.agreed_price_kobo,
+                           t.platform_fee_kobo
+                    FROM transactions t
+                    JOIN transaction_events e
+                      ON e.transaction_id = t.id AND e.to_stage = 'completed'
+                    WHERE t.stage = 'completed'
+                      AND t.platform_fee_kobo IS NOT NULL
+                      AND e.created_at <= NOW() - make_interval(hours => :hold)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM payment_events pe
+                          WHERE pe.transaction_id = t.id
+                            AND pe.payment_type = 'seller_disbursement'
+                            AND pe.status = 'completed')
+                    ORDER BY e.created_at
+                    LIMIT :limit
+                    """
+                ),
+                {"hold": hold_hours, "limit": limit},
+            )
+        ).all()
+        return [
+            SettleableDeal(
+                transaction_id=r.id,
+                buyer_id=r.buyer_id,
+                seller_id=r.seller_id,
+                agreed_price_kobo=r.agreed_price_kobo,
+                platform_fee_kobo=r.platform_fee_kobo,
+            )
+            for r in rows
+        ]
+
+    async def commission_gate(self, transaction_id: UUID) -> CommissionGate:
+        """The deal's recorded realtor commission (cross-service read of
+        realtor-service's commissions) + whether a realtor was involved at all."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT
+                      (SELECT amount_kobo FROM commissions WHERE transaction_id = :id)
+                          AS commission_kobo,
+                      EXISTS (SELECT 1 FROM inspections
+                              WHERE transaction_id = :id AND status = 'completed')
+                          AS has_inspection
+                    """
+                ),
+                {"id": transaction_id},
+            )
+        ).one()
+        return CommissionGate(
+            amount_kobo=row.commission_kobo,
+            has_completed_inspection=bool(row.has_inspection),
+        )
 
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
         """Current stage + parties + listing of a transaction (transition authz
