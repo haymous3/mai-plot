@@ -21,11 +21,12 @@ class LoanRow:
     status: str
     bank_reference_id: str | None
     created_at: datetime
+    title_released_at: datetime | None = None
 
 
 _COLUMNS = (
     "id, transaction_id, buyer_id, bank_partner_id, requested_amount_kobo, "
-    "tenure_months, status, bank_reference_id, created_at"
+    "tenure_months, status, bank_reference_id, created_at, title_released_at"
 )
 
 
@@ -164,6 +165,49 @@ class LoanRepository:
         ).first()
         return row is not None
 
+    async def mark_fully_repaid(self, loan_id: UUID) -> bool:
+        """Apply a loan.fully_repaid decision: mark the loan repaid and release
+        the held title (CLAUDE.md §8 rule 6). Guarded on title_released_at IS NULL
+        so a duplicate webhook is a silent no-op. Returns True iff this call
+        released the title (the first webhook wins). No transaction state-machine
+        change here (SCRUM-77 design sign-off)."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE loans
+                       SET status = 'fully_repaid',
+                           title_released_at = NOW(),
+                           updated_at = NOW()
+                     WHERE id = :id
+                       AND deleted_at IS NULL
+                       AND title_released_at IS NULL
+                    RETURNING id
+                    """
+                ),
+                {"id": loan_id},
+            )
+        ).first()
+        return row is not None
+
+    async def list_active(self, *, limit: int, offset: int) -> list[LoanRow]:
+        """Decided loans for the admin repayment view — everything that became a
+        real loan (excludes never-decided 'submitted'/'under_review'/'info_required'
+        and 'rejected'), newest first."""
+        rows = (
+            await self._session.execute(
+                text(
+                    f"SELECT {_COLUMNS} FROM loans "
+                    "WHERE deleted_at IS NULL "
+                    "AND status IN ('approved', 'disbursed', 'repaying', "
+                    "'fully_repaid', 'defaulted') "
+                    "ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+                ),
+                {"limit": limit, "offset": offset},
+            )
+        ).all()
+        return [self._to_row(r) for r in rows]
+
     async def get(self, loan_id: UUID) -> LoanRow | None:
         row = (
             await self._session.execute(
@@ -212,4 +256,5 @@ class LoanRepository:
             status=r.status,  # type: ignore[attr-defined]
             bank_reference_id=r.bank_reference_id,  # type: ignore[attr-defined]
             created_at=r.created_at,  # type: ignore[attr-defined]
+            title_released_at=r.title_released_at,  # type: ignore[attr-defined]
         )

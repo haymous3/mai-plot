@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_current_user, get_loan_application_service
+from app.dependencies import (
+    get_current_user,
+    get_loan_application_service,
+    get_repayment_query_service,
+)
 from app.schemas.loan import LoanApplyRequest, LoanApplyResponse, LoanItem, LoanListResponse
+from app.schemas.repayment import LoanRepaymentsOut
 from app.security import CurrentUser
 from app.services.loan_application import (
     BankPartnerUnavailable,
@@ -20,11 +26,17 @@ from app.services.loan_application import (
     TenureViolation,
     TransactionNotFound,
 )
+from app.services.repayment_query import (
+    LoanNotFound,
+    NotLoanViewer,
+    RepaymentQueryService,
+)
 
 router = APIRouter(prefix="/loans", tags=["loans"])
 
 BuyerDep = Annotated[CurrentUser, Depends(get_current_user)]
 ServiceDep = Annotated[LoanApplicationService, Depends(get_loan_application_service)]
+RepaymentsDep = Annotated[RepaymentQueryService, Depends(get_repayment_query_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -99,3 +111,24 @@ async def my_loans(caller: BuyerDep, service: ServiceDep) -> LoanListResponse:
     """The caller's loan applications, newest first."""
     rows = await service.list_for_buyer(caller)
     return LoanListResponse(items=[LoanItem.from_row(r) for r in rows])
+
+
+@router.get("/{loan_id}/repayments", response_model=None)
+async def loan_repayments(
+    loan_id: UUID,
+    caller: BuyerDep,
+    service: RepaymentsDep,
+) -> LoanRepaymentsOut | JSONResponse:
+    """Repayment milestones + progress for a loan. The buyer sees only their own
+    loan; admins may view any (SCRUM-77). Overdue is derived at read-time."""
+    try:
+        view = await service.get_for_loan(loan_id, caller)
+    except LoanNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "LOAN_NOT_FOUND", "No such loan.")
+    except NotLoanViewer:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_LOAN_VIEWER",
+            "You can only view your own loan's repayments.",
+        )
+    return LoanRepaymentsOut.from_view(view)

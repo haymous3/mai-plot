@@ -240,6 +240,30 @@ services:
               minute: 200
               policy: local
               fault_tolerant: true
+      - name: admin-loans
+        # Admin loan/repayment view (SCRUM-77) — admin JWT + IP allowlist
+        # (defence in depth; require_admin re-checks both in-service).
+        paths:
+          - /admin/loans
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
 
   # =========================================================================
   # Document service — /admin/poa/* (PoA review queue)

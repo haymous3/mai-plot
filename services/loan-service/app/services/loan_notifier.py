@@ -40,6 +40,12 @@ def _decision_message(*, decision: str, approved_amount_kobo: int | None) -> tup
     )
 
 
+_TITLE_RELEASED_BODY = (
+    "Your loan is fully repaid — the bank has released your title documents. "
+    "Congratulations, the property is fully yours."
+)
+
+
 class LoanNotifier(Protocol):
     async def loan_decision(
         self,
@@ -48,6 +54,11 @@ class LoanNotifier(Protocol):
         loan_id: UUID,
         decision: str,
         approved_amount_kobo: int | None,
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def title_released(
+        self, *, buyer_id: UUID, loan_id: UUID
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -65,6 +76,9 @@ class NullLoanNotifier:
     ) -> None:
         return None
 
+    async def title_released(self, *, buyer_id: UUID, loan_id: UUID) -> None:
+        return None
+
 
 class CeleryLoanNotifier:
     """Enqueues `notifications.dispatch` on the shared broker, best-effort."""
@@ -74,17 +88,9 @@ class CeleryLoanNotifier:
 
         self._app = Celery(broker=broker_url)
 
-    async def loan_decision(
-        self,
-        *,
-        buyer_id: UUID,
-        loan_id: UUID,
-        decision: str,
-        approved_amount_kobo: int | None,
+    def _dispatch(
+        self, *, buyer_id: UUID, loan_id: UUID, type_: str, title: str, body: str
     ) -> None:
-        type_, title, body = _decision_message(
-            decision=decision, approved_amount_kobo=approved_amount_kobo
-        )
         try:
             self._app.send_task(
                 "notifications.dispatch",
@@ -98,11 +104,33 @@ class CeleryLoanNotifier:
                     "reference_id": str(loan_id),
                 },
             )
-        except Exception as exc:  # broker down etc. — never fail the decision
+        except Exception as exc:  # broker down etc. — never fail the committed event
             logger.warning(
                 "loan.notify_failed",
-                extra={"loan_id": str(loan_id), "decision": decision, "error": str(exc)},
+                extra={"loan_id": str(loan_id), "type": type_, "error": str(exc)},
             )
+
+    async def loan_decision(
+        self,
+        *,
+        buyer_id: UUID,
+        loan_id: UUID,
+        decision: str,
+        approved_amount_kobo: int | None,
+    ) -> None:
+        type_, title, body = _decision_message(
+            decision=decision, approved_amount_kobo=approved_amount_kobo
+        )
+        self._dispatch(buyer_id=buyer_id, loan_id=loan_id, type_=type_, title=title, body=body)
+
+    async def title_released(self, *, buyer_id: UUID, loan_id: UUID) -> None:
+        self._dispatch(
+            buyer_id=buyer_id,
+            loan_id=loan_id,
+            type_="title_released",
+            title="Title documents released",
+            body=_TITLE_RELEASED_BODY,
+        )
 
 
 def build_loan_notifier(*, enabled: bool, broker_url: str) -> LoanNotifier:
