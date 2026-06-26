@@ -8,6 +8,7 @@ const TABS = [
   { key: 'listings', label: 'Listings', href: '/admin/listings/queue' },
   { key: 'poa', label: 'Power of Attorney', href: '/admin/poa/queue' },
   { key: 'realtors', label: 'Realtors', href: '/admin/realtors/queue' },
+  { key: 'loans', label: 'Loans', href: '/admin/loans' },
   { key: 'audit', label: 'Audit log', href: '/admin/audit' },
 ] as const;
 
@@ -20,7 +21,7 @@ export function AdminNav({
   active,
   count,
 }: {
-  active: 'listings' | 'poa' | 'realtors' | 'audit' | 'settings';
+  active: 'listings' | 'poa' | 'realtors' | 'loans' | 'audit' | 'settings';
   count: number | null;
 }) {
   return (

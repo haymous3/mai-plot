@@ -25,6 +25,10 @@ export function analyticsServiceUrl(): string {
   return process.env.ANALYTICS_SERVICE_URL ?? 'http://localhost:8018';
 }
 
+export function loanServiceUrl(): string {
+  return process.env.LOAN_SERVICE_URL ?? 'http://localhost:8015';
+}
+
 export interface Pagination {
   page: number;
   page_size: number;
@@ -127,6 +131,54 @@ export interface AuditLogEntry {
 export interface AuditLogListResponse {
   items: AuditLogEntry[];
   pagination: Pagination;
+}
+
+/** Repayment rollup for one loan (SCRUM-77). Money is BIGINT kobo. The counts
+ * are derived server-side; overdue = pending milestone past its due date. */
+export interface RepaymentProgress {
+  milestone_count: number;
+  paid_count: number;
+  overdue_count: number;
+  total_due_kobo: number;
+  total_paid_kobo: number;
+  next_due_date: string | null;
+}
+
+/** A row in the admin active-loans view (GET /admin/loans, SCRUM-77). */
+export interface ActiveLoan {
+  loan_id: string;
+  buyer_id: string;
+  transaction_id: string;
+  status: string;
+  requested_amount_kobo: number;
+  title_released: boolean;
+  created_at: string;
+  progress: RepaymentProgress;
+}
+
+export interface ActiveLoansResponse {
+  items: ActiveLoan[];
+}
+
+/** A single repayment milestone (GET /loans/{id}/repayments, SCRUM-77). */
+export interface RepaymentMilestone {
+  due_date: string;
+  amount_due_kobo: number;
+  amount_paid_kobo: number;
+  status: string;
+  is_overdue: boolean;
+  paid_at: string | null;
+  bank_reference: string | null;
+}
+
+/** Full repayment schedule for one loan — the admin drill-down. */
+export interface LoanRepayments {
+  loan_id: string;
+  status: string;
+  requested_amount_kobo: number;
+  title_released: boolean;
+  progress: RepaymentProgress;
+  milestones: RepaymentMilestone[];
 }
 
 export interface LoginSuccess {
