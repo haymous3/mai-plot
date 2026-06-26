@@ -353,9 +353,14 @@ services:
     ports:
       - "8015:8000"
     environment:
-      # Bank partner adapter is unbuilt (SCRUM-76) — keep the fake adapter. Real
+      # Bank partner adapter (SCRUM-76). false keeps the fake adapter; real
       # partner credentials come from BANK_<SHORT_CODE>_API_URL / _API_KEY.
       BANK_ADAPTER_ENABLED: ${BANK_ADAPTER_ENABLED:-false}
+      # HMAC secret for the inbound bank loan.decision_ready webhook (SCRUM-76).
+      BANK_WEBHOOK_SECRET: ${BANK_WEBHOOK_SECRET:-change-me-bank-webhook-secret}
+      # Buyer loan-decision notification via the shared broker (best-effort).
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
 
   notification-service:
     <<: *fastapi-defaults

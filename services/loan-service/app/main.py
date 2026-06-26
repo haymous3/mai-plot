@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.loans import router as loans_router
+from app.routes.webhooks import router as webhooks_router
 from app.security import AdminAccessError, AuthenticationError
 from app.telemetry import setup_telemetry
 
@@ -19,6 +20,7 @@ SERVICE_NAME = "loan-service"
 app = FastAPI(title="Maiplot Loan Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(loans_router)
+app.include_router(webhooks_router)
 
 
 @app.exception_handler(RequestValidationError)

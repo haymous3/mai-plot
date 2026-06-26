@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     bank_max_retries: int = 3  # AC: 3 retries
     bank_retry_base_delay_seconds: float = 0.5  # exponential backoff base
 
+    # Bank decision webhook (SCRUM-76). Inbound `loan.decision_ready` callbacks
+    # are authenticated by an HMAC-SHA256 signature over the RAW body, keyed by a
+    # per-bank shared secret (review.md §5). Set per partner via env in prod.
+    bank_webhook_secret: str = "change-me-bank-webhook-secret"
+
+    # Buyer notification of the loan decision goes via the shared broker
+    # (notifications.dispatch), best-effort. notifications_enabled=false (dev/CI
+    # default) wires a no-op producer so no broker is needed.
+    notifications_enabled: bool = False
+    celery_broker_url: str = "redis://localhost:6379/1"
+
     # Loan business rules (CLAUDE.md §8). Max loan = 50% of the agreed price;
     # a buyer may submit at most a few applications per day (Kong only rate-limits
     # 30/min — this is the per-buyer daily cap).
