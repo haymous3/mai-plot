@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     commission_available_business_days: int = 3
     commission_beat_interval_seconds: float = 3600.0
 
+    # Commission disbursement (SCRUM-86 PR-B). A beat sweeps 'available'
+    # commissions: it enqueues the transaction-service `payments.disburse_commission`
+    # task (the real money movement lives there) and reconciles completed payouts
+    # to 'withdrawn'. disbursement_enabled=false (dev/CI default) wires a no-op
+    # producer so no broker is needed. No money moves in realtor-service.
+    disbursement_enabled: bool = False
+    disbursement_beat_interval_seconds: float = 900.0  # every 15 min
+
     # Inspection auto-assignment (SCRUM-72). The nearest approved realtor within
     # the radius is assigned with an acceptance window; if none is in range the
     # request fails and an admin alert is logged.

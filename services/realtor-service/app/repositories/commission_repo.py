@@ -33,6 +33,18 @@ class CommissionTotals:
     withdrawn_kobo: int
 
 
+@dataclass(frozen=True)
+class DisbursableCommission:
+    """An available commission ready to disburse, with the deal's seller (read
+    cross-service) — the payer on the disbursement payment_event."""
+
+    commission_id: UUID
+    transaction_id: UUID
+    realtor_id: UUID
+    seller_id: UUID
+    amount_kobo: int
+
+
 class CommissionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -116,6 +128,76 @@ class CommissionRepository:
             )
         ).all()
         return len(rows)
+
+    async def list_disbursable(self, *, limit: int = 500) -> list[DisbursableCommission]:
+        """Available commissions not yet withdrawn, joined to the deal's seller
+        (cross-service read of transactions) — the payer on the payout."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT c.id AS commission_id, c.transaction_id, c.realtor_id,
+                           t.seller_id, c.amount_kobo
+                    FROM commissions c
+                    JOIN transactions t ON t.id = c.transaction_id
+                    WHERE c.status = 'available'
+                    ORDER BY c.available_at
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [
+            DisbursableCommission(
+                commission_id=r.commission_id,
+                transaction_id=r.transaction_id,
+                realtor_id=r.realtor_id,
+                seller_id=r.seller_id,
+                amount_kobo=r.amount_kobo,
+            )
+            for r in rows
+        ]
+
+    async def completed_disbursement(self, transaction_id: UUID) -> UUID | None:
+        """The id of a COMPLETED realtor_commission payment_event for this deal,
+        if disbursement finished (cross-service read of payment_events). None
+        otherwise — used to reconcile 'available' -> 'withdrawn'."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT id FROM payment_events
+                    WHERE transaction_id = :tid
+                      AND payment_type = 'realtor_commission'
+                      AND status = 'completed'
+                    LIMIT 1
+                    """
+                ),
+                {"tid": transaction_id},
+            )
+        ).first()
+        return row.id if row is not None else None
+
+    async def mark_withdrawn(self, transaction_id: UUID, *, payment_event_id: UUID) -> bool:
+        """Flip an available commission to withdrawn once its payout completed.
+        Guarded on status='available' so it's idempotent (a second run is a
+        no-op). Returns True only if this call performed the transition."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE commissions
+                    SET status = 'withdrawn', payment_event_id = :peid,
+                        disbursed_at = NOW(), updated_at = NOW()
+                    WHERE transaction_id = :tid AND status = 'available'
+                    RETURNING id
+                    """
+                ),
+                {"tid": transaction_id, "peid": payment_event_id},
+            )
+        ).first()
+        return row is not None
 
     async def totals_for_realtor(self, realtor_id: UUID) -> CommissionTotals:
         rows = (
