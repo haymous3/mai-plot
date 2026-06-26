@@ -24,6 +24,20 @@ pytestmark = pytest.mark.asyncio
 
 _PRICE = 5_000_000_000
 _LOAN = 2_000_000_000
+# Must match config default disbursement_actor_id — the system actor stamped on
+# the escrow credit + transaction_events, which FK to users.
+_ACTOR_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+
+def _seed_actor(db_engine: Engine) -> None:
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (id, role, verified_status, is_active) "
+                "VALUES (:id, 'admin', 'id_verified', TRUE) ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": _ACTOR_ID},
+        )
 
 
 def _seed_buyer(db_engine: Engine, *, email: str | None = "buyer@maiplot.ng") -> UUID:
@@ -107,6 +121,7 @@ def _escrow_credits(db_engine: Engine, tx_id: UUID) -> list[int]:
 async def test_credit_funds_escrow(
     clean_tables: None, db_engine: Engine, seed_user: Callable[..., UUID]
 ) -> None:
+    _seed_actor(db_engine)
     buyer = _seed_buyer(db_engine)
     tx_id = _seed_transaction(
         db_engine, buyer=buyer, seller=seed_user(role="seller"), stage="loan_approved"
@@ -133,6 +148,7 @@ async def test_credit_funds_escrow(
 async def test_credit_idempotent_no_double(
     clean_tables: None, db_engine: Engine, seed_user: Callable[..., UUID]
 ) -> None:
+    _seed_actor(db_engine)
     buyer = _seed_buyer(db_engine)
     tx_id = _seed_transaction(
         db_engine, buyer=buyer, seller=seed_user(role="seller"), stage="loan_approved"
@@ -149,6 +165,7 @@ async def test_credit_idempotent_no_double(
 async def test_stage_advances_on_approved(
     clean_tables: None, db_engine: Engine, seed_user: Callable[..., UUID]
 ) -> None:
+    _seed_actor(db_engine)
     buyer = _seed_buyer(db_engine)
     tx_id = _seed_transaction(
         db_engine, buyer=buyer, seller=seed_user(role="seller"), stage="loan_applied"
