@@ -43,10 +43,11 @@ async def _run_sweep() -> DisbursementResult:
 def _seed_available_commission(db_engine: Engine) -> tuple[UUID, UUID, UUID]:
     """Seed seller + realtor + a completed transaction + an 'available'
     commission. Returns (transaction_id, realtor_id, seller_id)."""
-    tx_id, seller, realtor = uuid4(), uuid4(), uuid4()
+    tx_id, buyer, seller, realtor = uuid4(), uuid4(), uuid4(), uuid4()
     past = datetime.now(UTC)
     with db_engine.begin() as conn:
-        for uid, role in ((seller, "seller"), (realtor, "realtor")):
+        # transactions.buyer_id/seller_id FK users — seed all parties first.
+        for uid, role in ((buyer, "buyer"), (seller, "seller"), (realtor, "realtor")):
             conn.execute(
                 text(
                     "INSERT INTO users (id, role, verified_status, is_active) "
@@ -59,7 +60,7 @@ def _seed_available_commission(db_engine: Engine) -> tuple[UUID, UUID, UUID]:
                 "INSERT INTO transactions (id, listing_id, buyer_id, seller_id, "
                 "agreed_price_kobo, stage) VALUES (:id, :lid, :bid, :sid, 5000000000, 'completed')"
             ),
-            {"id": tx_id, "lid": uuid4(), "bid": uuid4(), "sid": seller},
+            {"id": tx_id, "lid": uuid4(), "bid": buyer, "sid": seller},
         )
         conn.execute(
             text(
