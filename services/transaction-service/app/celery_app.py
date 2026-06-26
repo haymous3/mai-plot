@@ -22,7 +22,12 @@ celery_app = Celery(
     "transaction-service",
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["app.tasks.disbursement", "app.tasks.seller_disbursement"],
+    include=[
+        "app.tasks.disbursement",
+        "app.tasks.seller_disbursement",
+        "app.tasks.loan_disbursement",
+        "app.tasks.loan_stage",
+    ],
 )
 
 celery_app.conf.update(

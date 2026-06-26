@@ -31,7 +31,8 @@ class NotTransactionBuyer(DepositError):
 
 
 class AmountMismatch(DepositError):
-    """The deposit must equal the agreed price (full escrow collection)."""
+    """The deposit must equal the buyer's required contribution — the agreed
+    price, less any approved loan (the bank disburses that part separately)."""
 
 
 class AlreadyDeposited(DepositError):
@@ -76,8 +77,12 @@ class DepositService:
             raise TransactionNotFound()
         if status.buyer_id != buyer.user_id:
             raise NotTransactionBuyer()
-        # Server-side amount validation (review.md P5): the full agreed price.
-        if amount_kobo != status.agreed_price_kobo:
+        # Server-side amount validation (review.md P5): the buyer funds the agreed
+        # price LESS any approved loan — the bank disburses that part straight to
+        # escrow (SCRUM-128). No approved loan → the buyer pays the full price.
+        approved_loan_kobo = await self._transactions.get_approved_loan_amount(transaction_id)
+        required_kobo = status.agreed_price_kobo - (approved_loan_kobo or 0)
+        if amount_kobo != required_kobo:
             raise AmountMismatch()
 
         email = await self._transactions.get_user_email(buyer.user_id)

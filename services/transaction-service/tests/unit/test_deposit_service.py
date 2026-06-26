@@ -36,12 +36,22 @@ def _status(buyer_id: UUID) -> TransactionStatus:
 
 
 class _StubTransactions:
-    def __init__(self, status: TransactionStatus | None, *, email: str | None = "b@x.io") -> None:
+    def __init__(
+        self,
+        status: TransactionStatus | None,
+        *,
+        email: str | None = "b@x.io",
+        approved_loan_kobo: int | None = None,
+    ) -> None:
         self._status = status
         self._email = email
+        self._approved_loan_kobo = approved_loan_kobo
 
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
         return self._status
+
+    async def get_approved_loan_amount(self, transaction_id: UUID) -> int | None:
+        return self._approved_loan_kobo
 
     async def get_user_email(self, user_id: UUID) -> str | None:
         return self._email
@@ -131,6 +141,39 @@ async def test_amount_must_equal_agreed_price() -> None:
             buyer=_buyer(buyer),
             idempotency_key=uuid4(),
             amount_kobo=_PRICE - 1,
+        )
+
+
+async def test_approved_loan_reduces_required_deposit() -> None:
+    # price − approved loan is the buyer's contribution; the bank disburses the rest.
+    buyer = uuid4()
+    loan = 2_000_000_000
+    payments, charge = _StubPayments(), _StubCharge()
+    result = await _service(
+        _StubTransactions(_status(buyer), approved_loan_kobo=loan), payments, charge
+    ).initiate(
+        transaction_id=uuid4(),
+        buyer=_buyer(buyer),
+        idempotency_key=uuid4(),
+        amount_kobo=_PRICE - loan,
+    )
+    assert result.payment_event_id == payments.pe_id
+    assert charge.calls == 1
+
+
+async def test_full_price_rejected_when_loan_approved() -> None:
+    # With a loan approved, paying the full price over-funds escrow → mismatch.
+    buyer = uuid4()
+    with pytest.raises(AmountMismatch):
+        await _service(
+            _StubTransactions(_status(buyer), approved_loan_kobo=2_000_000_000),
+            _StubPayments(),
+            _StubCharge(),
+        ).initiate(
+            transaction_id=uuid4(),
+            buyer=_buyer(buyer),
+            idempotency_key=uuid4(),
+            amount_kobo=_PRICE,
         )
 
 
