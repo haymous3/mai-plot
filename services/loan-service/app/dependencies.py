@@ -16,6 +16,8 @@ from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.loan_application import LoanApplicationService
+from app.services.loan_decision import LoanDecisionWebhookService
+from app.services.loan_notifier import LoanNotifier, build_loan_notifier
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -67,6 +69,29 @@ def get_loan_application_service(
         registry=registry,
         loan_cap_bps=settings.loan_cap_bps,
         max_applications_per_day=settings.max_loan_applications_per_day,
+    )
+
+
+# Process-singleton loan-decision notifier (Celery producer or no-op).
+_notifier: LoanNotifier | None = None
+
+
+def get_loan_notifier(settings: SettingsDep) -> LoanNotifier:
+    global _notifier
+    if _notifier is None:
+        _notifier = build_loan_notifier(
+            enabled=settings.notifications_enabled, broker_url=settings.celery_broker_url
+        )
+    return _notifier
+
+
+def get_loan_decision_service(
+    settings: SettingsDep,
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+    notifier: Annotated[LoanNotifier, Depends(get_loan_notifier)],
+) -> LoanDecisionWebhookService:
+    return LoanDecisionWebhookService(
+        loans=loans, notifier=notifier, secret=settings.bank_webhook_secret
     )
 
 

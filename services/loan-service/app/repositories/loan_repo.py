@@ -104,6 +104,66 @@ class LoanRepository:
         ).first()
         return self._to_row(row) if row is not None else None
 
+    async def get_by_bank_reference(self, bank_reference_id: str) -> LoanRow | None:
+        """The loan a bank decision webhook refers to, keyed by the reference the
+        bank issued at submission (SCRUM-76)."""
+        row = (
+            await self._session.execute(
+                text(
+                    f"SELECT {_COLUMNS} FROM loans "
+                    "WHERE bank_reference_id = :ref AND deleted_at IS NULL"
+                ),
+                {"ref": bank_reference_id},
+            )
+        ).first()
+        return self._to_row(row) if row is not None else None
+
+    async def record_decision(
+        self,
+        loan_id: UUID,
+        *,
+        status: str,
+        approved_amount_kobo: int | None,
+        interest_rate_bps: int | None,
+        tenure_months: int | None,
+        monthly_instalment_kobo: int | None,
+    ) -> bool:
+        """Apply a bank decision (approved/rejected) to a still-pending loan.
+
+        Guarded on the current status so a duplicate webhook (or one arriving
+        after the decision was already recorded) is a silent no-op: the UPDATE
+        only matches a loan still awaiting a decision. Returns True iff a row was
+        updated (the first webhook wins)."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE loans
+                       SET status = :status,
+                           approved_amount_kobo = :approved,
+                           interest_rate_bps = :rate,
+                           tenure_months = COALESCE(:tenure, tenure_months),
+                           monthly_instalment_kobo = :instalment,
+                           bank_decision_at = NOW(),
+                           updated_at = NOW()
+                     WHERE id = :id
+                       AND deleted_at IS NULL
+                       AND status IN ('submitted', 'under_review', 'info_required')
+                    RETURNING id
+                    """
+                ),
+                {
+                    "status": status,
+                    "approved": approved_amount_kobo,
+                    "rate": interest_rate_bps,
+                    "tenure": tenure_months,
+                    "instalment": monthly_instalment_kobo,
+                    "id": loan_id,
+                },
+            )
+        ).first()
+        return row is not None
+
     async def get(self, loan_id: UUID) -> LoanRow | None:
         row = (
             await self._session.execute(
