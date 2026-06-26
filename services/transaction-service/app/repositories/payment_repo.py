@@ -26,6 +26,16 @@ class PaymentEventRow:
     amount_kobo: int
 
 
+@dataclass(frozen=True)
+class PaymentEventDetail:
+    id: UUID
+    status: str
+    payment_type: str
+    amount_kobo: int
+    transaction_id: UUID | None
+    payer_id: UUID
+
+
 class PaymentEventRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -85,6 +95,29 @@ class PaymentEventRepository:
             status=row.status,
             payment_type=row.payment_type,
             amount_kobo=row.amount_kobo,
+        )
+
+    async def get(self, payment_event_id: UUID) -> PaymentEventDetail | None:
+        """Look up a payment_event by id — used by the webhook to confirm a
+        deposit (the Paystack reference is the payment_event id)."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT id, status, payment_type, amount_kobo, transaction_id, payer_id "
+                    "FROM payment_events WHERE id = :id"
+                ),
+                {"id": payment_event_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return PaymentEventDetail(
+            id=row.id,
+            status=row.status,
+            payment_type=row.payment_type,
+            amount_kobo=row.amount_kobo,
+            transaction_id=row.transaction_id,
+            payer_id=row.payer_id,
         )
 
     async def update_status(

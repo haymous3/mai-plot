@@ -7,17 +7,21 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.paystack_charge import PaystackChargeClient, build_paystack_charge_client
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.escrow_repo import EscrowLedgerRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository
+from app.repositories.payment_repo import PaymentEventRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.deposit import DepositService
 from app.services.escrow_ledger import EscrowLedgerService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
+from app.services.paystack_webhook import PaystackWebhookService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
 from app.services.transaction_status import TransactionStatusService
 
@@ -54,6 +58,53 @@ def get_escrow_service(
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
 ) -> EscrowLedgerService:
     return EscrowLedgerService(ledger=ledger, audit=audit)
+
+
+def _payment_repo(session: SessionDep) -> PaymentEventRepository:
+    return PaymentEventRepository(session)
+
+
+# Process-singleton Paystack charge client (the real one holds an HTTP client).
+_charge_client: PaystackChargeClient | None = None
+
+
+def get_charge_client(settings: SettingsDep) -> PaystackChargeClient:
+    global _charge_client
+    if _charge_client is None:
+        _charge_client = build_paystack_charge_client(
+            enabled=settings.paystack_enabled,
+            secret_key=settings.paystack_secret_key,
+            base_url=settings.paystack_base_url,
+        )
+    return _charge_client
+
+
+def get_deposit_service(
+    settings: SettingsDep,
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    payments: Annotated[PaymentEventRepository, Depends(_payment_repo)],
+    charge_client: Annotated[PaystackChargeClient, Depends(get_charge_client)],
+) -> DepositService:
+    return DepositService(
+        transactions=transactions,
+        payments=payments,
+        charge_client=charge_client,
+        callback_url=settings.paystack_callback_url,
+    )
+
+
+def get_webhook_service(
+    settings: SettingsDep,
+    payments: Annotated[PaymentEventRepository, Depends(_payment_repo)],
+    escrow: Annotated[EscrowLedgerService, Depends(get_escrow_service)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> PaystackWebhookService:
+    return PaystackWebhookService(
+        payments=payments,
+        escrow=escrow,
+        audit=audit,
+        secret=settings.paystack_webhook_secret,
+    )
 
 
 # One seller notifier per process — the Celery producer app builds a broker
