@@ -305,6 +305,10 @@ services:
       # enqueues notifications.dispatch on the shared broker, best-effort.
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      # Paystack buyer-deposit checkout + webhook (SCRUM-83). Fake when disabled.
+      PAYSTACK_ENABLED: ${PAYSTACK_ENABLED:-false}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-change-me-paystack-webhook-secret}
 
   # Background worker for transaction-service (SCRUM-86). Consumes the
   # payments.disburse_commission task realtor-service enqueues. No HTTP port.

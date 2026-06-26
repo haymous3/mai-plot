@@ -20,6 +20,9 @@ dependencies = [
     # Payment receipts → private S3 (SCRUM-86). Imported lazily inside the S3
     # adapter; the in-memory fake (dev/CI default) never touches it.
     "boto3>=1.34",
+    # Paystack charge client (SCRUM-83). Imported lazily inside the real HTTP
+    # client; the fake (dev/CI default) never touches it.
+    "httpx>=0.27",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

@@ -52,11 +52,17 @@ class Settings(BaseSettings):
     # escalates to dual admin approval via the existing escrow flow.
     disbursement_actor_id: str = "00000000-0000-0000-0000-000000000001"
 
-    # Paystack payout rail. Unbuilt (SCRUM-83/M3) — paystack_enabled=false wires a
-    # FAKE transfer client (synthetic reference, no network) so the disbursement
-    # flow runs end-to-end in dev/CI. Production sets it true + the secret.
+    # Paystack rail (charge/collection + payout). paystack_enabled=false wires the
+    # FAKE clients (synthetic URLs/references, no network) so deposit + disbursement
+    # run end-to-end in dev/CI. Production sets it true + the keys.
     paystack_enabled: bool = False
     paystack_secret_key: str = ""
+    paystack_base_url: str = "https://api.paystack.co"
+    # Where Paystack redirects the buyer after checkout (frontend route). Optional.
+    paystack_callback_url: str = ""
+    # Webhook HMAC-SHA512 secret (Paystack signs with your secret key). The
+    # /webhooks/paystack handler rejects any body whose signature doesn't match.
+    paystack_webhook_secret: str = "change-me-paystack-webhook-secret"
 
     # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
     # local/CI never reach S3; production sets receipts_storage_use_fake=false.

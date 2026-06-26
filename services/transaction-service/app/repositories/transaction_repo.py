@@ -65,6 +65,17 @@ class TransactionRepository:
             platform_fee_kobo=row.platform_fee_kobo,
         )
 
+    async def get_user_email(self, user_id: UUID) -> str | None:
+        """The user's email (shared users table) — Paystack needs it to initialise
+        a charge (SCRUM-83). Cross-service read, like the accrual joins."""
+        row = (
+            await self._session.execute(
+                text("SELECT email FROM users WHERE id = :id"),
+                {"id": user_id},
+            )
+        ).first()
+        return row.email if row is not None else None
+
     async def get_lock_for_listing(self, listing_id: UUID) -> ListingLock | None:
         """The most recent transaction for a listing (its stage + lock window),
         used to decide whether an under_offer listing's 72h lock has lapsed."""
