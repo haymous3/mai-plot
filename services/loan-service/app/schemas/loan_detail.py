@@ -25,6 +25,8 @@ class LoanDetailOut(BaseModel):
     bank_decision_at: datetime | None
     created_at: datetime
     title_released: bool
+    employment_status: str | None
+    monthly_income_kobo: int | None
 
     @classmethod
     def from_row(cls, r: LoanDetailRow) -> LoanDetailOut:
@@ -43,4 +45,6 @@ class LoanDetailOut(BaseModel):
             bank_decision_at=r.bank_decision_at,
             created_at=r.created_at,
             title_released=r.title_released_at is not None,
+            employment_status=r.employment_status,
+            monthly_income_kobo=r.monthly_income_kobo,
         )

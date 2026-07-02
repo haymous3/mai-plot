@@ -256,6 +256,8 @@ export interface LoanDetail {
   bank_decision_at: string | null;
   created_at: string;
   title_released: boolean;
+  employment_status: string | null;
+  monthly_income_kobo: number | null;
 }
 
 export interface LoginSuccess {

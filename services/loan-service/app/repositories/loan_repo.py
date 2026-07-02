@@ -47,6 +47,8 @@ class LoanDetailRow:
     bank_decision_at: datetime | None
     created_at: datetime
     title_released_at: datetime | None
+    employment_status: str | None = None
+    monthly_income_kobo: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,8 @@ class LoanRepository:
         requested_amount_kobo: int,
         tenure_months: int,
         idempotency_key: UUID,
+        employment_status: str | None = None,
+        monthly_income_kobo: int | None = None,
     ) -> tuple[UUID, bool]:
         """Insert a submitted loan. Idempotent on (buyer_id, idempotency_key):
         returns (loan_id, created) — created=False when the application was
@@ -89,8 +93,10 @@ class LoanRepository:
                     """
                     INSERT INTO loans
                         (transaction_id, buyer_id, bank_partner_id,
-                         requested_amount_kobo, tenure_months, idempotency_key)
-                    VALUES (:tx, :buyer, :partner, :amount, :tenure, :ik)
+                         requested_amount_kobo, tenure_months, idempotency_key,
+                         employment_status, monthly_income_kobo)
+                    VALUES (:tx, :buyer, :partner, :amount, :tenure, :ik,
+                            :employment, :income)
                     ON CONFLICT (buyer_id, idempotency_key)
                         WHERE idempotency_key IS NOT NULL DO NOTHING
                     RETURNING id
@@ -103,6 +109,8 @@ class LoanRepository:
                     "amount": requested_amount_kobo,
                     "tenure": tenure_months,
                     "ik": idempotency_key,
+                    "employment": employment_status,
+                    "income": monthly_income_kobo,
                 },
             )
         ).first()
@@ -333,7 +341,7 @@ class LoanRepository:
                            l.requested_amount_kobo, l.approved_amount_kobo,
                            l.interest_rate_bps, l.tenure_months, l.monthly_instalment_kobo,
                            l.bank_account_opened, l.bank_decision_at, l.created_at,
-                           l.title_released_at,
+                           l.title_released_at, l.employment_status, l.monthly_income_kobo,
                            bp.name AS bank_name,
                            bp.requires_account_opening
                     FROM loans l
@@ -362,6 +370,8 @@ class LoanRepository:
             bank_decision_at=row.bank_decision_at,
             created_at=row.created_at,
             title_released_at=row.title_released_at,
+            employment_status=row.employment_status,
+            monthly_income_kobo=row.monthly_income_kobo,
         )
 
     async def get(self, loan_id: UUID) -> LoanRow | None:

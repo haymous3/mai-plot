@@ -71,6 +71,8 @@ async def apply_for_loan(
             requested_amount_kobo=payload.requested_amount_kobo,
             tenure_months=payload.tenure_months,
             idempotency_key=payload.idempotency_key,
+            employment_status=payload.employment_status,
+            monthly_income_kobo=payload.monthly_income_kobo,
         )
     except TransactionNotFound:
         return _error(status.HTTP_404_NOT_FOUND, "TRANSACTION_NOT_FOUND", "No such transaction.")

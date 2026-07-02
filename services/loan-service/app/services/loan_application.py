@@ -86,6 +86,8 @@ class LoanApplicationService:
         requested_amount_kobo: int,
         tenure_months: int,
         idempotency_key: UUID,
+        employment_status: str | None = None,
+        monthly_income_kobo: int | None = None,
     ) -> LoanApplicationResult:
         # Idempotent retry — return the existing application untouched.
         existing = await self._loans.get_by_idempotency(buyer.user_id, idempotency_key)
@@ -120,6 +122,8 @@ class LoanApplicationService:
             requested_amount_kobo=requested_amount_kobo,
             tenure_months=tenure_months,
             idempotency_key=idempotency_key,
+            employment_status=employment_status,
+            monthly_income_kobo=monthly_income_kobo,
         )
         if not created:  # raced with a concurrent identical apply
             row = await self._loans.get(loan_id)

@@ -147,6 +147,24 @@ async def test_happy_path_submits_to_bank() -> None:
     assert loans.refs == [("under_review", f"FAKE-BANK-{loans.loan_id}")]
 
 
+async def test_applicant_fields_passed_to_create() -> None:
+    buyer = uuid4()
+    loans = _StubLoans()
+    svc = _service(_StubTransactions(_info(buyer)), _StubPartners(_partner()), loans)
+    await svc.apply(
+        buyer=_buyer(buyer),
+        transaction_id=uuid4(),
+        bank_partner_id=uuid4(),
+        requested_amount_kobo=_AMOUNT,
+        tenure_months=12,
+        idempotency_key=uuid4(),
+        employment_status="employed",
+        monthly_income_kobo=90_000_000,
+    )
+    assert loans.created[0]["employment_status"] == "employed"
+    assert loans.created[0]["monthly_income_kobo"] == 90_000_000
+
+
 async def test_unknown_transaction() -> None:
     with pytest.raises(TransactionNotFound):
         await _apply(
