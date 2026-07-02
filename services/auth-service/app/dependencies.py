@@ -39,6 +39,7 @@ from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
+from app.services.set_password import SetPasswordService
 from app.services.token_refresh import TokenRefreshService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -193,6 +194,12 @@ def get_login_service(
         refresh_tokens=refresh_tokens,
         jwt=jwt_service,
     )
+
+
+def get_set_password_service(
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+) -> SetPasswordService:
+    return SetPasswordService(credentials=credentials)
 
 
 def get_otp_verification_service(
