@@ -52,8 +52,8 @@ export function ApplicationWizard({
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
   const [verifying, setVerifying] = useState(false);
 
-  // Step 2 — files are selected client-side; there is no buyer loan-document
-  // endpoint yet (SCRUM-131 follow-up), so they are not uploaded.
+  // Step 2 — files are selected client-side and uploaded after the loan is
+  // created (SCRUM-131), since the upload endpoint is loan-scoped.
   const [files, setFiles] = useState<Record<DocKey, File | null>>({
     bankStatement: null,
     employment: null,
@@ -104,6 +104,31 @@ export function ApplicationWizard({
     if (files.bankStatement && files.employment && files.passport) setStep(3);
   }
 
+  async function uploadDocuments(loanId: string): Promise<boolean> {
+    const slots: [DocKey, string][] = [
+      ['bankStatement', 'bank_statement'],
+      ['employment', 'employment_letter'],
+      ['passport', 'passport'],
+    ];
+    for (const [key, documentType] of slots) {
+      const file = files[key];
+      if (!file) continue; // step 2 requires all three, so this is defensive
+      const fd = new FormData();
+      fd.append('document_type', documentType);
+      fd.append('file', file);
+      try {
+        const r = await fetch(`/api/buyer/loans/${loanId}/documents`, {
+          method: 'POST',
+          body: fd,
+        });
+        if (!r.ok) return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
   async function submit() {
     setSubmitting(true);
     setSubmitError(null);
@@ -124,6 +149,16 @@ export function ApplicationWizard({
       });
       const body = (await resp.json()) as { loan_id?: string; error_code?: string };
       if (resp.ok && body.loan_id) {
+        // Upload the step-2 documents now that the loan exists (SCRUM-131).
+        // /loans/apply is idempotent, so a retry after a failed upload re-uses
+        // the same loan and re-attempts the uploads.
+        const uploaded = await uploadDocuments(body.loan_id);
+        if (!uploaded) {
+          setSubmitError(
+            'Your application was created, but a document failed to upload. Please submit again to retry.',
+          );
+          return;
+        }
         router.push(`/loans/${body.loan_id}`);
         return;
       }

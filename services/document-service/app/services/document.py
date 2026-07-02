@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 _PDF_MAGIC = b"%PDF-"
 _JPEG_MAGIC = b"\xff\xd8\xff"
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 class InvalidDocument(ValueError):
@@ -21,14 +22,18 @@ class InvalidDocument(ValueError):
         self.code = code
 
 
-def detect_document_type(data: bytes) -> tuple[str, str]:
-    """Return (content_type, extension) from the magic bytes; raise for any
-    non PDF/JPEG. Bytes are inspected, never logged or echoed."""
+def detect_document_type(data: bytes, *, allow_png: bool = False) -> tuple[str, str]:
+    """Return (content_type, extension) from the magic bytes. Listing legal docs
+    are PDF/JPEG; buyer loan docs (SCRUM-131) also allow PNG via allow_png. Bytes
+    are inspected, never logged or echoed."""
     if data.startswith(_PDF_MAGIC):
         return "application/pdf", "pdf"
     if data.startswith(_JPEG_MAGIC):
         return "image/jpeg", "jpg"
-    raise InvalidDocument("DOCUMENT_FORMAT_INVALID", "Document must be a PDF or JPEG file.")
+    if allow_png and data.startswith(_PNG_MAGIC):
+        return "image/png", "png"
+    accepted = "PDF, JPEG, or PNG" if allow_png else "PDF or JPEG"
+    raise InvalidDocument("DOCUMENT_FORMAT_INVALID", f"Document must be a {accepted} file.")
 
 
 def validate_size(data: bytes, *, max_bytes: int) -> None:
@@ -41,3 +46,8 @@ def validate_size(data: bytes, *, max_bytes: int) -> None:
 def build_document_key(listing_id: UUID, *, extension: str) -> str:
     """Private-bucket key: listings/{listing_id}/documents/{uuid}.{ext}."""
     return f"listings/{listing_id}/documents/{uuid4()}.{extension}"
+
+
+def build_loan_document_key(loan_id: UUID, *, extension: str) -> str:
+    """Private-bucket key: loans/{loan_id}/documents/{uuid}.{ext} (SCRUM-131)."""
+    return f"loans/{loan_id}/documents/{uuid4()}.{extension}"

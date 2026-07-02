@@ -23,6 +23,28 @@ class DocumentUploadResponse(BaseModel):
     verification_status: str = "pending"
 
 
+# ---- Buyer loan documents (SCRUM-131) --------------------------------------
+
+LoanDocumentType = Literal["bank_statement", "employment_letter", "passport"]
+
+
+class LoanDocumentUploadResponse(BaseModel):
+    document_id: UUID
+    verification_status: str = "pending"
+
+
+class LoanDocumentItem(BaseModel):
+    id: UUID
+    document_type: str
+    verification_status: str
+    created_at: datetime
+    url: str
+
+
+class LoanDocumentsResponse(BaseModel):
+    items: list[LoanDocumentItem]
+
+
 # ---- Admin verification ----------------------------------------------------
 
 ReviewAction = Literal["verify", "reject"]
