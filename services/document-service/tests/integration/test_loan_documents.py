@@ -33,7 +33,22 @@ def _seed_bank_partner(db_engine: Engine) -> UUID:
     return pid
 
 
-def _seed_loan(db_engine: Engine, *, buyer_id: UUID, partner_id: UUID) -> UUID:
+def _seed_transaction(db_engine: Engine, *, buyer_id: UUID, seller_id: UUID) -> UUID:
+    tx_id = uuid4()
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO transactions (id, listing_id, buyer_id, seller_id, "
+                "agreed_price_kobo, stage) VALUES (:id, :lid, :bid, :sid, 60000000, "
+                "'offer_accepted')"
+            ),
+            {"id": tx_id, "lid": uuid4(), "bid": buyer_id, "sid": seller_id},
+        )
+    return tx_id
+
+
+def _seed_loan(db_engine: Engine, *, buyer_id: UUID, seller_id: UUID, partner_id: UUID) -> UUID:
+    tx_id = _seed_transaction(db_engine, buyer_id=buyer_id, seller_id=seller_id)
     loan_id = uuid4()
     with db_engine.begin() as conn:
         conn.execute(
@@ -44,7 +59,7 @@ def _seed_loan(db_engine: Engine, *, buyer_id: UUID, partner_id: UUID) -> UUID:
                 VALUES (:id, :tx, :buyer, :partner, 30000000)
                 """
             ),
-            {"id": loan_id, "tx": uuid4(), "buyer": buyer_id, "partner": partner_id},
+            {"id": loan_id, "tx": tx_id, "buyer": buyer_id, "partner": partner_id},
         )
     return loan_id
 
@@ -70,7 +85,8 @@ async def test_buyer_uploads_then_lists(
 ) -> None:
     buyer = seed_seller(phone="08012345678", role="buyer")
     partner = _seed_bank_partner(db_engine)
-    loan = _seed_loan(db_engine, buyer_id=buyer, partner_id=partner)
+    seller = seed_seller(phone="08055555555", role="seller")
+    loan = _seed_loan(db_engine, buyer_id=buyer, seller_id=seller, partner_id=partner)
     token = mint_access_token(buyer, "buyer")
 
     up = await _upload(http_client, loan, token)
@@ -104,7 +120,8 @@ async def test_stranger_forbidden(
     buyer = seed_seller(phone="08012345678", role="buyer")
     stranger = seed_seller(phone="08087654321", role="buyer")
     partner = _seed_bank_partner(db_engine)
-    loan = _seed_loan(db_engine, buyer_id=buyer, partner_id=partner)
+    seller = seed_seller(phone="08055555555", role="seller")
+    loan = _seed_loan(db_engine, buyer_id=buyer, seller_id=seller, partner_id=partner)
 
     resp = await _upload(http_client, loan, mint_access_token(stranger, "buyer"))
     assert resp.status_code == 403
@@ -134,7 +151,8 @@ async def test_bad_format_422(
 ) -> None:
     buyer = seed_seller(phone="08012345678", role="buyer")
     partner = _seed_bank_partner(db_engine)
-    loan = _seed_loan(db_engine, buyer_id=buyer, partner_id=partner)
+    seller = seed_seller(phone="08055555555", role="seller")
+    loan = _seed_loan(db_engine, buyer_id=buyer, seller_id=seller, partner_id=partner)
 
     resp = await _upload(http_client, loan, mint_access_token(buyer, "buyer"), data=b"not-a-doc")
     assert resp.status_code == 422

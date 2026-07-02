@@ -34,6 +34,7 @@ _TABLES = (
     "loan_documents",
     "loans",
     "bank_partners",
+    "transactions",
     "property_listings",
     "user_pii",
     "users",
