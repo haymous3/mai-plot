@@ -25,6 +25,16 @@ class LoanRow:
     approved_amount_kobo: int | None = None
 
 
+@dataclass(frozen=True)
+class PollableLoan:
+    """A still-pending loan to poll the bank for (SCRUM-130) — the loan plus its
+    partner's short_code (to resolve the adapter) and the bank reference."""
+
+    loan: LoanRow
+    short_code: str
+    bank_reference_id: str
+
+
 _COLUMNS = (
     "id, transaction_id, buyer_id, bank_partner_id, requested_amount_kobo, "
     "tenure_months, status, bank_reference_id, created_at, title_released_at, "
@@ -254,6 +264,39 @@ class LoanRepository:
             )
         ).all()
         return [self._to_row(r) for r in rows]
+
+    async def list_pollable(self, *, older_than_minutes: int, limit: int) -> list[PollableLoan]:
+        """Loans still awaiting a bank decision past the stale threshold — the
+        polling fallback's worklist (SCRUM-130). Only those with a bank reference
+        (already submitted) and an active partner, joined to the partner short_code
+        so the poller can resolve the adapter. Oldest first."""
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT {", ".join("l." + c.strip() for c in _COLUMNS.split(","))},
+                           bp.short_code AS short_code
+                    FROM loans l
+                    JOIN bank_partners bp ON bp.id = l.bank_partner_id
+                    WHERE l.deleted_at IS NULL
+                      AND l.status IN ('submitted', 'under_review', 'info_required')
+                      AND l.bank_reference_id IS NOT NULL
+                      AND l.created_at < NOW() - make_interval(mins => :mins)
+                    ORDER BY l.created_at
+                    LIMIT :limit
+                    """
+                ),
+                {"mins": older_than_minutes, "limit": limit},
+            )
+        ).all()
+        return [
+            PollableLoan(
+                loan=self._to_row(r),
+                short_code=r.short_code,
+                bank_reference_id=r.bank_reference_id,
+            )
+            for r in rows
+        ]
 
     async def get(self, loan_id: UUID) -> LoanRow | None:
         row = (

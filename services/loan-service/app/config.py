@@ -51,6 +51,17 @@ class Settings(BaseSettings):
     # celery_broker_url — the same shared broker as the notifier.
     tx_tasks_enabled: bool = False
 
+    # Loan status polling fallback (SCRUM-130). A Celery beat polls the bank for
+    # loans still pending past loan_poll_stale_minutes and applies a delayed/dropped
+    # decision through the same path as the webhook. The worker needs a result
+    # backend. loan_poll_enabled=false (dev/CI default) makes the task a no-op (and
+    # the fake adapter only ever reports under_review, so polling is harmless).
+    celery_result_backend: str = "redis://localhost:6379/1"
+    loan_poll_enabled: bool = False
+    loan_poll_interval_seconds: float = 900.0  # every 15 min
+    loan_poll_stale_minutes: int = 30  # only poll loans pending this long
+    loan_poll_batch_limit: int = 100
+
     # Loan business rules (CLAUDE.md §8). Max loan = 50% of the agreed price;
     # a buyer may submit at most a few applications per day (Kong only rate-limits
     # 30/min — this is the per-buyer daily cap).
