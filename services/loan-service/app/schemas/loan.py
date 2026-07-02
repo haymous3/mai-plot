@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.repositories.loan_repo import LoanRow
+
+EmploymentStatus = Literal["employed", "self_employed", "business_owner", "unemployed"]
 
 
 class LoanApplyRequest(BaseModel):
@@ -17,6 +20,10 @@ class LoanApplyRequest(BaseModel):
     tenure_months: int = Field(ge=1, le=480)
     # Client-generated UUID v4 (CLAUDE.md §4) — dedupes the application.
     idempotency_key: UUID
+    # Applicant details from the onboarding wizard (SCRUM-131). Optional so a
+    # bare apply still works; money is BIGINT kobo per §4.
+    employment_status: EmploymentStatus | None = None
+    monthly_income_kobo: int | None = Field(default=None, ge=0)
 
 
 class LoanApplyResponse(BaseModel):

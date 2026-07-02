@@ -44,8 +44,8 @@ export function ApplicationWizard({
 
   const [step, setStep] = useState(1);
 
-  // Step 1 — BVN is verified against auth-service; employment + income are held
-  // client-side only (no backend field yet — SCRUM-131 follow-up to persist).
+  // Step 1 — BVN is verified against auth-service; employment + income are sent
+  // with the application and persisted on the loan (SCRUM-131).
   const [bvn, setBvn] = useState('');
   const [employment, setEmployment] = useState('');
   const [income, setIncome] = useState('');
@@ -117,6 +117,9 @@ export function ApplicationWizard({
           requested_amount_kobo: amountKobo,
           tenure_months: tenureMonths,
           idempotency_key: idempotencyKey.current,
+          // Applicant details from step 1 (SCRUM-131) — now persisted.
+          employment_status: employment || null,
+          monthly_income_kobo: income ? Number(income) * 100 : null,
         }),
       });
       const body = (await resp.json()) as { loan_id?: string; error_code?: string };
