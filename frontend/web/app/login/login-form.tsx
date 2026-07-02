@@ -32,7 +32,14 @@ export function LoginForm() {
       const body = (await resp.json()) as { ok?: boolean; redirect?: string; error?: string };
       if (resp.ok && body.ok && body.redirect) {
         // Only follow a same-origin relative `next` to avoid an open redirect.
-        const dest = next && next.startsWith('/') ? next : body.redirect;
+        // Reject protocol-relative ("//host") and backslash ("/\\host") forms —
+        // browsers treat those as absolute cross-origin URLs.
+        const isSafeNext =
+          typeof next === 'string' &&
+          next.startsWith('/') &&
+          !next.startsWith('//') &&
+          !next.startsWith('/\\');
+        const dest = isSafeNext ? (next as string) : body.redirect;
         router.replace(dest);
         router.refresh();
         return;
