@@ -23,9 +23,58 @@ class ListingForOffer:
     expires_at: datetime | None
 
 
+@dataclass(frozen=True)
+class PropertySummary:
+    """A listing's headline details for the buyer's financing page (SCRUM-94):
+    what the property is, where it is, its asking price, and a cover image. The
+    image is a public CloudFront URL (media is CDN-served, not presigned)."""
+
+    title: str
+    property_type: str
+    address_text: str
+    lga: str
+    state: str
+    sale_type: str
+    asking_price_kobo: int
+    primary_image_url: str | None
+
+
 class ListingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_property_summary(self, listing_id: UUID) -> PropertySummary | None:
+        """Headline listing details + a cover image for the financing page. The
+        image is the lowest-sorted image in listing_media (a public CDN URL), or
+        None if the listing has no photos yet."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT title, property_type, address_text, lga, state, sale_type,
+                           asking_price_kobo,
+                           (SELECT cdn_url FROM listing_media
+                             WHERE listing_id = :id AND media_type = 'image'
+                             ORDER BY sort_order LIMIT 1) AS primary_image_url
+                    FROM property_listings
+                    WHERE id = :id AND deleted_at IS NULL
+                    """
+                ),
+                {"id": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return PropertySummary(
+            title=row.title,
+            property_type=row.property_type,
+            address_text=row.address_text,
+            lga=row.lga,
+            state=row.state,
+            sale_type=row.sale_type,
+            asking_price_kobo=row.asking_price_kobo,
+            primary_image_url=row.primary_image_url,
+        )
 
     async def get_for_offer(self, listing_id: UUID) -> ListingForOffer | None:
         """Owner + status + expiry of a live listing, for offer validation."""

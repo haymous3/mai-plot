@@ -15,13 +15,23 @@ from fastapi.responses import JSONResponse
 
 from app.dependencies import (
     get_current_user,
+    get_financing_summary_service,
     get_offer_service,
     get_transaction_status_service,
 )
 from app.repositories.offer_repo import OfferRow
+from app.schemas.financing import FinancingSummaryOut
 from app.schemas.offer import CounterRequest, CreateOfferRequest, OfferResponse, RespondRequest
 from app.schemas.transaction import StatusChangeRequest, StatusResponse
 from app.security import CurrentUser
+from app.services.financing_summary import (
+    FinancingSummaryService,
+    NotTransactionBuyer,
+    PropertyNotFound,
+)
+from app.services.financing_summary import (
+    TransactionNotFound as FinancingTransactionNotFound,
+)
 from app.services.offer_service import (
     AcceptResult,
     CannotOfferOwnListing,
@@ -68,6 +78,30 @@ def _offer_response(offer: OfferRow, *, transaction_id: UUID | None = None) -> O
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
 StatusServiceDep = Annotated[TransactionStatusService, Depends(get_transaction_status_service)]
+FinancingServiceDep = Annotated[FinancingSummaryService, Depends(get_financing_summary_service)]
+
+
+@router.get("/{transaction_id}/financing-summary", response_model=None)
+async def financing_summary(
+    transaction_id: UUID,
+    caller: CurrentUserDep,
+    service: FinancingServiceDep,
+) -> FinancingSummaryOut | JSONResponse:
+    """Property + price + 50% loan cap for the buyer's financing page (SCRUM-94).
+    The buyer sees only their own deal."""
+    try:
+        summary = await service.get(transaction_id, caller)
+    except FinancingTransactionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "TRANSACTION_NOT_FOUND", "No such transaction.")
+    except NotTransactionBuyer:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_TRANSACTION_BUYER",
+            "You can only view your own deal's financing.",
+        )
+    except PropertyNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "PROPERTY_NOT_FOUND", "Listing not found.")
+    return FinancingSummaryOut.from_summary(summary)
 
 
 @router.patch("/{transaction_id}/status", response_model=StatusResponse)
