@@ -22,6 +22,7 @@ from app.services.loan_application import LoanApplicationService
 from app.services.loan_decision import LoanDecisionWebhookService
 from app.services.loan_disbursement_webhook import LoanDisbursementWebhookService
 from app.services.loan_notifier import LoanNotifier, build_loan_notifier
+from app.services.loan_query import LoanQueryService
 from app.services.loan_repayment import LoanRepaymentWebhookService
 from app.services.repayment_query import RepaymentQueryService
 from app.services.tx_tasks import TxTaskProducer, build_tx_task_producer
@@ -154,6 +155,12 @@ def get_bank_webhook_dispatcher(
         repayment=repayment,
         disbursement=disbursement,
     )
+
+
+def get_loan_query_service(
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+) -> LoanQueryService:
+    return LoanQueryService(loans=loans)
 
 
 def get_repayment_query_service(
