@@ -25,6 +25,10 @@ export function analyticsServiceUrl(): string {
   return process.env.ANALYTICS_SERVICE_URL ?? 'http://localhost:8018';
 }
 
+export function transactionServiceUrl(): string {
+  return process.env.TRANSACTION_SERVICE_URL ?? 'http://localhost:8014';
+}
+
 export function loanServiceUrl(): string {
   return process.env.LOAN_SERVICE_URL ?? 'http://localhost:8015';
 }
@@ -234,6 +238,24 @@ export interface FinancingSummary {
   max_loan_kobo: number;
   property: FinancingProperty;
   existing_loan: { loan_id: string; status: string } | null;
+}
+
+/** Full loan detail for the status/approval page (GET /loans/{id}, SCRUM-94). */
+export interface LoanDetail {
+  loan_id: string;
+  transaction_id: string;
+  status: string;
+  requested_amount_kobo: number;
+  approved_amount_kobo: number | null;
+  interest_rate_bps: number | null;
+  tenure_months: number | null;
+  monthly_instalment_kobo: number | null;
+  bank_name: string;
+  requires_account_opening: boolean;
+  bank_account_opened: boolean;
+  bank_decision_at: string | null;
+  created_at: string;
+  title_released: boolean;
 }
 
 export interface LoginSuccess {

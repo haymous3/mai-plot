@@ -46,3 +46,38 @@ export async function buyerBackendGet<T>(url: string): Promise<BackendResult<T>>
 
   return { ok: true, data: (await resp.json()) as T };
 }
+
+/** Raw authenticated backend call for a buyer proxy route. Returns the backend
+ * status + parsed JSON so the proxy can mirror them to the browser (the token
+ * stays server-side). A missing token is 401; an unreachable backend is 502. */
+export async function buyerBackendSend(
+  method: 'GET' | 'POST',
+  url: string,
+  body?: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const token = buyerAccessToken();
+  if (!token) return { status: 401, body: { error_code: 'NO_SESSION' } };
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
+    });
+  } catch {
+    return { status: 502, body: { error_code: 'BACKEND_UNAVAILABLE' } };
+  }
+
+  let parsed: unknown = null;
+  try {
+    parsed = await resp.json();
+  } catch {
+    parsed = null;
+  }
+  return { status: resp.status, body: parsed };
+}

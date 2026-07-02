@@ -12,10 +12,12 @@ from app.dependencies import (
     get_bank_partner_query_service,
     get_current_user,
     get_loan_application_service,
+    get_loan_query_service,
     get_repayment_query_service,
 )
 from app.schemas.bank_partner import BankPartnerItem, BankPartnersResponse
 from app.schemas.loan import LoanApplyRequest, LoanApplyResponse, LoanItem, LoanListResponse
+from app.schemas.loan_detail import LoanDetailOut
 from app.schemas.repayment import LoanRepaymentsOut
 from app.security import CurrentUser
 from app.services.bank_partner_query import BankPartnerQueryService
@@ -29,6 +31,9 @@ from app.services.loan_application import (
     TenureViolation,
     TransactionNotFound,
 )
+from app.services.loan_query import LoanNotFound as LoanDetailNotFound
+from app.services.loan_query import LoanQueryService
+from app.services.loan_query import NotLoanViewer as NotLoanDetailViewer
 from app.services.repayment_query import (
     LoanNotFound,
     NotLoanViewer,
@@ -41,6 +46,7 @@ BuyerDep = Annotated[CurrentUser, Depends(get_current_user)]
 ServiceDep = Annotated[LoanApplicationService, Depends(get_loan_application_service)]
 RepaymentsDep = Annotated[RepaymentQueryService, Depends(get_repayment_query_service)]
 PartnersDep = Annotated[BankPartnerQueryService, Depends(get_bank_partner_query_service)]
+LoanDetailDep = Annotated[LoanQueryService, Depends(get_loan_query_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -124,6 +130,25 @@ async def my_loans(caller: BuyerDep, service: ServiceDep) -> LoanListResponse:
     """The caller's loan applications, newest first."""
     rows = await service.list_for_buyer(caller)
     return LoanListResponse(items=[LoanItem.from_row(r) for r in rows])
+
+
+@router.get("/{loan_id}", response_model=None)
+async def loan_detail(
+    loan_id: UUID,
+    caller: BuyerDep,
+    service: LoanDetailDep,
+) -> LoanDetailOut | JSONResponse:
+    """Full loan detail for the buyer's status/approval page (SCRUM-94): the
+    decided terms + bank name. The buyer sees only their own loan; admins any."""
+    try:
+        detail = await service.get_detail(loan_id, caller)
+    except LoanDetailNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "LOAN_NOT_FOUND", "No such loan.")
+    except NotLoanDetailViewer:
+        return _error(
+            status.HTTP_403_FORBIDDEN, "NOT_LOAN_VIEWER", "You can only view your own loan."
+        )
+    return LoanDetailOut.from_row(detail)
 
 
 @router.get("/{loan_id}/repayments", response_model=None)

@@ -26,6 +26,30 @@ class LoanRow:
 
 
 @dataclass(frozen=True)
+class LoanDetailRow:
+    """Full loan detail for the buyer's status/approval page (SCRUM-94) — the
+    decided terms (approved amount, rate, monthly instalment) plus the partner's
+    display name and whether it needs an account opened. Not on LoanRow because
+    only this read needs the decision columns + the bank join."""
+
+    id: UUID
+    buyer_id: UUID
+    transaction_id: UUID
+    status: str
+    requested_amount_kobo: int
+    approved_amount_kobo: int | None
+    interest_rate_bps: int | None
+    tenure_months: int | None
+    monthly_instalment_kobo: int | None
+    bank_name: str
+    requires_account_opening: bool
+    bank_account_opened: bool
+    bank_decision_at: datetime | None
+    created_at: datetime
+    title_released_at: datetime | None
+
+
+@dataclass(frozen=True)
 class PollableLoan:
     """A still-pending loan to poll the bank for (SCRUM-130) — the loan plus its
     partner's short_code (to resolve the adapter) and the bank reference."""
@@ -297,6 +321,48 @@ class LoanRepository:
             )
             for r in rows
         ]
+
+    async def get_detail(self, loan_id: UUID) -> LoanDetailRow | None:
+        """Full loan detail + bank display name for the buyer status/approval
+        page (SCRUM-94)."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT l.id, l.buyer_id, l.transaction_id, l.status,
+                           l.requested_amount_kobo, l.approved_amount_kobo,
+                           l.interest_rate_bps, l.tenure_months, l.monthly_instalment_kobo,
+                           l.bank_account_opened, l.bank_decision_at, l.created_at,
+                           l.title_released_at,
+                           bp.name AS bank_name,
+                           bp.requires_account_opening
+                    FROM loans l
+                    JOIN bank_partners bp ON bp.id = l.bank_partner_id
+                    WHERE l.id = :id AND l.deleted_at IS NULL
+                    """
+                ),
+                {"id": loan_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return LoanDetailRow(
+            id=row.id,
+            buyer_id=row.buyer_id,
+            transaction_id=row.transaction_id,
+            status=row.status,
+            requested_amount_kobo=row.requested_amount_kobo,
+            approved_amount_kobo=row.approved_amount_kobo,
+            interest_rate_bps=row.interest_rate_bps,
+            tenure_months=row.tenure_months,
+            monthly_instalment_kobo=row.monthly_instalment_kobo,
+            bank_name=row.bank_name,
+            requires_account_opening=row.requires_account_opening,
+            bank_account_opened=row.bank_account_opened,
+            bank_decision_at=row.bank_decision_at,
+            created_at=row.created_at,
+            title_released_at=row.title_released_at,
+        )
 
     async def get(self, loan_id: UUID) -> LoanRow | None:
         row = (
