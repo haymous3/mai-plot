@@ -27,7 +27,17 @@ from app.config import get_settings
 from app.db import dispose_engine
 
 # FK-safe order; CASCADE handles the property_listings partitions.
-_TABLES = ("audit_log", "offers", "listing_documents", "property_listings", "user_pii", "users")
+_TABLES = (
+    "audit_log",
+    "offers",
+    "listing_documents",
+    "loan_documents",
+    "loans",
+    "bank_partners",
+    "property_listings",
+    "user_pii",
+    "users",
+)
 
 
 @pytest.fixture

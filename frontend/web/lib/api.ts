@@ -29,6 +29,10 @@ export function transactionServiceUrl(): string {
   return process.env.TRANSACTION_SERVICE_URL ?? 'http://localhost:8014';
 }
 
+export function documentServiceUrl(): string {
+  return process.env.DOCUMENT_SERVICE_URL ?? 'http://localhost:8013';
+}
+
 export function loanServiceUrl(): string {
   return process.env.LOAN_SERVICE_URL ?? 'http://localhost:8015';
 }

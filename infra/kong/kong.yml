@@ -273,6 +273,23 @@ services:
   - name: document-service
     url: http://document-service:8000
     routes:
+      # Buyer loan-application documents (SCRUM-131). A regex path so this
+      # specific suffix beats loan-service's /loans prefix and lands here.
+      - name: loan-documents
+        paths:
+          - ~/loans/[^/]+/documents$
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: admin-poa
         paths:
           - /admin/poa

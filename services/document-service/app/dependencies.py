@@ -15,6 +15,8 @@ from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.document_repo import DocumentRepository
 from app.repositories.listing_repo import ListingRepository
+from app.repositories.loan_document_repo import LoanDocumentRepository
+from app.repositories.loan_repo import LoanRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
@@ -22,6 +24,7 @@ from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
 from app.services.document_view import DocumentViewService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
+from app.services.loan_document_upload import LoanDocumentService
 from app.services.ocr_dispatch import OcrDispatcher, build_ocr_dispatcher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -147,6 +150,29 @@ def get_document_upload_service(
         storage=storage,
         max_bytes=settings.max_document_bytes,
         ocr_dispatch=ocr_dispatch,
+    )
+
+
+def _loan_repo(session: SessionDep) -> LoanRepository:
+    return LoanRepository(session)
+
+
+def _loan_document_repo(session: SessionDep) -> LoanDocumentRepository:
+    return LoanDocumentRepository(session)
+
+
+def get_loan_document_service(
+    loans: Annotated[LoanRepository, Depends(_loan_repo)],
+    documents: Annotated[LoanDocumentRepository, Depends(_loan_document_repo)],
+    storage: DocumentStorageDep,
+    settings: SettingsDep,
+) -> LoanDocumentService:
+    return LoanDocumentService(
+        loans=loans,
+        documents=documents,
+        storage=storage,
+        max_bytes=settings.max_document_bytes,
+        presign_ttl_seconds=settings.doc_presign_ttl_seconds,
     )
 
 
