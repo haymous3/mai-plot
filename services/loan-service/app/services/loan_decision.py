@@ -21,7 +21,7 @@ import logging
 from enum import StrEnum
 from typing import Any
 
-from app.repositories.loan_repo import LoanRepository
+from app.repositories.loan_repo import LoanRepository, LoanRow
 from app.services.loan_notifier import LoanNotifier
 from app.services.tx_tasks import TxTaskProducer
 
@@ -73,21 +73,46 @@ class LoanDecisionWebhookService:
         if loan is None:
             logger.warning("loan.webhook.unknown_reference")  # no PII / no reference in log
             return DecisionOutcome.unknown_loan
+
+        return await self.apply_for_loan(
+            loan,
+            decision=decision,
+            approved_amount_kobo=_as_int(data.get("approved_amount_kobo")),
+            interest_rate_bps=_as_int(data.get("interest_rate_bps")),
+            tenure_months=_as_int(data.get("tenure_months")),
+            monthly_instalment_kobo=_as_int(data.get("monthly_instalment_kobo")),
+        )
+
+    async def apply_for_loan(
+        self,
+        loan: LoanRow,
+        *,
+        decision: str,
+        approved_amount_kobo: int | None,
+        interest_rate_bps: int | None,
+        tenure_months: int | None,
+        monthly_instalment_kobo: int | None,
+    ) -> DecisionOutcome:
+        """Apply a verified bank decision (approved/rejected) to a fetched loan:
+        record it (guarded), advance the deal, and notify the buyer. Shared by the
+        webhook (SCRUM-76) and the polling fallback (SCRUM-130) so both go through
+        one path. `decision` must already be approved/rejected; the terms are
+        nulled here on a rejection. Idempotent: the guarded record_decision only
+        matches a still-pending loan, so an already-decided loan (or a concurrent
+        webhook/poll) is a silent `duplicate`."""
         if loan.status not in ("submitted", "under_review", "info_required"):
-            return DecisionOutcome.duplicate  # already decided — bank retried
+            return DecisionOutcome.duplicate  # already decided
 
         approved = decision == "approved"
         updated = await self._loans.record_decision(
             loan.id,
             status="approved" if approved else "rejected",
-            approved_amount_kobo=_as_int(data.get("approved_amount_kobo")) if approved else None,
-            interest_rate_bps=_as_int(data.get("interest_rate_bps")) if approved else None,
-            tenure_months=_as_int(data.get("tenure_months")) if approved else None,
-            monthly_instalment_kobo=(
-                _as_int(data.get("monthly_instalment_kobo")) if approved else None
-            ),
+            approved_amount_kobo=approved_amount_kobo if approved else None,
+            interest_rate_bps=interest_rate_bps if approved else None,
+            tenure_months=tenure_months if approved else None,
+            monthly_instalment_kobo=monthly_instalment_kobo if approved else None,
         )
-        if not updated:  # raced with a concurrent identical webhook
+        if not updated:  # raced with a concurrent identical webhook/poll
             return DecisionOutcome.duplicate
 
         # Advance the deal loan_applied → loan_approved/loan_rejected (SCRUM-128
@@ -111,7 +136,7 @@ class LoanDecisionWebhookService:
             buyer_id=loan.buyer_id,
             loan_id=loan.id,
             decision="approved" if approved else "rejected",
-            approved_amount_kobo=_as_int(data.get("approved_amount_kobo")) if approved else None,
+            approved_amount_kobo=approved_amount_kobo if approved else None,
         )
         logger.info("loan.decision.recorded", extra={"loan_id": str(loan.id), "decision": decision})
         return DecisionOutcome.decided

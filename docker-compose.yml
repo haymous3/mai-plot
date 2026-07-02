@@ -365,6 +365,46 @@ services:
       # (SCRUM-129). false wires a no-op producer (no broker needed for dev/CI).
       TX_TASKS_ENABLED: ${TX_TASKS_ENABLED:-true}
 
+  # Background worker for loan-service (SCRUM-130) — loan-service's FIRST worker.
+  # Executes the poll-pending-loan-status beat task (reconcile a delayed/dropped
+  # loan.decision_ready webhook by polling the bank). No HTTP port.
+  loan-celery-worker:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/loan-service
+    container_name: maiplot-loan-celery-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      BANK_ADAPTER_ENABLED: ${BANK_ADAPTER_ENABLED:-false}
+      BANK_WEBHOOK_SECRET: ${BANK_WEBHOOK_SECRET:-change-me-bank-webhook-secret}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      TX_TASKS_ENABLED: ${TX_TASKS_ENABLED:-true}
+      # Off by default — the poller only runs where explicitly enabled.
+      LOAN_POLL_ENABLED: ${LOAN_POLL_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app worker --loglevel=INFO
+
+  # Beat for loan-service (SCRUM-130) — schedules the loan-status poll on the
+  # loan_poll_interval_seconds cadence.
+  loan-celery-beat:
+    <<: *fastapi-defaults
+    build:
+      context: ./services/loan-service
+    container_name: maiplot-loan-celery-beat
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      BANK_ADAPTER_ENABLED: ${BANK_ADAPTER_ENABLED:-false}
+      BANK_WEBHOOK_SECRET: ${BANK_WEBHOOK_SECRET:-change-me-bank-webhook-secret}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      TX_TASKS_ENABLED: ${TX_TASKS_ENABLED:-true}
+      LOAN_POLL_ENABLED: ${LOAN_POLL_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: celery -A app.celery_app beat --loglevel=INFO
+
   notification-service:
     <<: *fastapi-defaults
     build:
