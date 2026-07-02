@@ -181,6 +181,61 @@ export interface LoanRepayments {
   milestones: RepaymentMilestone[];
 }
 
+/** A buyer's own loan application (GET /loans/me, SCRUM-75/94). */
+export interface BuyerLoan {
+  id: string;
+  transaction_id: string;
+  bank_partner_id: string;
+  requested_amount_kobo: number;
+  tenure_months: number | null;
+  status: string;
+  bank_reference_id: string | null;
+  created_at: string;
+}
+
+export interface BuyerLoansResponse {
+  items: BuyerLoan[];
+}
+
+/** An active bank partner's loan product (GET /loans/bank-partners, SCRUM-94). */
+export interface BankPartner {
+  id: string;
+  name: string;
+  short_code: string;
+  loan_min_kobo: number;
+  loan_max_kobo: number;
+  interest_rate_bps: number;
+  min_tenure_months: number;
+  max_tenure_months: number;
+  requires_account_opening: boolean;
+}
+
+export interface BankPartnersResponse {
+  items: BankPartner[];
+}
+
+/** The buyer financing summary (GET /transactions/{id}/financing-summary,
+ * SCRUM-94). Money is BIGINT kobo. */
+export interface FinancingProperty {
+  title: string;
+  property_type: string;
+  address_text: string;
+  lga: string;
+  state: string;
+  sale_type: string;
+  asking_price_kobo: number;
+  primary_image_url: string | null;
+}
+
+export interface FinancingSummary {
+  transaction_id: string;
+  stage: string;
+  agreed_price_kobo: number;
+  max_loan_kobo: number;
+  property: FinancingProperty;
+  existing_loan: { loan_id: string; status: string } | null;
+}
+
 export interface LoginSuccess {
   ok: true;
   accessToken: string;

@@ -35,6 +35,27 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/** Human label for a loans.status value (SCRUM-94). Unknown values are
+ * title-cased as a fallback so a new backend status never renders as a raw slug. */
+const LOAN_STATUS_LABELS: Record<string, string> = {
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  info_required: 'Info required',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  disbursed: 'Disbursed',
+  repaying: 'Repaying',
+  fully_repaid: 'Fully repaid',
+  defaulted: 'Defaulted',
+};
+
+export function loanStatusLabel(status: string): string {
+  return (
+    LOAN_STATUS_LABELS[status] ??
+    status.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+  );
+}
+
 /** True when the seller holds power-of-attorney authority (gets the PoA tag). */
 export function isPowerOfAttorney(authorityType: string | null | undefined): boolean {
   return authorityType === 'power_of_attorney';
