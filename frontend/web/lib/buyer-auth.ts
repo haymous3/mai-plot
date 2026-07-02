@@ -1,17 +1,14 @@
 /**
- * Buyer session primitives (SCRUM-94).
- *
- * Separate from the admin session (lib/auth.ts): buyers get their own httpOnly
- * cookie namespace and their own login surface. Only the `buyer` role may hold a
- * buyer session — sellers/realtors will get their own surfaces later.
- *
- * NOTE: this login gate is intentionally minimal and temporary — the polished
- * auth screens come from Figma in a later ticket. It exists so the loan flow can
- * run end-to-end today.
+ * Buyer session constants (SCRUM-94), now backed by the shared non-admin session
+ * (SCRUM-132). The cookie namespace is shared across buyer/seller/realtor — these
+ * re-exports keep the SCRUM-94 buyer imports stable while the register funnel and
+ * future seller/realtor surfaces use lib/session.ts directly.
  */
 
-export const BUYER_ACCESS_COOKIE = 'mp_buyer_at';
-export const BUYER_REFRESH_COOKIE = 'mp_buyer_rt';
+export {
+  SESSION_ACCESS_COOKIE as BUYER_ACCESS_COOKIE,
+  SESSION_REFRESH_COOKIE as BUYER_REFRESH_COOKIE,
+} from './session';
 
 export function isBuyerRole(role: string | null | undefined): boolean {
   return role === 'buyer';
