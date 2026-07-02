@@ -21,6 +21,7 @@ from app.dependencies import (
     get_otp_verification_service,
     get_poa_upload_service,
     get_registration_service,
+    get_set_password_service,
     get_token_refresh_service,
 )
 from app.schemas.auth import (
@@ -37,6 +38,8 @@ from app.schemas.auth import (
     PoaUploadResponse,
     RegisterRequest,
     RegisterResponse,
+    SetPasswordRequest,
+    SetPasswordResponse,
     TokenRefreshRequest,
     TokenRefreshResponse,
     UserPublic,
@@ -75,6 +78,7 @@ from app.services.registration import (
     PhoneAlreadyRegistered,
     RegistrationService,
 )
+from app.services.set_password import SetPasswordService, WeakPassword
 from app.services.token_refresh import (
     RefreshTokenExpired,
     RefreshTokenInvalid,
@@ -189,6 +193,25 @@ async def otp_verify(
             {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
         ),
     )
+
+
+@router.post("/set-password", response_model=SetPasswordResponse)
+async def set_password(
+    body: SetPasswordRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SetPasswordService, Depends(get_set_password_service)],
+) -> SetPasswordResponse | JSONResponse:
+    """Set the caller's password after phone-OTP verification (SCRUM-94). Authed
+    by the access token issued at /auth/otp/verify."""
+    try:
+        await service.set(user_id=current_user.user_id, password=body.password)
+    except WeakPassword:
+        return _error(
+            422,
+            "PASSWORD_TOO_WEAK",
+            "Password must be at least 8 characters and include an uppercase letter and a number.",
+        )
+    return SetPasswordResponse(message="Password set")
 
 
 @router.post("/token/refresh", response_model=TokenRefreshResponse)

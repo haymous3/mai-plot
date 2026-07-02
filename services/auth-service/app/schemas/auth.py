@@ -98,6 +98,18 @@ class LoginResponse(BaseModel):
     user: UserPublic
 
 
+class SetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Composition (uppercase + digit) is enforced in SetPasswordService so the
+    # error maps to the standard envelope; the length floor is declared here.
+    password: str = Field(min_length=8, max_length=128)
+
+
+class SetPasswordResponse(BaseModel):
+    message: str
+
+
 class TokenRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
