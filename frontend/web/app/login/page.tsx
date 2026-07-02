@@ -55,6 +55,13 @@ export default function BuyerLoginPage() {
               <LoginForm />
             </Suspense>
           </div>
+
+          <p className="mt-8 text-sm text-ink-500">
+            New to Maiplot?{' '}
+            <a href="/register" className="font-medium text-emerald-deep hover:underline">
+              Create an account
+            </a>
+          </p>
         </div>
       </section>
     </main>
