@@ -28,6 +28,14 @@ class TransactionStatus:
 
 
 @dataclass(frozen=True)
+class LatestLoan:
+    """The most recent loan application on a deal (SCRUM-94)."""
+
+    loan_id: UUID
+    status: str
+
+
+@dataclass(frozen=True)
 class ListingLock:
     """The latest transaction holding a listing's 72h lock — its stage and lock
     window decide whether an under_offer listing can be reopened (SCRUM-68)."""
@@ -142,6 +150,24 @@ class TransactionRepository:
             )
         ).first()
         return row.approved_amount_kobo if row is not None else None
+
+    async def get_latest_loan(self, transaction_id: UUID) -> LatestLoan | None:
+        """The most recent loan application for a deal, if any (cross-service read
+        of loan-service's loans). Lets the financing page route a buyer who has
+        already applied to their loan's status instead of re-applying (SCRUM-94)."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT id, status FROM loans "
+                    "WHERE transaction_id = :id AND deleted_at IS NULL "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"id": transaction_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return LatestLoan(loan_id=row.id, status=row.status)
 
     async def get_status(self, transaction_id: UUID) -> TransactionStatus | None:
         """Current stage + parties + listing of a transaction (transition authz

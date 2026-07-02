@@ -19,6 +19,7 @@ from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.deposit import DepositService
 from app.services.escrow_ledger import EscrowLedgerService
+from app.services.financing_summary import FinancingSummaryService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
 from app.services.paystack_webhook import PaystackWebhookService
@@ -152,6 +153,13 @@ def get_transaction_status_service(
         listings=listings,
         platform_fee_bps=settings.platform_fee_bps,
     )
+
+
+def get_financing_summary_service(
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> FinancingSummaryService:
+    return FinancingSummaryService(transactions=transactions, listings=listings)
 
 
 async def get_current_user(

@@ -27,8 +27,30 @@ class BankPartner:
     requires_account_opening: bool
 
 
+@dataclass(frozen=True)
+class BankPartnerSummary:
+    """A partner's public loan-product details for the buyer's bank-selection
+    calculator (SCRUM-94) — includes the display name, unlike BankPartner which
+    is used only for server-side application validation."""
+
+    id: UUID
+    name: str
+    short_code: str
+    loan_min_kobo: int
+    loan_max_kobo: int
+    interest_rate_bps: int
+    min_tenure_months: int
+    max_tenure_months: int
+    requires_account_opening: bool
+
+
 _COLUMNS = (
     "id, short_code, loan_min_kobo, loan_max_kobo, interest_rate_bps, "
+    "min_tenure_months, max_tenure_months, requires_account_opening"
+)
+
+_SUMMARY_COLUMNS = (
+    "id, name, short_code, loan_min_kobo, loan_max_kobo, interest_rate_bps, "
     "min_tenure_months, max_tenure_months, requires_account_opening"
 )
 
@@ -48,6 +70,32 @@ class BankPartnerRepository:
             )
         ).first()
         return self._to_row(row) if row is not None else None
+
+    async def list_active(self) -> list[BankPartnerSummary]:
+        """Every active partner's loan-product details, for the buyer's
+        bank-selection calculator (SCRUM-94). Alphabetical by name."""
+        rows = (
+            await self._session.execute(
+                text(
+                    f"SELECT {_SUMMARY_COLUMNS} FROM bank_partners "
+                    "WHERE is_active = TRUE AND deleted_at IS NULL ORDER BY name"
+                )
+            )
+        ).all()
+        return [
+            BankPartnerSummary(
+                id=r.id,
+                name=r.name,
+                short_code=r.short_code,
+                loan_min_kobo=r.loan_min_kobo,
+                loan_max_kobo=r.loan_max_kobo,
+                interest_rate_bps=r.interest_rate_bps,
+                min_tenure_months=r.min_tenure_months,
+                max_tenure_months=r.max_tenure_months,
+                requires_account_opening=r.requires_account_opening,
+            )
+            for r in rows
+        ]
 
     @staticmethod
     def _to_row(r: object) -> BankPartner:

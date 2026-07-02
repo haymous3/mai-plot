@@ -176,7 +176,7 @@ def seed_loan(db_engine: Engine) -> Callable[..., UUID]:
 
 @pytest.fixture
 def seed_bank_partner(db_engine: Engine) -> Callable[..., UUID]:
-    def _seed(*, is_active: bool = True) -> UUID:
+    def _seed(*, is_active: bool = True, name: str = "Test Bank") -> UUID:
         pid = uuid4()
         with db_engine.begin() as conn:
             conn.execute(
@@ -185,10 +185,15 @@ def seed_bank_partner(db_engine: Engine) -> Callable[..., UUID]:
                     INSERT INTO bank_partners
                         (id, name, short_code, loan_min_kobo, loan_max_kobo,
                          interest_rate_bps, min_tenure_months, max_tenure_months, is_active)
-                    VALUES (:id, 'Test Bank', :code, 1000000, 500000000, 2200, 6, 36, :active)
+                    VALUES (:id, :name, :code, 1000000, 500000000, 2200, 6, 36, :active)
                     """
                 ),
-                {"id": pid, "code": f"BANK{uuid4().hex[:6].upper()}", "active": is_active},
+                {
+                    "id": pid,
+                    "name": name,
+                    "code": f"BANK{uuid4().hex[:6].upper()}",
+                    "active": is_active,
+                },
             )
         return pid
 

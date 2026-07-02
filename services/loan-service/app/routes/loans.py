@@ -9,13 +9,16 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_bank_partner_query_service,
     get_current_user,
     get_loan_application_service,
     get_repayment_query_service,
 )
+from app.schemas.bank_partner import BankPartnerItem, BankPartnersResponse
 from app.schemas.loan import LoanApplyRequest, LoanApplyResponse, LoanItem, LoanListResponse
 from app.schemas.repayment import LoanRepaymentsOut
 from app.security import CurrentUser
+from app.services.bank_partner_query import BankPartnerQueryService
 from app.services.loan_application import (
     BankPartnerUnavailable,
     DailyLimitReached,
@@ -37,6 +40,7 @@ router = APIRouter(prefix="/loans", tags=["loans"])
 BuyerDep = Annotated[CurrentUser, Depends(get_current_user)]
 ServiceDep = Annotated[LoanApplicationService, Depends(get_loan_application_service)]
 RepaymentsDep = Annotated[RepaymentQueryService, Depends(get_repayment_query_service)]
+PartnersDep = Annotated[BankPartnerQueryService, Depends(get_bank_partner_query_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -104,6 +108,15 @@ async def apply_for_loan(
         bank_reference_id=result.bank_reference_id,
         requested_amount_kobo=result.requested_amount_kobo,
     )
+
+
+@router.get("/bank-partners", response_model=BankPartnersResponse)
+async def bank_partners(caller: BuyerDep, service: PartnersDep) -> BankPartnersResponse:
+    """Active bank partners and their loan-product details, for the buyer's
+    financing calculator (SCRUM-94). Read-only; auth-gated so only signed-in
+    buyers see partner terms."""
+    partners = await service.list_active()
+    return BankPartnersResponse(items=[BankPartnerItem.from_summary(p) for p in partners])
 
 
 @router.get("/me", response_model=LoanListResponse)

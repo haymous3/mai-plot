@@ -15,6 +15,7 @@ from app.repositories.loan_repo import LoanRepository
 from app.repositories.repayment_repo import RepaymentMilestoneRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.bank_partner_query import BankPartnerQueryService
 from app.services.bank_webhook import BankWebhookDispatcher
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.loan_application import LoanApplicationService
@@ -63,6 +64,12 @@ def get_bank_registry(settings: SettingsDep) -> BankAdapterRegistry:
             base_delay=settings.bank_retry_base_delay_seconds,
         )
     return _registry
+
+
+def get_bank_partner_query_service(
+    partners: Annotated[BankPartnerRepository, Depends(_bank_partner_repo)],
+) -> BankPartnerQueryService:
+    return BankPartnerQueryService(partners=partners)
 
 
 def get_loan_application_service(
