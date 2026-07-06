@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
-// Onboarding: intro carousel → role select → phone → OTP → password (SCRUM-132).
-// Mobile-styled Figma built as a responsive web funnel.
+// Onboarding: intro carousel → role select → phone → OTP → password → personal
+// details (SCRUM-132). Mobile-styled Figma built as a responsive web funnel.
 
 const SLIDES = [
   {
@@ -36,7 +36,7 @@ const REGISTER_ERRORS: Record<string, string> = {
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step = 'intro' | 'role' | 'phone' | 'otp' | 'password';
+type Step = 'intro' | 'role' | 'phone' | 'otp' | 'password' | 'personal';
 
 export function RegisterFlow() {
   const router = useRouter();
@@ -150,8 +150,7 @@ export function RegisterFlow() {
                   body: JSON.stringify({ password }),
                 });
                 if (resp.ok) {
-                  router.replace(redirect);
-                  router.refresh();
+                  setStep('personal');
                   return;
                 }
                 const b = (await resp.json()) as { error_code?: string };
@@ -168,13 +167,49 @@ export function RegisterFlow() {
             }}
           />
         )}
+        {step === 'personal' && (
+          <PersonalDetailsStep
+            busy={busy}
+            error={error}
+            onSubmit={async (fullName, email) => {
+              setError(null);
+              setBusy(true);
+              try {
+                const resp = await fetch('/api/auth/profile', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ full_name: fullName, email: email || null }),
+                });
+                if (resp.ok) {
+                  router.replace(redirect);
+                  router.refresh();
+                  return;
+                }
+                const b = (await resp.json()) as { error_code?: string };
+                setError(
+                  b.error_code === 'EMAIL_ALREADY_IN_USE'
+                    ? 'That email is already linked to another account.'
+                    : b.error_code === 'FULL_NAME_REQUIRED'
+                      ? 'Please enter your full name.'
+                      : 'Could not save your details. Please retry.',
+                );
+              } catch {
+                setError('Could not reach the server. Please try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        )}
 
-        <p className="mt-8 text-center text-sm text-ink-500">
-          Already have an account?{' '}
-          <Link href="/login" className="font-medium text-emerald-deep hover:underline">
-            Sign in
-          </Link>
-        </p>
+        {step !== 'personal' && (
+          <p className="mt-8 text-center text-sm text-ink-500">
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-emerald-deep hover:underline">
+              Sign in
+            </Link>
+          </p>
+        )}
       </div>
     </main>
   );
@@ -481,5 +516,70 @@ function Requirement({ ok, children }: { ok: boolean; children: React.ReactNode 
       <span aria-hidden>{ok ? '✓' : '○'}</span>
       {children}
     </p>
+  );
+}
+
+function PersonalDetailsStep({
+  busy,
+  error,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  onSubmit: (fullName: string, email: string) => void;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const canSubmit = fullName.trim().length > 0;
+
+  return (
+    <div>
+      <h1 className="text-center font-display text-3xl text-ink-900">Personal details</h1>
+      <p className="mt-2 text-center text-sm text-ink-500">Tell us a bit about yourself</p>
+
+      <div className="mx-auto mt-8 flex h-20 w-20 items-center justify-center rounded-full bg-bone text-emerald-deep">
+        <span aria-hidden className="text-2xl">
+          {fullName.trim() ? fullName.trim()[0].toUpperCase() : '👤'}
+        </span>
+      </div>
+
+      <label className="mt-8 block text-sm font-medium text-ink-700">
+        Full Name <span className="text-red-500">*</span>
+      </label>
+      <input
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        placeholder="John Doe"
+        autoComplete="name"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">
+        Email Address <span className="text-ink-500">(Optional)</span>
+      </label>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="john@example.com"
+        autoComplete="email"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      <p className="mt-1.5 text-xs text-ink-500">You&rsquo;ll use your email to sign in.</p>
+
+      {error && (
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={busy || !canSubmit}
+        onClick={() => onSubmit(fullName.trim(), email.trim())}
+        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? 'Saving…' : 'Continue'}
+      </button>
+    </div>
   );
 }

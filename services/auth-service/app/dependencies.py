@@ -37,6 +37,7 @@ from app.services.poa_notifier import PoaNotifier, build_poa_notifier
 from app.services.poa_queue import PoaQueueService
 from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
+from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
 from app.services.set_password import SetPasswordService
@@ -200,6 +201,12 @@ def get_set_password_service(
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
 ) -> SetPasswordService:
     return SetPasswordService(credentials=credentials)
+
+
+def get_profile_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+) -> ProfileService:
+    return ProfileService(users=users)
 
 
 def get_otp_verification_service(
