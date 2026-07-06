@@ -150,6 +150,29 @@ class UserRepository:
         await self._session.flush()
         return user.id
 
+    async def email_taken_by_other(self, email: str, *, user_id: UUID) -> bool:
+        """True if a live user OTHER than user_id already owns this email.
+        Pre-check for the profile update — mirrors the phone/BVN uniqueness
+        pre-checks; the unique constraint on users.email is the backstop."""
+        stmt = select(User.id).where(
+            User.email == email,
+            User.id != user_id,
+            User.deleted_at.is_(None),
+        )
+        return (await self._session.execute(stmt)).first() is not None
+
+    async def update_profile(self, user_id: UUID, *, full_name: str, email: str | None) -> None:
+        """Set the caller's display name (user_pii) and, when supplied, email
+        (users). Only touches the caller's own rows; email is left unchanged
+        when None so a re-submit without email does not clear an existing one."""
+        pii = await self._session.get(UserPii, user_id)
+        if pii is not None:
+            pii.full_name = full_name
+        if email is not None:
+            user = await self._session.get(User, user_id)
+            if user is not None:
+                user.email = email
+
     async def mark_phone_verified(self, user_id: UUID) -> None:
         user = await self._session.get(User, user_id)
         if user is None:

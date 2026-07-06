@@ -20,6 +20,7 @@ from app.dependencies import (
     get_nin_verification_service,
     get_otp_verification_service,
     get_poa_upload_service,
+    get_profile_service,
     get_registration_service,
     get_set_password_service,
     get_token_refresh_service,
@@ -36,6 +37,8 @@ from app.schemas.auth import (
     OtpVerifyRequest,
     OtpVerifyResponse,
     PoaUploadResponse,
+    ProfileUpdateRequest,
+    ProfileUpdateResponse,
     RegisterRequest,
     RegisterResponse,
     SetPasswordRequest,
@@ -72,6 +75,7 @@ from app.services.poa_upload import (
     PoaStorageUnavailable,
     PoaUploadService,
 )
+from app.services.profile import EmailAlreadyInUse, InvalidFullName, ProfileService
 from app.services.registration import (
     OtpDispatchFailed,
     OtpRateLimited,
@@ -212,6 +216,28 @@ async def set_password(
             "Password must be at least 8 characters and include an uppercase letter and a number.",
         )
     return SetPasswordResponse(message="Password set")
+
+
+@router.post("/profile", response_model=ProfileUpdateResponse)
+async def update_profile(
+    body: ProfileUpdateRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ProfileService, Depends(get_profile_service)],
+) -> ProfileUpdateResponse | JSONResponse:
+    """Save the caller's personal details (full name + optional email) from the
+    onboarding "Personal details" screen (SCRUM-132). Authed by the access token
+    issued at /auth/otp/verify."""
+    try:
+        await service.update(
+            user_id=current_user.user_id, full_name=body.full_name, email=body.email
+        )
+    except InvalidFullName:
+        return _error(422, "FULL_NAME_REQUIRED", "Please enter your full name.")
+    except EmailAlreadyInUse:
+        return _error(
+            409, "EMAIL_ALREADY_IN_USE", "That email is already linked to another account."
+        )
+    return ProfileUpdateResponse(message="Profile updated")
 
 
 @router.post("/token/refresh", response_model=TokenRefreshResponse)

@@ -110,6 +110,21 @@ class SetPasswordResponse(BaseModel):
     message: str
 
 
+class ProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Collected on the "Personal details" onboarding screen (SCRUM-132), after
+    # OTP verification. full_name is required by the design; email is optional
+    # (it is what /auth/login authenticates on, so users who skip it here can
+    # add it later). Blank-after-strip full_name is rejected in ProfileService.
+    full_name: str = Field(min_length=1, max_length=120)
+    email: str | None = Field(default=None, max_length=254)
+
+
+class ProfileUpdateResponse(BaseModel):
+    message: str
+
+
 class TokenRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
