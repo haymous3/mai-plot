@@ -16,6 +16,7 @@ from app.adapters.search_index import SearchParams
 from app.dependencies import (
     get_current_user,
     get_current_user_optional,
+    get_express_interest_service,
     get_listing_create_service,
     get_listing_detail_service,
     get_listing_query_service,
@@ -28,6 +29,8 @@ from app.repositories.listing_repo import FeedFilters
 from app.schemas.listing import (
     CreateListingRequest,
     CreateListingResponse,
+    ExpressInterestRequest,
+    ExpressInterestResponse,
     FeedResponse,
     ListingDetailResponse,
     MediaType,
@@ -39,6 +42,7 @@ from app.schemas.listing import (
     UpdateListingResponse,
 )
 from app.security import CurrentUser
+from app.services.express_interest import ExpressInterestService
 from app.services.listing_create import (
     BvnRequired,
     CreateListingInput,
@@ -245,6 +249,21 @@ async def unsave_listing(
     """Remove a listing from the caller's saved list (SCRUM-95). Idempotent."""
     await service.unsave(buyer_id=current_user.user_id, listing_id=listing_id)
     return SavedResponse(listing_id=listing_id, saved=False)
+
+
+@router.post("/{listing_id}/interest", response_model=ExpressInterestResponse)
+async def express_interest(
+    listing_id: UUID,
+    body: ExpressInterestRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ExpressInterestService, Depends(get_express_interest_service)],
+) -> ExpressInterestResponse:
+    """Express interest in a listing (SCRUM-95) — lighter than an offer.
+    Idempotent; the first interest bumps the listing's interest_count."""
+    created = await service.express(
+        buyer_id=current_user.user_id, listing_id=listing_id, message=body.message
+    )
+    return ExpressInterestResponse(listing_id=listing_id, new_interest=created)
 
 
 @router.patch("/{listing_id}", response_model=UpdateListingResponse)

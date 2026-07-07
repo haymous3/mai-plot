@@ -3,10 +3,17 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { Carousel } from './carousel';
-import type { ListingDetail, ListingDocumentsResponse, FeedResponse } from '@/lib/api';
-import { documentServiceUrl, listingServiceUrl } from '@/lib/api';
+import { PropertyActions } from './property-actions';
+import type {
+  DealsResponse,
+  FeedResponse,
+  ListingDetail,
+  ListingDocumentsResponse,
+} from '@/lib/api';
+import { documentServiceUrl, listingServiceUrl, transactionServiceUrl } from '@/lib/api';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
+import { isDealActive } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Property · Maiplot' };
@@ -36,12 +43,13 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 }
 
 export default async function ListingDetailPage({ params }: { params: { id: string } }) {
-  const [detailRes, docsRes, savedRes] = await Promise.all([
+  const [detailRes, docsRes, savedRes, dealsRes] = await Promise.all([
     buyerBackendGet<ListingDetail>(`${listingServiceUrl()}/listings/${params.id}`),
     buyerBackendGet<ListingDocumentsResponse>(
       `${documentServiceUrl()}/listings/${params.id}/documents`,
     ),
     buyerBackendGet<FeedResponse>(`${listingServiceUrl()}/listings/saved`),
+    buyerBackendGet<DealsResponse>(`${transactionServiceUrl()}/transactions`),
   ]);
 
   if (!detailRes.ok) {
@@ -52,6 +60,13 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
   const listing = detailRes.data;
   const docs = docsRes.ok ? docsRes.data.documents : [];
   const isSaved = savedRes.ok ? savedRes.data.data.some((i) => i.id === listing.id) : false;
+  // An accepted deal on this listing enables "Make a deposit".
+  const matchingDeal = (dealsRes.ok ? dealsRes.data.data : []).find(
+    (d) => d.listing_id === listing.id && isDealActive(d.stage),
+  );
+  const deal = matchingDeal
+    ? { transactionId: matchingDeal.transaction_id, agreedPriceKobo: matchingDeal.agreed_price_kobo }
+    : null;
   const left = daysLeft(listing.urgency_expires_at);
   const isPoa = listing.seller.authority_type === 'power_of_attorney';
 
@@ -236,6 +251,12 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
           </Card>
         </aside>
       </div>
+
+      <PropertyActions
+        listingId={listing.id}
+        askingPriceKobo={listing.asking_price_kobo}
+        deal={deal}
+      />
     </main>
   );
 }
