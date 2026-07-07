@@ -16,6 +16,7 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository
 from app.repositories.payment_repo import PaymentEventRepository
 from app.repositories.transaction_repo import TransactionRepository
+from app.repositories.wallet_repo import WalletRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.buyer_deals import BuyerDealsService
 from app.services.deposit import DepositService
@@ -26,6 +27,7 @@ from app.services.offer_service import OfferService
 from app.services.paystack_webhook import PaystackWebhookService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
 from app.services.transaction_status import TransactionStatusService
+from app.services.wallet import WalletService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -167,6 +169,16 @@ def get_buyer_deals_service(
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
 ) -> BuyerDealsService:
     return BuyerDealsService(transactions=transactions)
+
+
+def _wallet_repo(session: SessionDep) -> WalletRepository:
+    return WalletRepository(session)
+
+
+def get_wallet_service(
+    wallet: Annotated[WalletRepository, Depends(_wallet_repo)],
+) -> WalletService:
+    return WalletService(wallet=wallet)
 
 
 async def get_current_user(

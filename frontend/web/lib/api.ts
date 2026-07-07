@@ -128,6 +128,39 @@ export interface FinancingSummary {
   existing_loan: { loan_id: string; status: string } | null;
 }
 
+export interface WalletActivePayment {
+  transaction_id: string;
+  listing_id: string;
+  property_title: string | null;
+  paid_kobo: number;
+  total_kobo: number;
+  stage: string;
+}
+
+export interface WalletSummary {
+  in_escrow_kobo: number;
+  escrow_deal_count: number;
+  total_invested_kobo: number;
+  active_property_count: number;
+  active_payments: WalletActivePayment[];
+}
+
+export interface WalletPayment {
+  id: string;
+  payment_type: string;
+  amount_kobo: number;
+  status: string;
+  provider: string;
+  provider_reference: string | null;
+  transaction_id: string | null;
+  property_title: string | null;
+  created_at: string;
+}
+
+export interface WalletPaymentsResponse {
+  data: WalletPayment[];
+}
+
 export interface ListingDocumentMeta {
   document_type: string;
   verification_status: string;
