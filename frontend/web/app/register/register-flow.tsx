@@ -44,6 +44,7 @@ type Step =
   | 'password'
   | 'personal'
   | 'realtor-kyc'
+  | 'seller-kyc'
   | 'success';
 
 export function RegisterFlow() {
@@ -191,10 +192,15 @@ export function RegisterFlow() {
                 });
                 if (resp.ok) {
                   setFirstName(fullName.trim().split(/\s+/)[0] ?? '');
-                  // Realtors complete a professional profile before the success
-                  // screen; buyers/sellers go straight through (seller KYC is a
-                  // later step).
-                  setStep(role === 'realtor' ? 'realtor-kyc' : 'success');
+                  // Sellers and realtors complete a role verification step
+                  // before the success screen; buyers go straight through.
+                  setStep(
+                    role === 'realtor'
+                      ? 'realtor-kyc'
+                      : role === 'seller'
+                        ? 'seller-kyc'
+                        : 'success',
+                  );
                   return;
                 }
                 const b = (await resp.json()) as { error_code?: string };
@@ -257,6 +263,67 @@ export function RegisterFlow() {
           />
         )}
 
+        {step === 'seller-kyc' && (
+          <SellerVerificationStep
+            busy={busy}
+            error={error}
+            onSubmit={async ({ nin, authority, poaFile }) => {
+              setError(null);
+              setBusy(true);
+              try {
+                const authResp = await fetch('/api/auth/seller/authority', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ authority_type: authority }),
+                });
+                if (!authResp.ok) {
+                  setError('Could not save your selling authority. Please retry.');
+                  return;
+                }
+                if (authority === 'owner') {
+                  const ninResp = await fetch('/api/auth/seller/nin', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ nin }),
+                  });
+                  if (!ninResp.ok) {
+                    const b = (await ninResp.json()) as { error_code?: string };
+                    setError(
+                      b.error_code === 'NIN_FORMAT_INVALID'
+                        ? 'Enter a valid 11-digit NIN.'
+                        : b.error_code === 'NIN_ALREADY_VERIFIED'
+                          ? 'This NIN is already verified.'
+                          : 'Could not verify your NIN. Please retry.',
+                    );
+                    return;
+                  }
+                } else if (poaFile) {
+                  const form = new FormData();
+                  form.append('file', poaFile);
+                  const poaResp = await fetch('/api/auth/seller/poa', {
+                    method: 'POST',
+                    body: form,
+                  });
+                  if (!poaResp.ok) {
+                    const b = (await poaResp.json()) as { error_code?: string };
+                    setError(
+                      b.error_code === 'POA_ALREADY_SUBMITTED'
+                        ? 'A Power of Attorney document is already on file.'
+                        : 'Could not upload your document. Please retry.',
+                    );
+                    return;
+                  }
+                }
+                setStep('success');
+              } catch {
+                setError('Could not reach the server. Please try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        )}
+
         {step === 'success' && (
           <SuccessStep
             role={role}
@@ -268,8 +335,11 @@ export function RegisterFlow() {
           />
         )}
 
-        {step !== 'personal' && step !== 'realtor-kyc' && step !== 'success' && (
-          <p className="mt-8 text-center text-sm text-ink-500">
+        {step !== 'personal' &&
+          step !== 'realtor-kyc' &&
+          step !== 'seller-kyc' &&
+          step !== 'success' && (
+            <p className="mt-8 text-center text-sm text-ink-500">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-emerald-deep hover:underline">
               Sign in
@@ -800,6 +870,114 @@ function RealtorProfileStep({
         className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Submitting…' : 'Complete Profile'}
+      </button>
+    </div>
+  );
+}
+
+type SellerAuthority = 'owner' | 'power_of_attorney';
+
+function SellerVerificationStep({
+  busy,
+  error,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  onSubmit: (v: { nin: string; authority: SellerAuthority; poaFile: File | null }) => void;
+}) {
+  const [nin, setNin] = useState('');
+  const [authority, setAuthority] = useState<SellerAuthority | ''>('');
+  const [poaFile, setPoaFile] = useState<File | null>(null);
+  const isPoa = authority === 'power_of_attorney';
+  const canSubmit =
+    nin.trim().length > 0 && authority !== '' && (!isPoa || poaFile !== null);
+
+  const options: { value: SellerAuthority; title: string; desc: string }[] = [
+    { value: 'owner', title: 'Property Owner', desc: 'I own the property' },
+    { value: 'power_of_attorney', title: 'Power of Attorney', desc: 'Authorized to sell' },
+  ];
+
+  return (
+    <div>
+      <h1 className="text-center font-display text-3xl text-ink-900">Seller Verification</h1>
+      <p className="mt-2 text-center text-sm text-ink-500">
+        Required for property listing authorization
+      </p>
+
+      <label className="mt-8 block text-sm font-medium text-ink-700">
+        NIN <span className="text-red-500">*</span>
+      </label>
+      <input
+        inputMode="numeric"
+        value={nin}
+        onChange={(e) => setNin(e.target.value.replace(/\D/g, '').slice(0, 11))}
+        placeholder="12345678901"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-500">
+        <span aria-hidden>🛡</span> Your data is encrypted and used only for verification
+      </p>
+
+      <p className="mt-5 text-sm font-medium text-ink-700">
+        Selling Authority <span className="text-red-500">*</span>
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        {options.map((o) => {
+          const active = authority === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setAuthority(o.value)}
+              className={`rounded-xl border px-4 py-3 text-left transition ${
+                active ? 'border-emerald-deep bg-emerald-deep/5' : 'border-ink-300/50 hover:border-ink-500'
+              }`}
+            >
+              <span className="block text-sm font-medium text-ink-900">{o.title}</span>
+              <span className="mt-0.5 block text-xs text-ink-500">{o.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {isPoa && (
+        <>
+          <label className="mt-5 block text-sm font-medium text-ink-700">
+            Upload Power of Attorney <span className="text-red-500">*</span>
+          </label>
+          <label className="mt-1.5 flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed border-ink-300/70 px-4 py-8 text-center transition hover:border-emerald-accent">
+            <span aria-hidden className="text-2xl text-ink-500">
+              ⬆
+            </span>
+            <span className="text-sm font-medium text-ink-900">
+              {poaFile ? poaFile.name : 'Upload document'}
+            </span>
+            <span className="text-xs text-ink-500">PDF or JPEG (max 5MB)</span>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg"
+              className="hidden"
+              onChange={(e) => setPoaFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={busy || !canSubmit}
+        onClick={() =>
+          authority && onSubmit({ nin: nin.trim(), authority, poaFile })
+        }
+        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? 'Verifying…' : 'Complete Verification'}
       </button>
     </div>
   );

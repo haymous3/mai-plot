@@ -22,6 +22,7 @@ from app.dependencies import (
     get_poa_upload_service,
     get_profile_service,
     get_registration_service,
+    get_seller_authority_service,
     get_set_password_service,
     get_token_refresh_service,
 )
@@ -41,6 +42,8 @@ from app.schemas.auth import (
     ProfileUpdateResponse,
     RegisterRequest,
     RegisterResponse,
+    SellerAuthorityRequest,
+    SellerAuthorityResponse,
     SetPasswordRequest,
     SetPasswordResponse,
     TokenRefreshRequest,
@@ -82,6 +85,7 @@ from app.services.registration import (
     PhoneAlreadyRegistered,
     RegistrationService,
 )
+from app.services.seller_authority import NotSeller, SellerAuthorityService
 from app.services.set_password import SetPasswordService, WeakPassword
 from app.services.token_refresh import (
     RefreshTokenExpired,
@@ -238,6 +242,27 @@ async def update_profile(
             409, "EMAIL_ALREADY_IN_USE", "That email is already linked to another account."
         )
     return ProfileUpdateResponse(message="Profile updated")
+
+
+@router.post("/seller/authority", response_model=SellerAuthorityResponse)
+async def declare_seller_authority(
+    body: SellerAuthorityRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerAuthorityService, Depends(get_seller_authority_service)],
+) -> SellerAuthorityResponse | JSONResponse:
+    """Declare the caller's selling authority on the "Seller Verification" screen
+    (SCRUM-132). A power_of_attorney declaration enters the PoA review queue and
+    gates the subsequent PoA-document upload; an owner may then verify a NIN.
+    Authed by the access token issued at /auth/otp/verify."""
+    try:
+        await service.set(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            authority_type=body.authority_type,
+        )
+    except NotSeller:
+        return _error(403, "SELLER_ROLE_REQUIRED", "Only sellers can declare a selling authority.")
+    return SellerAuthorityResponse(message="Authority declared", authority_type=body.authority_type)
 
 
 @router.post("/token/refresh", response_model=TokenRefreshResponse)

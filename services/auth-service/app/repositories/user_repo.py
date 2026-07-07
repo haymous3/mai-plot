@@ -173,6 +173,21 @@ class UserRepository:
             if user is not None:
                 user.email = email
 
+    async def set_seller_authority(self, user_id: UUID, *, authority_type: str) -> None:
+        """Declare a seller's selling authority after registration (SCRUM-132).
+
+        A power_of_attorney seller enters the PoA review queue (poa_verified_status
+        'pending', which gates PoA-document upload); an owner is 'not_applicable'.
+        Mirrors the create_with_pii logic so a deferred declaration behaves exactly
+        like declaring it at registration."""
+        user = await self._session.get(User, user_id)
+        if user is None:
+            return
+        user.seller_authority_type = authority_type
+        user.poa_verified_status = (
+            "pending" if authority_type == "power_of_attorney" else "not_applicable"
+        )
+
     async def mark_phone_verified(self, user_id: UUID) -> None:
         user = await self._session.get(User, user_id)
         if user is None:

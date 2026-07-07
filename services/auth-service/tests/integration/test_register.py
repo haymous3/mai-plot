@@ -69,20 +69,21 @@ async def test_register_buyer_happy_path(
 
 
 @pytest.mark.asyncio
-async def test_register_seller_requires_authority_type(
+async def test_register_seller_without_authority_is_allowed(
     clean_auth_tables: None,
     disable_rate_limit: None,
     termii_fake: InMemoryTermiiClient,
     http_client: AsyncClient,
 ) -> None:
+    # SCRUM-132: authority is now declared later on the Seller Verification
+    # screen, so a seller may register without it (and still gets an OTP).
     response = await http_client.post(
         "/auth/register",
         json={"phone": "08012345678", "role": "seller"},
     )
 
-    assert response.status_code == 422
-    assert_error_envelope(response.json(), "VALIDATION_ERROR")
-    assert termii_fake.sent == []
+    assert response.status_code == 201, response.text
+    assert len(termii_fake.sent) == 1
 
 
 @pytest.mark.asyncio

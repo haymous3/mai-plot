@@ -40,6 +40,7 @@ from app.services.poa_upload import PoaUploadService
 from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
+from app.services.seller_authority import SellerAuthorityService
 from app.services.set_password import SetPasswordService
 from app.services.token_refresh import TokenRefreshService
 
@@ -207,6 +208,12 @@ def get_profile_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
 ) -> ProfileService:
     return ProfileService(users=users)
+
+
+def get_seller_authority_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+) -> SellerAuthorityService:
+    return SellerAuthorityService(users=users)
 
 
 def get_otp_verification_service(
