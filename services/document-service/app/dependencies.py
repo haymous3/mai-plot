@@ -24,6 +24,7 @@ from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
 from app.services.document_view import DocumentViewService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
+from app.services.listing_document_list import ListingDocumentListService
 from app.services.loan_document_upload import LoanDocumentService
 from app.services.ocr_dispatch import OcrDispatcher, build_ocr_dispatcher
 
@@ -116,6 +117,12 @@ def get_admin_queue_service(
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
 ) -> AdminQueueService:
     return AdminQueueService(documents=documents)
+
+
+def get_listing_document_list_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+) -> ListingDocumentListService:
+    return ListingDocumentListService(documents=documents)
 
 
 def get_document_review_service(

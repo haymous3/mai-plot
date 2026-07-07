@@ -70,6 +70,40 @@ export interface FeedResponse {
   pagination: Pagination;
 }
 
+export interface ListingDetail {
+  id: string;
+  seller: {
+    id: string;
+    authority_type: string | null;
+    poa_owner_name: string | null;
+    trust_score: number | null;
+  };
+  title: string;
+  property_type: string;
+  description: string | null;
+  address_text: string;
+  location: { lat: number; lng: number };
+  size_sqm: string | null;
+  asking_price_kobo: number;
+  sale_type: string;
+  urgency_tag: string | null;
+  urgency_expires_at: string | null;
+  status: string;
+  media: { type: string; url: string; sort_order: number }[];
+  loan_eligibility_kobo: number | null;
+  view_count: number;
+  interest_count: number;
+}
+
+export interface ListingDocumentMeta {
+  document_type: string;
+  verification_status: string;
+}
+
+export interface ListingDocumentsResponse {
+  documents: ListingDocumentMeta[];
+}
+
 /** A row in the admin listing-review queue (GET /admin/listings/queue). */
 export interface AdminQueueItem {
   id: string;

@@ -95,6 +95,7 @@ class ListingDetailService:
                 poa_owner_name=seller.poa_owner_name if seller else None,
             ),
             title=row.title,
+            property_type=row.property_type,
             description=row.description,
             address_text=row.address_text,
             location=GeoPoint(lat=row.lat, lng=row.lng),

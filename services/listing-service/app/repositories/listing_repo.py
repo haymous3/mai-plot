@@ -114,6 +114,7 @@ class DetailRow:
     id: UUID
     seller_id: UUID
     title: str
+    property_type: str
     description: str | None
     address_text: str
     lat: float
@@ -250,7 +251,8 @@ class ListingRepository:
             await self._session.execute(
                 text(
                     """
-                    SELECT pl.id, pl.seller_id, pl.title, pl.description, pl.address_text,
+                    SELECT pl.id, pl.seller_id, pl.title, pl.property_type, pl.description,
+                           pl.address_text,
                            ST_Y(pl.location::geometry) AS lat, ST_X(pl.location::geometry) AS lng,
                            pl.size_sqm, pl.asking_price_kobo, pl.sale_type, pl.urgency_tag,
                            pl.expires_at, pl.status, pl.view_count, pl.interest_count
@@ -267,6 +269,7 @@ class ListingRepository:
             id=row.id,
             seller_id=row.seller_id,
             title=row.title,
+            property_type=row.property_type,
             description=row.description,
             address_text=row.address_text,
             lat=row.lat,

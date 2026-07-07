@@ -34,6 +34,14 @@ class QueueRow:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class DocMetaRow:
+    """Public verification metadata for a listing's documents — no s3_key/url."""
+
+    document_type: str
+    verification_status: str
+
+
 class DocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -55,6 +63,28 @@ class DocumentRepository:
         ).scalar_one()
         assert isinstance(document_id, UUID)
         return document_id
+
+    async def list_for_listing(self, listing_id: UUID) -> list[DocMetaRow]:
+        """A listing's documents' verification metadata (type + status only),
+        for the buyer detail page's trust panel. Never returns s3_key/url — the
+        file itself is served only via the watermarked pre-signed view route."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT document_type, verification_status
+                    FROM listing_documents
+                    WHERE listing_id = :lid
+                    ORDER BY created_at
+                    """
+                ),
+                {"lid": listing_id},
+            )
+        ).all()
+        return [
+            DocMetaRow(document_type=r.document_type, verification_status=r.verification_status)
+            for r in rows
+        ]
 
     async def get_ocr_source(self, document_id: UUID) -> str | None:
         """The S3 key OCR should read, or None if the document is gone."""
