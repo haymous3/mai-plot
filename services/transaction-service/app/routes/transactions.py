@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_buyer_deals_service,
     get_current_user,
     get_financing_summary_service,
     get_offer_service,
@@ -22,8 +23,9 @@ from app.dependencies import (
 from app.repositories.offer_repo import OfferRow
 from app.schemas.financing import FinancingSummaryOut
 from app.schemas.offer import CounterRequest, CreateOfferRequest, OfferResponse, RespondRequest
-from app.schemas.transaction import StatusChangeRequest, StatusResponse
+from app.schemas.transaction import DealsResponse, StatusChangeRequest, StatusResponse
 from app.security import CurrentUser
+from app.services.buyer_deals import BuyerDealsService
 from app.services.financing_summary import (
     FinancingSummaryService,
     NotTransactionBuyer,
@@ -79,6 +81,16 @@ CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
 StatusServiceDep = Annotated[TransactionStatusService, Depends(get_transaction_status_service)]
 FinancingServiceDep = Annotated[FinancingSummaryService, Depends(get_financing_summary_service)]
+
+
+@router.get("", response_model=DealsResponse)
+async def list_my_deals(
+    caller: CurrentUserDep,
+    service: Annotated[BuyerDealsService, Depends(get_buyer_deals_service)],
+) -> DealsResponse:
+    """The caller's deals for the "Your Active Deals" surface (SCRUM-95),
+    newest first."""
+    return await service.list_for_buyer(caller.user_id)
 
 
 @router.get("/{transaction_id}/financing-summary", response_model=None)

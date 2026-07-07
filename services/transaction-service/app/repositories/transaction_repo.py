@@ -65,6 +65,20 @@ class CommissionGate:
     has_completed_inspection: bool  # a realtor was involved (commission expected)
 
 
+@dataclass(frozen=True)
+class DealRow:
+    """A buyer's deal for the "Your Active Deals" list (SCRUM-95). Title +
+    sale_type join from property_listings (owned by listing-service)."""
+
+    id: UUID
+    listing_id: UUID
+    stage: str
+    agreed_price_kobo: int
+    created_at: datetime
+    property_title: str | None
+    sale_type: str | None
+
+
 class TransactionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -192,6 +206,37 @@ class TransactionRepository:
             agreed_price_kobo=row.agreed_price_kobo,
             platform_fee_kobo=row.platform_fee_kobo,
         )
+
+    async def list_for_buyer(self, buyer_id: UUID) -> list[DealRow]:
+        """A buyer's deals (transactions), newest first, with the property title
+        joined from property_listings (shared-DB cross-service read)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT t.id, t.listing_id, t.stage, t.agreed_price_kobo, t.created_at,
+                           pl.title AS property_title, pl.sale_type
+                    FROM transactions t
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE t.buyer_id = :buyer_id
+                    ORDER BY t.created_at DESC
+                    """
+                ),
+                {"buyer_id": buyer_id},
+            )
+        ).all()
+        return [
+            DealRow(
+                id=r.id,
+                listing_id=r.listing_id,
+                stage=r.stage,
+                agreed_price_kobo=r.agreed_price_kobo,
+                created_at=r.created_at,
+                property_title=r.property_title,
+                sale_type=r.sale_type,
+            )
+            for r in rows
+        ]
 
     async def get_user_email(self, user_id: UUID) -> str | None:
         """The user's email (shared users table) — Paystack needs it to initialise

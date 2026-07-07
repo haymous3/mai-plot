@@ -17,6 +17,7 @@ from app.repositories.offer_repo import OfferRepository
 from app.repositories.payment_repo import PaymentEventRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.buyer_deals import BuyerDealsService
 from app.services.deposit import DepositService
 from app.services.escrow_ledger import EscrowLedgerService
 from app.services.financing_summary import FinancingSummaryService
@@ -160,6 +161,12 @@ def get_financing_summary_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
 ) -> FinancingSummaryService:
     return FinancingSummaryService(transactions=transactions, listings=listings)
+
+
+def get_buyer_deals_service(
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+) -> BuyerDealsService:
+    return BuyerDealsService(transactions=transactions)
 
 
 async def get_current_user(

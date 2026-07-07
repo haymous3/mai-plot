@@ -95,6 +95,39 @@ export interface ListingDetail {
   interest_count: number;
 }
 
+export interface DealItem {
+  transaction_id: string;
+  listing_id: string;
+  stage: string;
+  agreed_price_kobo: number;
+  property_title: string | null;
+  sale_type: string | null;
+  created_at: string;
+}
+
+export interface DealsResponse {
+  data: DealItem[];
+}
+
+/** GET /transactions/{id}/financing-summary — reused for the Deal Progress page. */
+export interface FinancingSummary {
+  transaction_id: string;
+  stage: string;
+  agreed_price_kobo: number;
+  max_loan_kobo: number;
+  property: {
+    title: string;
+    property_type: string;
+    address_text: string;
+    lga: string;
+    state: string;
+    sale_type: string;
+    asking_price_kobo: number;
+    primary_image_url: string | null;
+  };
+  existing_loan: { loan_id: string; status: string } | null;
+}
+
 export interface ListingDocumentMeta {
   document_type: string;
   verification_status: string;
