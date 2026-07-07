@@ -40,8 +40,10 @@ class RegisterRequest(BaseModel):
         except InvalidPhoneError as exc:
             raise ValueError(str(exc)) from exc
 
-        if self.role == "seller" and self.seller_authority_type is None:
-            raise ValueError("seller_authority_type is required when role=seller")
+        # A seller may register without declaring authority yet — it is collected
+        # later on the "Seller Verification" onboarding screen via
+        # POST /auth/seller/authority (SCRUM-132). Non-sellers still may not send
+        # it. When a seller does supply it at register, it is honoured.
         if self.role != "seller" and self.seller_authority_type is not None:
             raise ValueError("seller_authority_type is only allowed when role=seller")
         return self
@@ -123,6 +125,19 @@ class ProfileUpdateRequest(BaseModel):
 
 class ProfileUpdateResponse(BaseModel):
     message: str
+
+
+class SellerAuthorityRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Declared on the "Seller Verification" onboarding screen (SCRUM-132). A PoA
+    # holder is then routed to the PoA-document upload; an owner verifies a NIN.
+    authority_type: SellerAuthorityType
+
+
+class SellerAuthorityResponse(BaseModel):
+    message: str
+    authority_type: SellerAuthorityType
 
 
 class TokenRefreshRequest(BaseModel):
