@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.routes.escrow import router as escrow_router
 from app.routes.offers import router as offers_router
 from app.routes.payments import router as payments_router
+from app.routes.sales import router as sales_router
 from app.routes.transactions import router as transactions_router
 from app.routes.wallet import router as wallet_router
 from app.routes.webhooks import router as webhooks_router
@@ -25,6 +26,7 @@ app = FastAPI(title="Maiplot Transaction Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(transactions_router)
 app.include_router(offers_router)
+app.include_router(sales_router)
 app.include_router(escrow_router)
 app.include_router(payments_router)
 app.include_router(wallet_router)

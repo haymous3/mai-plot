@@ -25,6 +25,7 @@ from app.services.financing_summary import FinancingSummaryService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
 from app.services.paystack_webhook import PaystackWebhookService
+from app.services.seller_deals import SellerDealsService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
 from app.services.seller_offers import SellerOffersService
 from app.services.transaction_status import TransactionStatusService
@@ -176,6 +177,12 @@ def get_buyer_deals_service(
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
 ) -> BuyerDealsService:
     return BuyerDealsService(transactions=transactions)
+
+
+def get_seller_deals_service(
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+) -> SellerDealsService:
+    return SellerDealsService(transactions=transactions)
 
 
 def _wallet_repo(session: SessionDep) -> WalletRepository:

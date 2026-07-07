@@ -113,6 +113,22 @@ export interface SellerOffersResponse {
   data: SellerOffer[];
 }
 
+/** A seller's transaction (GET /sales — SCRUM-98). Buyer masked. */
+export interface SellerDeal {
+  transaction_id: string;
+  listing_id: string;
+  buyer_ref: string;
+  stage: string;
+  agreed_price_kobo: number;
+  property_title: string | null;
+  sale_type: string | null;
+  created_at: string;
+}
+
+export interface SellerDealsResponse {
+  data: SellerDeal[];
+}
+
 export interface ListingDetail {
   id: string;
   seller: {

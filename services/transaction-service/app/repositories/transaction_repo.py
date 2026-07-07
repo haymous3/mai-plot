@@ -79,6 +79,21 @@ class DealRow:
     sale_type: str | None
 
 
+@dataclass(frozen=True)
+class SellerDealRow:
+    """A seller's transaction for the seller "Transactions" list (SCRUM-98).
+    Same shape as DealRow plus the buyer id (surfaced masked)."""
+
+    id: UUID
+    listing_id: UUID
+    buyer_id: UUID
+    stage: str
+    agreed_price_kobo: int
+    created_at: datetime
+    property_title: str | None
+    sale_type: str | None
+
+
 class TransactionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -229,6 +244,38 @@ class TransactionRepository:
             DealRow(
                 id=r.id,
                 listing_id=r.listing_id,
+                stage=r.stage,
+                agreed_price_kobo=r.agreed_price_kobo,
+                created_at=r.created_at,
+                property_title=r.property_title,
+                sale_type=r.sale_type,
+            )
+            for r in rows
+        ]
+
+    async def list_for_seller(self, seller_id: UUID) -> list[SellerDealRow]:
+        """A seller's transactions, newest first, with the property title joined
+        from property_listings (shared-DB cross-service read)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT t.id, t.listing_id, t.buyer_id, t.stage, t.agreed_price_kobo,
+                           t.created_at, pl.title AS property_title, pl.sale_type
+                    FROM transactions t
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE t.seller_id = :seller_id
+                    ORDER BY t.created_at DESC
+                    """
+                ),
+                {"seller_id": seller_id},
+            )
+        ).all()
+        return [
+            SellerDealRow(
+                id=r.id,
+                listing_id=r.listing_id,
+                buyer_id=r.buyer_id,
                 stage=r.stage,
                 agreed_price_kobo=r.agreed_price_kobo,
                 created_at=r.created_at,

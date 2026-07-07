@@ -201,6 +201,22 @@ services:
               claims_to_verify:
                 - exp
               key_claim_name: iss
+      # Seller Transactions / sales (SCRUM-98).
+      - name: sales
+        paths:
+          - /sales
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: admin-transactions
         paths:
           - /admin/transactions
