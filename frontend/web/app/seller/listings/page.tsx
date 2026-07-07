@@ -24,7 +24,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 const DOC_BADGE: Record<string, { label: string; cls: string }> = {
   verified: { label: '✓ approved', cls: 'text-emerald-deep' },
   pending: { label: '◷ pending', cls: 'text-amber-600' },
-  not_submitted: { label: '○ no docs', cls: 'text-ink-400' },
+  not_submitted: { label: '○ no docs', cls: 'text-ink-500' },
   failed: { label: '✕ rejected', cls: 'text-red-600' },
 };
 
@@ -85,7 +85,7 @@ export default async function SellerListingsPage() {
             Could not load your listings. Please retry.
           </div>
         ) : listings.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-ink-300/50 bg-white/60 px-6 py-16 text-center text-sm text-ink-400">
+          <div className="rounded-xl border border-dashed border-ink-300/50 bg-white/60 px-6 py-16 text-center text-sm text-ink-500">
             You haven&rsquo;t created any listings yet.
           </div>
         ) : (

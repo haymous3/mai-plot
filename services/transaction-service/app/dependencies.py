@@ -26,6 +26,7 @@ from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
 from app.services.paystack_webhook import PaystackWebhookService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
+from app.services.seller_offers import SellerOffersService
 from app.services.transaction_status import TransactionStatusService
 from app.services.wallet import WalletService
 
@@ -39,6 +40,12 @@ def _jwt_verifier(settings: SettingsDep) -> JwtVerifier:
 
 def _offer_repo(session: SessionDep) -> OfferRepository:
     return OfferRepository(session)
+
+
+def get_seller_offers_service(
+    offers: Annotated[OfferRepository, Depends(_offer_repo)],
+) -> SellerOffersService:
+    return SellerOffersService(offers=offers)
 
 
 def _listing_repo(session: SessionDep) -> ListingRepository:
