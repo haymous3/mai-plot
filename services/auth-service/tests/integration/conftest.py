@@ -30,7 +30,15 @@ from app.config import get_settings
 from app.db import dispose_engine
 
 # Match the auth tables the migrations create, in FK-safe order.
-_TABLES = ("audit_log", "refresh_tokens", "auth_credentials", "otp_codes", "user_pii", "users")
+_TABLES = (
+    "audit_log",
+    "refresh_tokens",
+    "auth_credentials",
+    "buyer_profiles",
+    "otp_codes",
+    "user_pii",
+    "users",
+)
 
 
 @pytest.fixture

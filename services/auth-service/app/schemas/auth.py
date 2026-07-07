@@ -140,6 +140,24 @@ class SellerAuthorityResponse(BaseModel):
     authority_type: SellerAuthorityType
 
 
+# Mirrors the loan-service employment values so the two stay consistent.
+EmploymentStatus = Literal["employed", "self_employed", "business_owner", "unemployed"]
+
+
+class BuyerProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # All optional — the onboarding "Personal Information" screen has "Skip for
+    # now". budget_kobo is BIGINT kobo (the naira figure ×100).
+    employment_status: EmploymentStatus | None = None
+    preferred_location: str | None = Field(default=None, max_length=120)
+    budget_kobo: int | None = Field(default=None, ge=0)
+
+
+class BuyerProfileResponse(BaseModel):
+    message: str
+
+
 class TokenRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

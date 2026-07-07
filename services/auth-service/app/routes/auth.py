@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_buyer_profile_service,
     get_bvn_verification_service,
     get_current_user,
     get_login_service,
@@ -27,6 +28,8 @@ from app.dependencies import (
     get_token_refresh_service,
 )
 from app.schemas.auth import (
+    BuyerProfileRequest,
+    BuyerProfileResponse,
     BvnVerifyRequest,
     BvnVerifyResponse,
     LoginRequest,
@@ -51,6 +54,7 @@ from app.schemas.auth import (
     UserPublic,
 )
 from app.security import CurrentUser
+from app.services.buyer_profile import BuyerProfileService, NotBuyer
 from app.services.bvn import InvalidBvnError
 from app.services.bvn_verification import (
     BvnAlreadyVerified,
@@ -263,6 +267,28 @@ async def declare_seller_authority(
     except NotSeller:
         return _error(403, "SELLER_ROLE_REQUIRED", "Only sellers can declare a selling authority.")
     return SellerAuthorityResponse(message="Authority declared", authority_type=body.authority_type)
+
+
+@router.post("/buyer/profile", response_model=BuyerProfileResponse)
+async def save_buyer_profile(
+    body: BuyerProfileRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[BuyerProfileService, Depends(get_buyer_profile_service)],
+) -> BuyerProfileResponse | JSONResponse:
+    """Save the caller's optional buying-capacity details from the buyer
+    onboarding "Personal Information" screen (SCRUM-132). Authed by the access
+    token issued at /auth/otp/verify. All fields optional ("Skip for now")."""
+    try:
+        await service.save(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            employment_status=body.employment_status,
+            preferred_location=body.preferred_location,
+            budget_kobo=body.budget_kobo,
+        )
+    except NotBuyer:
+        return _error(403, "BUYER_ROLE_REQUIRED", "Only buyers have a buyer profile.")
+    return BuyerProfileResponse(message="Profile saved")
 
 
 @router.post("/token/refresh", response_model=TokenRefreshResponse)
