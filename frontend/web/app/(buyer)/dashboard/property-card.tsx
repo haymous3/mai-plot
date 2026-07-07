@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { SaveHeart } from './save-heart';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
 
@@ -36,9 +37,16 @@ function Specs({ item }: { item: FeedItem }) {
 }
 
 /** A listing card in the buyer feed. `grid` for the Urgent Deals grid, `row` for
- * the All Properties list. Save/favourite hearts land in the next PR (they need
- * the saved-listings backend). */
-export function PropertyCard({ item, variant }: { item: FeedItem; variant: 'grid' | 'row' }) {
+ * the All Properties list. `saved` seeds the favourite heart. */
+export function PropertyCard({
+  item,
+  variant,
+  saved = false,
+}: {
+  item: FeedItem;
+  variant: 'grid' | 'row';
+  saved?: boolean;
+}) {
   const left = daysLeft(item.urgency_expires_at);
   const verified = item.doc_verification_status === 'verified';
   const href = `/listings/${item.id}`;
@@ -68,6 +76,7 @@ export function PropertyCard({ item, variant }: { item: FeedItem; variant: 'grid
               ⏱ {left}d left
             </span>
           )}
+          <SaveHeart listingId={item.id} initialSaved={saved} className="absolute right-2 top-2" />
         </div>
         <div className="p-3">
           <p className="truncate font-medium text-ink-900">{item.title}</p>
@@ -109,6 +118,13 @@ export function PropertyCard({ item, variant }: { item: FeedItem; variant: 'grid
               ✓
             </span>
           )}
+          <span className="ml-auto flex-none">
+            <SaveHeart
+              listingId={item.id}
+              initialSaved={saved}
+              className="!bg-transparent !shadow-none"
+            />
+          </span>
         </div>
         <p className="mt-0.5 truncate text-xs text-ink-500">
           📍 {item.lga}, {item.state}

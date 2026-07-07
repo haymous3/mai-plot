@@ -30,7 +30,7 @@ from app.db import dispose_engine
 
 # Tables this service's tests touch, in FK-safe order (CASCADE handles the
 # property_listings partitions and any users-referencing rows).
-_TABLES = ("audit_log", "listing_media", "property_listings", "user_pii", "users")
+_TABLES = ("audit_log", "saved_listings", "listing_media", "property_listings", "user_pii", "users")
 
 
 @pytest.fixture
