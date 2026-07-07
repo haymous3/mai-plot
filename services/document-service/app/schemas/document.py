@@ -23,6 +23,17 @@ class DocumentUploadResponse(BaseModel):
     verification_status: str = "pending"
 
 
+class ListingDocumentMeta(BaseModel):
+    # Verification metadata only — the file is served via the watermarked view
+    # route, never here (SCRUM-95 buyer detail-page trust panel).
+    document_type: str
+    verification_status: str
+
+
+class ListingDocumentsResponse(BaseModel):
+    documents: list[ListingDocumentMeta]
+
+
 # ---- Buyer loan documents (SCRUM-131) --------------------------------------
 
 LoanDocumentType = Literal["bank_statement", "employment_letter", "passport"]

@@ -290,6 +290,24 @@ services:
               claims_to_verify:
                 - exp
               key_claim_name: iss
+      # Listing legal documents — seller upload (POST) + buyer verification-status
+      # list (GET, SCRUM-95). A regex path so this specific suffix beats
+      # listing-service's /listings prefix and lands here.
+      - name: listing-documents
+        paths:
+          - ~/listings/[^/]+/documents$
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: admin-poa
         paths:
           - /admin/poa

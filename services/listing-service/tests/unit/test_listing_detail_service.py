@@ -21,6 +21,7 @@ def _detail_row() -> DetailRow:
         id=uuid4(),
         seller_id=_SELLER_ID,
         title="3-Bed Apartment",
+        property_type="residential",
         description="Nice",
         address_text="12 Admiralty Way",
         lat=6.4281,

@@ -192,6 +192,7 @@ class ListingDetailResponse(BaseModel):
     id: UUID
     seller: SellerBlock
     title: str
+    property_type: str
     description: str | None
     address_text: str
     location: GeoPoint

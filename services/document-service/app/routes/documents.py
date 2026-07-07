@@ -13,8 +13,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_current_user, get_document_upload_service
-from app.schemas.document import DocumentType, DocumentUploadResponse
+from app.dependencies import (
+    get_current_user,
+    get_document_upload_service,
+    get_listing_document_list_service,
+)
+from app.schemas.document import (
+    DocumentType,
+    DocumentUploadResponse,
+    ListingDocumentsResponse,
+)
 from app.security import CurrentUser
 from app.services.document import InvalidDocument
 from app.services.document_upload import (
@@ -23,6 +31,7 @@ from app.services.document_upload import (
     ListingNotFound,
     NotListingOwner,
 )
+from app.services.listing_document_list import ListingDocumentListService
 
 router = APIRouter(prefix="/listings", tags=["documents"])
 
@@ -77,3 +86,14 @@ async def upload_document(
     return DocumentUploadResponse(
         document_id=result.document_id, verification_status=result.verification_status
     )
+
+
+@router.get("/{listing_id}/documents", response_model=ListingDocumentsResponse)
+async def list_listing_documents(
+    listing_id: UUID,
+    _caller: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ListingDocumentListService, Depends(get_listing_document_list_service)],
+) -> ListingDocumentsResponse:
+    """A listing's document verification metadata (type + status) for the buyer
+    detail page's trust panel (SCRUM-95). Authenticated; returns no file/URL."""
+    return await service.list_for_listing(listing_id)
