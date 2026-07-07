@@ -36,13 +36,14 @@ const REGISTER_ERRORS: Record<string, string> = {
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step = 'intro' | 'role' | 'phone' | 'otp' | 'password' | 'personal';
+type Step = 'intro' | 'role' | 'phone' | 'otp' | 'password' | 'personal' | 'success';
 
 export function RegisterFlow() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
   const [role, setRole] = useState('');
   const [phone, setPhone] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [redirect, setRedirect] = useState('/dashboard');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -181,8 +182,8 @@ export function RegisterFlow() {
                   body: JSON.stringify({ full_name: fullName, email: email || null }),
                 });
                 if (resp.ok) {
-                  router.replace(redirect);
-                  router.refresh();
+                  setFirstName(fullName.trim().split(/\s+/)[0] ?? '');
+                  setStep('success');
                   return;
                 }
                 const b = (await resp.json()) as { error_code?: string };
@@ -202,7 +203,18 @@ export function RegisterFlow() {
           />
         )}
 
-        {step !== 'personal' && (
+        {step === 'success' && (
+          <SuccessStep
+            role={role}
+            firstName={firstName}
+            onContinue={() => {
+              router.replace(redirect);
+              router.refresh();
+            }}
+          />
+        )}
+
+        {step !== 'personal' && step !== 'success' && (
           <p className="mt-8 text-center text-sm text-ink-500">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-emerald-deep hover:underline">
@@ -580,6 +592,85 @@ function PersonalDetailsStep({
       >
         {busy ? 'Saving…' : 'Continue'}
       </button>
+    </div>
+  );
+}
+
+const SUCCESS_COPY: Record<string, { label: string; blurb: string }> = {
+  buyer: {
+    label: 'Buyer',
+    blurb: 'Start exploring verified properties and get instant loan pre-approval',
+  },
+  seller: {
+    label: 'Seller',
+    blurb: 'List your properties and connect with verified buyers instantly',
+  },
+  realtor: {
+    label: 'Realtor',
+    blurb: 'Access your professional dashboard and manage listings',
+  },
+};
+
+function SuccessStep({
+  role,
+  firstName,
+  onContinue,
+}: {
+  role: string;
+  firstName: string;
+  onContinue: () => void;
+}) {
+  const copy = SUCCESS_COPY[role] ?? SUCCESS_COPY.buyer;
+  const greeting = firstName ? `Welcome, ${firstName}!` : 'Welcome!';
+  return (
+    <div className="text-center">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-bone">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-deep text-2xl text-emerald-deep">
+          ✓
+        </span>
+      </div>
+      <h1 className="mt-6 font-display text-3xl text-ink-900">{greeting}</h1>
+      <p className="mx-auto mt-3 max-w-sm text-sm text-ink-500">{copy.blurb}</p>
+
+      <div className="mt-8 rounded-2xl bg-emerald-deep p-6 text-left text-bone">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-bone/70">Your Profile</p>
+            <p className="mt-1 font-display text-2xl">{copy.label}</p>
+          </div>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm">
+            ✓
+          </span>
+        </div>
+        <div className="my-4 h-px bg-white/15" />
+        <p className="text-xs uppercase tracking-wide text-bone/70">Account Status</p>
+        <p className="mt-1 flex items-center gap-2 text-sm">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-amber-400" />
+          Verification in progress
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onContinue}
+        className="mt-4 w-full rounded-xl bg-emerald-deep px-4 py-3.5 text-sm font-semibold text-bone transition hover:bg-emerald-accent"
+      >
+        Go to Dashboard →
+      </button>
+
+      <div className="mt-6 grid grid-cols-3 gap-3">
+        {[
+          { stat: '2.5K+', label: 'Properties' },
+          { stat: '98%', label: 'Verified' },
+          { stat: 'Fast', label: 'Loans' },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl bg-bone px-3 py-4">
+            <p className="font-display text-lg text-emerald-deep">{s.stat}</p>
+            <p className="mt-0.5 text-xs text-ink-500">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-6 text-xs text-ink-500">Secure • Transparent • Trusted</p>
     </div>
   );
 }
