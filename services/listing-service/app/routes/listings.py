@@ -24,6 +24,7 @@ from app.dependencies import (
     get_listing_update_service,
     get_media_upload_service,
     get_saved_listing_service,
+    get_seller_listings_service,
 )
 from app.repositories.listing_repo import FeedFilters
 from app.schemas.listing import (
@@ -33,10 +34,12 @@ from app.schemas.listing import (
     ExpressInterestResponse,
     FeedResponse,
     ListingDetailResponse,
+    ListingStatusResponse,
     MediaType,
     MediaUploadResponse,
     SavedResponse,
     SearchResponse,
+    SellerListingsResponse,
     SortOption,
     UpdateListingRequest,
     UpdateListingResponse,
@@ -67,6 +70,16 @@ from app.services.media_upload import (
 )
 from app.services.poa_guard import PoaNotVerified
 from app.services.saved_listings import SavedListingService
+from app.services.seller_listings import (
+    ListingNotFound as SellerListingNotFound,
+)
+from app.services.seller_listings import (
+    ListingNotPausable,
+    SellerListingsService,
+)
+from app.services.seller_listings import (
+    NotListingOwner as SellerNotListingOwner,
+)
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -160,6 +173,16 @@ async def list_saved_listings(
     """The caller's saved listings as feed cards (SCRUM-95). Declared before
     /{listing_id} so the literal path wins the match."""
     return await service.list_saved(current_user.user_id)
+
+
+@router.get("/mine", response_model=SellerListingsResponse)
+async def list_my_listings(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerListingsService, Depends(get_seller_listings_service)],
+) -> SellerListingsResponse:
+    """The caller's own listings for "My Listings" (SCRUM-98). Declared before
+    /{listing_id} so the literal path wins."""
+    return await service.list_mine(current_user.user_id)
 
 
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
@@ -264,6 +287,42 @@ async def express_interest(
         buyer_id=current_user.user_id, listing_id=listing_id, message=body.message
     )
     return ExpressInterestResponse(listing_id=listing_id, new_interest=created)
+
+
+@router.post("/{listing_id}/pause", response_model=ListingStatusResponse)
+async def pause_listing(
+    listing_id: UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerListingsService, Depends(get_seller_listings_service)],
+) -> ListingStatusResponse | JSONResponse:
+    """Pause an active listing (hide it from the feed). Owner only (SCRUM-98)."""
+    try:
+        await service.pause(listing_id=listing_id, caller=current_user)
+    except SellerListingNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found.")
+    except SellerNotListingOwner:
+        return _error(status.HTTP_403_FORBIDDEN, "NOT_LISTING_OWNER", "This is not your listing.")
+    except ListingNotPausable:
+        return _error(422, "LISTING_NOT_PAUSABLE", "Only an active listing can be paused.")
+    return ListingStatusResponse(id=listing_id, status="paused")
+
+
+@router.post("/{listing_id}/resume", response_model=ListingStatusResponse)
+async def resume_listing(
+    listing_id: UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerListingsService, Depends(get_seller_listings_service)],
+) -> ListingStatusResponse | JSONResponse:
+    """Resume a paused listing (return it to the feed). Owner only (SCRUM-98)."""
+    try:
+        await service.resume(listing_id=listing_id, caller=current_user)
+    except SellerListingNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found.")
+    except SellerNotListingOwner:
+        return _error(status.HTTP_403_FORBIDDEN, "NOT_LISTING_OWNER", "This is not your listing.")
+    except ListingNotPausable:
+        return _error(422, "LISTING_NOT_PAUSABLE", "Only a paused listing can be resumed.")
+    return ListingStatusResponse(id=listing_id, status="active")
 
 
 @router.patch("/{listing_id}", response_model=UpdateListingResponse)

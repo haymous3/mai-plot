@@ -3,16 +3,42 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { LoginForm } from './login-form';
-import { BUYER_HOME } from '@/lib/buyer-auth';
-import { buyerAccessToken } from '@/lib/buyer-server-api';
+import { isNonAdminRole } from '@/lib/session';
+import { sessionAccessToken, sessionHome } from '@/lib/session-server';
 
 export const metadata: Metadata = {
   title: 'Sign in · Maiplot',
 };
 
-export default function BuyerLoginPage() {
-  // Already signed in — skip the form.
-  if (buyerAccessToken()) redirect(BUYER_HOME);
+const ROLE_COPY: Record<string, { eyebrow: string; sub: string; panel: string }> = {
+  buyer: {
+    eyebrow: 'Buyer account',
+    sub: 'Sign in to browse financing and track your loan applications.',
+    panel: 'Browse verified listings and apply for a soft loan of up to 50% of the price.',
+  },
+  seller: {
+    eyebrow: 'Seller account',
+    sub: 'Sign in to manage your listings, offers, and transactions.',
+    panel: 'List your property, respond to verified buyers, and track every deal to close.',
+  },
+  realtor: {
+    eyebrow: 'Realtor account',
+    sub: 'Sign in to manage assignments and track your commissions.',
+    panel: 'Manage client listings, coordinate inspections, and grow your commission income.',
+  },
+};
+
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { role?: string | string[] };
+}) {
+  // Already signed in — go to the caller's role home.
+  if (sessionAccessToken()) redirect(sessionHome() ?? '/dashboard');
+
+  const roleParam = Array.isArray(searchParams.role) ? searchParams.role[0] : searchParams.role;
+  const role = isNonAdminRole(roleParam) ? roleParam : 'buyer';
+  const copy = ROLE_COPY[role];
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
@@ -25,14 +51,11 @@ export default function BuyerLoginPage() {
         </div>
 
         <div className="relative z-10 max-w-md">
-          <p className="text-xs uppercase tracking-[0.2em] text-bone/50">Buyers &amp; investors</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-bone/50">Nigeria&rsquo;s property marketplace</p>
           <h1 className="mt-4 font-display text-4xl leading-tight text-bone">
-            Finance your property purchase in days, not months.
+            Close property deals in days, not months.
           </h1>
-          <p className="mt-5 text-sm leading-relaxed text-bone/70">
-            Browse verified listings and apply for a soft loan of up to 50% of the price, funded
-            through our bank partners and protected via escrow.
-          </p>
+          <p className="mt-5 text-sm leading-relaxed text-bone/70">{copy.panel}</p>
         </div>
 
         <p className="relative z-10 text-xs text-bone/40">Secure · encrypted · af-south-1</p>
@@ -44,11 +67,9 @@ export default function BuyerLoginPage() {
             <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
           </div>
 
-          <p className="text-xs uppercase tracking-[0.2em] text-ink-300">Buyer account</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-300">{copy.eyebrow}</p>
           <h2 className="mt-2 font-display text-3xl text-ink-900">Sign in</h2>
-          <p className="mt-2 text-sm text-ink-500">
-            Sign in to browse financing and track your loan applications.
-          </p>
+          <p className="mt-2 text-sm text-ink-500">{copy.sub}</p>
 
           <div className="mt-8">
             <Suspense fallback={null}>

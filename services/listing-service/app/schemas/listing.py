@@ -161,6 +161,33 @@ class SavedResponse(BaseModel):
     saved: bool
 
 
+class SellerListingItem(BaseModel):
+    id: UUID
+    title: str
+    property_type: str
+    state: str
+    lga: str
+    size_sqm: Decimal | None
+    asking_price_kobo: int
+    sale_type: str
+    status: str
+    doc_verification_status: str
+    view_count: int
+    offers_count: int
+    saves_count: int
+    urgency_expires_at: datetime | None
+    created_at: datetime
+
+
+class SellerListingsResponse(BaseModel):
+    data: list[SellerListingItem]
+
+
+class ListingStatusResponse(BaseModel):
+    id: UUID
+    status: str
+
+
 class ExpressInterestRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

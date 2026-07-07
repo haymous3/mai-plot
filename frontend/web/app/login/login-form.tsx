@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 const MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: 'Email or password is incorrect.',
-  NOT_BUYER: 'This account is not a buyer account.',
+  NOT_ALLOWED: 'Use the admin sign-in for admin accounts.',
   AUTH_SERVICE_UNAVAILABLE: 'Sign-in is temporarily unavailable. Please try again.',
   INVALID_REQUEST: 'Please enter your email and password.',
 };
@@ -24,7 +24,7 @@ export function LoginForm() {
     setError(null);
     setSubmitting(true);
     try {
-      const resp = await fetch('/api/buyer/login', {
+      const resp = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),

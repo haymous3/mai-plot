@@ -70,6 +70,29 @@ export interface FeedResponse {
   pagination: Pagination;
 }
 
+/** A seller's own listing (GET /listings/mine — SCRUM-98). */
+export interface SellerListingItem {
+  id: string;
+  title: string;
+  property_type: string;
+  state: string;
+  lga: string;
+  size_sqm: string | null;
+  asking_price_kobo: number;
+  sale_type: string;
+  status: string;
+  doc_verification_status: string;
+  view_count: number;
+  offers_count: number;
+  saves_count: number;
+  urgency_expires_at: string | null;
+  created_at: string;
+}
+
+export interface SellerListingsResponse {
+  data: SellerListingItem[];
+}
+
 export interface ListingDetail {
   id: string;
   seller: {

@@ -34,6 +34,7 @@ from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
 from app.services.media_upload import MediaUploadService
 from app.services.saved_listings import SavedListingService
+from app.services.seller_listings import SellerListingsService
 from app.services.view_count_dispatch import ViewCountDispatcher, build_view_count_dispatcher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -120,6 +121,12 @@ def get_saved_listing_service(
     saved: Annotated[SavedListingRepository, Depends(_saved_repo)],
 ) -> SavedListingService:
     return SavedListingService(saved=saved)
+
+
+def get_seller_listings_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> SellerListingsService:
+    return SellerListingsService(listings=listings)
 
 
 def _interest_repo(session: SessionDep) -> InterestRepository:
