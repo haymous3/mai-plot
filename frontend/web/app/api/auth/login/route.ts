@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { backendLogin } from '@/lib/api';
-import { BUYER_ACCESS_COOKIE, BUYER_HOME, BUYER_REFRESH_COOKIE, isBuyerRole } from '@/lib/buyer-auth';
+import {
+  SESSION_ACCESS_COOKIE,
+  SESSION_REFRESH_COOKIE,
+  isNonAdminRole,
+  roleHome,
+} from '@/lib/session';
 
 /**
- * Buyer login proxy (SCRUM-94). The browser posts credentials here (same
- * origin); we call auth-service, enforce that the account is a buyer, and on
- * success store the tokens in httpOnly cookies. The token is never returned to
- * client JS. Temporary gate — the designed auth screens land in a later ticket.
+ * Shared non-admin login proxy (SCRUM-98). One login for buyer/seller/realtor:
+ * authenticate via auth-service, reject admins (they use the admin surface),
+ * store the tokens in httpOnly session cookies, and return the caller's role
+ * home so the client can route there. Replaces the buyer-only /api/buyer/login.
  */
 const FIFTEEN_MINUTES = 15 * 60;
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
@@ -19,7 +24,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400 });
   }
-
   const email = typeof payload.email === 'string' ? payload.email : '';
   const password = typeof payload.password === 'string' ? payload.password : '';
   if (!email || !password) {
@@ -28,24 +32,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const result = await backendLogin(email, password);
   if (!result.ok) {
-    const status = result.status === 502 ? 502 : 401;
-    return NextResponse.json({ error: result.code }, { status });
+    return NextResponse.json({ error: result.code }, { status: result.status === 502 ? 502 : 401 });
+  }
+  if (!isNonAdminRole(result.role)) {
+    return NextResponse.json({ error: 'NOT_ALLOWED' }, { status: 403 });
   }
 
-  if (!isBuyerRole(result.role)) {
-    return NextResponse.json({ error: 'NOT_BUYER' }, { status: 403 });
-  }
-
-  const response = NextResponse.json({ ok: true, redirect: BUYER_HOME });
+  const response = NextResponse.json({ ok: true, role: result.role, redirect: roleHome(result.role) });
   const secure = process.env.NODE_ENV === 'production';
-  response.cookies.set(BUYER_ACCESS_COOKIE, result.accessToken, {
+  response.cookies.set(SESSION_ACCESS_COOKIE, result.accessToken, {
     httpOnly: true,
     secure,
     sameSite: 'lax',
     path: '/',
     maxAge: FIFTEEN_MINUTES,
   });
-  response.cookies.set(BUYER_REFRESH_COOKIE, result.refreshToken, {
+  response.cookies.set(SESSION_REFRESH_COOKIE, result.refreshToken, {
     httpOnly: true,
     secure,
     sameSite: 'lax',

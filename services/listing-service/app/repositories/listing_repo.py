@@ -110,6 +110,28 @@ class FeedRow:
 
 
 @dataclass(frozen=True)
+class SellerListingRow:
+    """A seller's own listing for "My Listings" (SCRUM-98) — all statuses, with
+    offer/save counts joined from the shared DB."""
+
+    id: UUID
+    title: str
+    property_type: str
+    state: str
+    lga: str
+    size_sqm: Decimal | None
+    asking_price_kobo: int
+    sale_type: str
+    status: str
+    doc_verification_status: str
+    view_count: int
+    offers_count: int
+    saves_count: int
+    urgency_expires_at: datetime | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class DetailRow:
     id: UUID
     seller_id: UUID
@@ -244,6 +266,59 @@ class ListingRepository:
             for r in rows
         ]
         return items, int(total)
+
+    async def list_for_seller(self, seller_id: UUID) -> list[SellerListingRow]:
+        """A seller's own listings (all statuses), newest first, with offer +
+        save counts. offers/saved_listings live in the shared DB."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pl.id, pl.title, pl.property_type, pl.state, pl.lga, pl.size_sqm,
+                           pl.asking_price_kobo, pl.sale_type, pl.status,
+                           pl.doc_verification_status, pl.view_count, pl.expires_at,
+                           pl.created_at,
+                           (SELECT COUNT(*) FROM offers o
+                            WHERE o.listing_id = pl.id) AS offers_count,
+                           (SELECT COUNT(*) FROM saved_listings s
+                            WHERE s.listing_id = pl.id AND s.deleted_at IS NULL) AS saves_count
+                    FROM property_listings pl
+                    WHERE pl.seller_id = :seller_id AND pl.deleted_at IS NULL
+                    ORDER BY pl.created_at DESC
+                    """
+                ),
+                {"seller_id": seller_id},
+            )
+        ).all()
+        return [
+            SellerListingRow(
+                id=r.id,
+                title=r.title,
+                property_type=r.property_type,
+                state=r.state,
+                lga=r.lga,
+                size_sqm=r.size_sqm,
+                asking_price_kobo=r.asking_price_kobo,
+                sale_type=r.sale_type,
+                status=r.status,
+                doc_verification_status=r.doc_verification_status,
+                view_count=r.view_count,
+                offers_count=int(r.offers_count),
+                saves_count=int(r.saves_count),
+                urgency_expires_at=r.expires_at,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def set_status(self, listing_id: UUID, *, status: str) -> None:
+        await self._session.execute(
+            text(
+                "UPDATE property_listings SET status = :status, updated_at = NOW() "
+                "WHERE id = :id AND deleted_at IS NULL"
+            ),
+            {"id": listing_id, "status": status},
+        )
 
     async def get_detail(self, listing_id: UUID) -> DetailRow | None:
         """A single non-deleted listing with lat/lng extracted from PostGIS."""
