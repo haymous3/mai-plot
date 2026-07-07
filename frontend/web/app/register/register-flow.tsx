@@ -43,6 +43,7 @@ type Step =
   | 'otp'
   | 'password'
   | 'personal'
+  | 'buyer-kyc'
   | 'realtor-kyc'
   | 'seller-kyc'
   | 'success';
@@ -192,14 +193,14 @@ export function RegisterFlow() {
                 });
                 if (resp.ok) {
                   setFirstName(fullName.trim().split(/\s+/)[0] ?? '');
-                  // Sellers and realtors complete a role verification step
-                  // before the success screen; buyers go straight through.
+                  // Each role completes a verification / capacity step before
+                  // the success screen.
                   setStep(
                     role === 'realtor'
                       ? 'realtor-kyc'
                       : role === 'seller'
                         ? 'seller-kyc'
-                        : 'success',
+                        : 'buyer-kyc',
                   );
                   return;
                 }
@@ -260,6 +261,58 @@ export function RegisterFlow() {
                 setBusy(false);
               }
             }}
+          />
+        )}
+
+        {step === 'buyer-kyc' && (
+          <BuyerInfoStep
+            busy={busy}
+            error={error}
+            onSubmit={async ({ bvn, employment, location, budget }) => {
+              setError(null);
+              setBusy(true);
+              try {
+                if (bvn) {
+                  const bvnResp = await fetch('/api/buyer/bvn-verify', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ bvn }),
+                  });
+                  if (!bvnResp.ok) {
+                    const b = (await bvnResp.json()) as { error_code?: string };
+                    setError(
+                      b.error_code === 'BVN_FORMAT_INVALID'
+                        ? 'Enter a valid 11-digit BVN.'
+                        : b.error_code === 'BVN_ALREADY_VERIFIED'
+                          ? 'This BVN is already verified.'
+                          : 'Could not verify your BVN. Please retry.',
+                    );
+                    return;
+                  }
+                }
+                if (employment || location.trim() || budget.trim()) {
+                  const profileResp = await fetch('/api/auth/buyer/profile', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                      employment_status: employment || null,
+                      preferred_location: location.trim() || null,
+                      budget_kobo: budget.trim() ? Number(budget.replace(/\D/g, '')) * 100 : null,
+                    }),
+                  });
+                  if (!profileResp.ok) {
+                    setError('Could not save your details. Please retry.');
+                    return;
+                  }
+                }
+                setStep('success');
+              } catch {
+                setError('Could not reach the server. Please try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+            onSkip={() => setStep('success')}
           />
         )}
 
@@ -336,6 +389,7 @@ export function RegisterFlow() {
         )}
 
         {step !== 'personal' &&
+          step !== 'buyer-kyc' &&
           step !== 'realtor-kyc' &&
           step !== 'seller-kyc' &&
           step !== 'success' && (
@@ -979,6 +1033,108 @@ function SellerVerificationStep({
       >
         {busy ? 'Verifying…' : 'Complete Verification'}
       </button>
+    </div>
+  );
+}
+
+const EMPLOYMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Select…' },
+  { value: 'employed', label: 'Employed' },
+  { value: 'self_employed', label: 'Self-employed' },
+  { value: 'business_owner', label: 'Business owner' },
+  { value: 'unemployed', label: 'Unemployed' },
+];
+
+function BuyerInfoStep({
+  busy,
+  error,
+  onSubmit,
+  onSkip,
+}: {
+  busy: boolean;
+  error: string | null;
+  onSubmit: (v: { bvn: string; employment: string; location: string; budget: string }) => void;
+  onSkip: () => void;
+}) {
+  const [bvn, setBvn] = useState('');
+  const [employment, setEmployment] = useState('');
+  const [location, setLocation] = useState('');
+  const [budget, setBudget] = useState('');
+
+  return (
+    <div>
+      <h1 className="text-center font-display text-3xl text-ink-900">Personal Information</h1>
+      <p className="mt-2 text-center text-sm text-ink-500">Help us understand your buying capacity</p>
+
+      {/* The design labels this NIN, but buyers verify their BVN in Maiplot
+          (NIN verification is reserved for property-owner sellers). */}
+      <label className="mt-8 block text-sm font-medium text-ink-700">
+        BVN (Bank Verification Number)
+      </label>
+      <input
+        inputMode="numeric"
+        value={bvn}
+        onChange={(e) => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))}
+        placeholder="12345678901"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-500">
+        <span aria-hidden>🛡</span> Your data is encrypted and used only for verification
+      </p>
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Employment Status</label>
+      <select
+        value={employment}
+        onChange={(e) => setEmployment(e.target.value)}
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      >
+        {EMPLOYMENT_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Preferred Location</label>
+      <input
+        value={location}
+        onChange={(e) => setLocation(e.target.value)}
+        placeholder="e.g., Lagos, Abuja"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Budget (₦)</label>
+      <input
+        inputMode="numeric"
+        value={budget}
+        onChange={(e) => setBudget(e.target.value.replace(/[^\d,]/g, ''))}
+        placeholder="e.g., 40,000,000"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      {error && (
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-6 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onSkip}
+          className="flex-1 rounded-lg border border-ink-300/60 px-4 py-3 text-sm font-medium text-ink-700 transition hover:border-ink-500 disabled:opacity-50"
+        >
+          Skip for now
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSubmit({ bvn: bvn.trim(), employment, location, budget })}
+          className="flex-1 rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? 'Saving…' : 'Complete Profile'}
+        </button>
+      </div>
     </div>
   );
 }

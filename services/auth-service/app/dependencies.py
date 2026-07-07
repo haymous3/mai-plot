@@ -22,10 +22,12 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
+from app.repositories.buyer_profile_repo import BuyerProfileRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
+from app.services.buyer_profile import BuyerProfileService
 from app.services.bvn_verification import BvnVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
@@ -153,6 +155,10 @@ def _auth_credentials_repo(session: SessionDep) -> AuthCredentialsRepository:
     return AuthCredentialsRepository(session)
 
 
+def _buyer_profile_repo(session: SessionDep) -> BuyerProfileRepository:
+    return BuyerProfileRepository(session)
+
+
 def _jwt_service(settings: SettingsDep) -> JwtService:
     return JwtService(
         secret=settings.jwt_secret,
@@ -214,6 +220,12 @@ def get_seller_authority_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
 ) -> SellerAuthorityService:
     return SellerAuthorityService(users=users)
+
+
+def get_buyer_profile_service(
+    profiles: Annotated[BuyerProfileRepository, Depends(_buyer_profile_repo)],
+) -> BuyerProfileService:
+    return BuyerProfileService(profiles=profiles)
 
 
 def get_otp_verification_service(
