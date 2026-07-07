@@ -27,7 +27,7 @@ export function SellerNav() {
         </span>
         <span>
           <span className="block font-display text-lg leading-tight text-ink-900">Maiplot</span>
-          <span className="block text-xs text-ink-400">Seller Dashboard</span>
+          <span className="block text-xs text-ink-500">Seller Dashboard</span>
         </span>
       </div>
 

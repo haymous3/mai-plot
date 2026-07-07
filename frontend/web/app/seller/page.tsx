@@ -39,7 +39,7 @@ export default function SellerOverviewPage() {
         </Link>
       </div>
 
-      <p className="mt-8 rounded-xl border border-dashed border-ink-300/40 bg-white/60 px-6 py-10 text-center text-sm text-ink-400">
+      <p className="mt-8 rounded-xl border border-dashed border-ink-300/40 bg-white/60 px-6 py-10 text-center text-sm text-ink-500">
         Performance insights &amp; recent activity are coming to this overview soon.
       </p>
     </main>

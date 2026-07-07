@@ -29,6 +29,25 @@ class OfferRow:
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class SellerOfferRow:
+    """An offer on one of the seller's listings, for the Offers inbox (SCRUM-98).
+    Joins property_listings for the title/asking price."""
+
+    id: UUID
+    listing_id: UUID
+    buyer_id: UUID
+    property_title: str
+    lga: str
+    state: str
+    asking_price_kobo: int
+    offered_price_kobo: int
+    counter_price_kobo: int | None
+    note: str | None
+    status: str
+    created_at: datetime
+
+
 class OfferRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -89,6 +108,42 @@ class OfferRepository:
             status=row.status,
             expires_at=row.expires_at,
         )
+
+    async def list_for_seller(self, seller_id: UUID) -> list[SellerOfferRow]:
+        """Every offer on the seller's listings, newest first."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT o.id, o.listing_id, o.buyer_id, pl.title AS property_title,
+                           pl.lga, pl.state, pl.asking_price_kobo, o.offered_price_kobo,
+                           o.counter_price_kobo, o.note, o.status, o.created_at
+                    FROM offers o
+                    JOIN property_listings pl ON pl.id = o.listing_id
+                    WHERE pl.seller_id = :sid
+                    ORDER BY o.created_at DESC
+                    """
+                ),
+                {"sid": seller_id},
+            )
+        ).all()
+        return [
+            SellerOfferRow(
+                id=r.id,
+                listing_id=r.listing_id,
+                buyer_id=r.buyer_id,
+                property_title=r.property_title,
+                lga=r.lga,
+                state=r.state,
+                asking_price_kobo=r.asking_price_kobo,
+                offered_price_kobo=r.offered_price_kobo,
+                counter_price_kobo=r.counter_price_kobo,
+                note=r.note,
+                status=r.status,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
 
     async def set_status(self, offer_id: UUID, *, status: str) -> None:
         await self._session.execute(
