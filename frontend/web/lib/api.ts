@@ -44,6 +44,32 @@ export interface Pagination {
   total_pages: number;
 }
 
+/** A listing card from the buyer feed / search (GET /listings, /listings/search). */
+export interface FeedItem {
+  id: string;
+  title: string;
+  property_type: string;
+  state: string;
+  lga: string;
+  size_sqm: string | null;
+  asking_price_kobo: number;
+  sale_type: string;
+  urgency_tag: string | null;
+  urgency_expires_at: string | null;
+  status: string;
+  doc_verification_status: string;
+  thumbnail_url: string | null;
+  seller_authority_type: string | null;
+  view_count: number;
+  interest_count: number;
+  created_at: string;
+}
+
+export interface FeedResponse {
+  data: FeedItem[];
+  pagination: Pagination;
+}
+
 /** A row in the admin listing-review queue (GET /admin/listings/queue). */
 export interface AdminQueueItem {
   id: string;
