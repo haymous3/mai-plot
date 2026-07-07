@@ -50,3 +50,21 @@ class DealItem(BaseModel):
 
 class DealsResponse(BaseModel):
     data: list[DealItem]
+
+
+class SellerDealItem(BaseModel):
+    """A seller's transaction for the seller "Transactions" list (SCRUM-98). The
+    buyer is masked to a short reference until the deal completes (§8)."""
+
+    transaction_id: UUID
+    listing_id: UUID
+    buyer_ref: str
+    stage: str
+    agreed_price_kobo: int
+    property_title: str | None
+    sale_type: str | None
+    created_at: datetime
+
+
+class SellerDealsResponse(BaseModel):
+    data: list[SellerDealItem]
