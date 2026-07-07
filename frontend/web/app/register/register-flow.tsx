@@ -36,7 +36,15 @@ const REGISTER_ERRORS: Record<string, string> = {
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step = 'intro' | 'role' | 'phone' | 'otp' | 'password' | 'personal' | 'success';
+type Step =
+  | 'intro'
+  | 'role'
+  | 'phone'
+  | 'otp'
+  | 'password'
+  | 'personal'
+  | 'realtor-kyc'
+  | 'success';
 
 export function RegisterFlow() {
   const router = useRouter();
@@ -183,7 +191,10 @@ export function RegisterFlow() {
                 });
                 if (resp.ok) {
                   setFirstName(fullName.trim().split(/\s+/)[0] ?? '');
-                  setStep('success');
+                  // Realtors complete a professional profile before the success
+                  // screen; buyers/sellers go straight through (seller KYC is a
+                  // later step).
+                  setStep(role === 'realtor' ? 'realtor-kyc' : 'success');
                   return;
                 }
                 const b = (await resp.json()) as { error_code?: string };
@@ -193,6 +204,49 @@ export function RegisterFlow() {
                     : b.error_code === 'FULL_NAME_REQUIRED'
                       ? 'Please enter your full name.'
                       : 'Could not save your details. Please retry.',
+                );
+              } catch {
+                setError('Could not reach the server. Please try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        )}
+
+        {step === 'realtor-kyc' && (
+          <RealtorProfileStep
+            busy={busy}
+            error={error}
+            onSubmit={async ({ esvarbon, coverage, file }) => {
+              setError(null);
+              setBusy(true);
+              try {
+                const form = new FormData();
+                form.append('esvarbon_number', esvarbon);
+                coverage
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .forEach((state) => form.append('coverage_states', state));
+                form.append('file', file);
+                const resp = await fetch('/api/realtor/onboarding', {
+                  method: 'POST',
+                  body: form,
+                });
+                if (resp.ok) {
+                  setStep('success');
+                  return;
+                }
+                const b = (await resp.json()) as { error_code?: string };
+                setError(
+                  b.error_code === 'REALTOR_ALREADY_REGISTERED'
+                    ? 'A realtor application already exists for this account.'
+                    : b.error_code === 'STORAGE_UNAVAILABLE'
+                      ? 'Document upload is temporarily unavailable. Please retry.'
+                      : b.error_code?.startsWith('CREDENTIAL') || b.error_code === 'INVALID_CREDENTIAL'
+                        ? 'That document must be a PDF, PNG, or JPG under 5MB.'
+                        : 'Could not complete your profile. Please retry.',
                 );
               } catch {
                 setError('Could not reach the server. Please try again.');
@@ -214,7 +268,7 @@ export function RegisterFlow() {
           />
         )}
 
-        {step !== 'personal' && step !== 'success' && (
+        {step !== 'personal' && step !== 'realtor-kyc' && step !== 'success' && (
           <p className="mt-8 text-center text-sm text-ink-500">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-emerald-deep hover:underline">
@@ -671,6 +725,82 @@ function SuccessStep({
         ))}
       </div>
       <p className="mt-6 text-xs text-ink-500">Secure • Transparent • Trusted</p>
+    </div>
+  );
+}
+
+function RealtorProfileStep({
+  busy,
+  error,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  onSubmit: (v: { esvarbon: string; coverage: string; file: File }) => void;
+}) {
+  const [esvarbon, setEsvarbon] = useState('');
+  const [coverage, setCoverage] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const canSubmit = esvarbon.trim().length > 0 && coverage.trim().length > 0 && file !== null;
+
+  return (
+    <div>
+      <h1 className="text-center font-display text-3xl text-ink-900">Realtor Profile</h1>
+      <p className="mt-2 text-center text-sm text-ink-500">Complete your professional profile</p>
+
+      <label className="mt-8 block text-sm font-medium text-ink-700">
+        ESVARBON License Number <span className="text-red-500">*</span>
+      </label>
+      <input
+        value={esvarbon}
+        onChange={(e) => setEsvarbon(e.target.value)}
+        placeholder="ESV/2024/123456"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">
+        Professional Credentials <span className="text-red-500">*</span>
+      </label>
+      <label className="mt-1.5 flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed border-ink-300/70 px-4 py-8 text-center transition hover:border-emerald-accent">
+        <span aria-hidden className="text-2xl text-ink-500">
+          ⬆
+        </span>
+        <span className="text-sm font-medium text-ink-900">
+          {file ? file.name : 'Upload credentials'}
+        </span>
+        <span className="text-xs text-ink-500">License, certification, or registration (PDF/PNG/JPG, max 5MB)</span>
+        <input
+          type="file"
+          accept="application/pdf,image/png,image/jpeg"
+          className="hidden"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+      </label>
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">
+        Coverage Area <span className="text-red-500">*</span>
+      </label>
+      <input
+        value={coverage}
+        onChange={(e) => setCoverage(e.target.value)}
+        placeholder="e.g., Lagos, Lekki, Victoria Island"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      <p className="mt-1.5 text-xs text-ink-500">Comma-separated areas where you provide services.</p>
+
+      {error && (
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={busy || !canSubmit}
+        onClick={() => file && onSubmit({ esvarbon: esvarbon.trim(), coverage, file })}
+        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? 'Submitting…' : 'Complete Profile'}
+      </button>
     </div>
   );
 }
