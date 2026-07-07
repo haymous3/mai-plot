@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -33,3 +34,19 @@ class StatusChangeRequest(BaseModel):
 class StatusResponse(BaseModel):
     transaction_id: UUID
     stage: str
+
+
+class DealItem(BaseModel):
+    """A buyer's deal for the "Your Active Deals" list (SCRUM-95)."""
+
+    transaction_id: UUID
+    listing_id: UUID
+    stage: str
+    agreed_price_kobo: int
+    property_title: str | None
+    sale_type: str | None
+    created_at: datetime
+
+
+class DealsResponse(BaseModel):
+    data: list[DealItem]

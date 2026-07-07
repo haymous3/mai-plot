@@ -4,10 +4,11 @@ import { redirect } from 'next/navigation';
 
 import { PropertyCard } from './property-card';
 import { SearchFilterBar } from './search-filter-bar';
-import type { FeedResponse } from '@/lib/api';
-import { listingServiceUrl } from '@/lib/api';
+import type { DealsResponse, FeedResponse } from '@/lib/api';
+import { listingServiceUrl, transactionServiceUrl } from '@/lib/api';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
+import { dealCompletedSteps, dealStageLabel, DEAL_TOTAL_STEPS, isDealActive } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Dashboard · Maiplot' };
@@ -74,14 +75,16 @@ export default async function BuyerDashboardPage({
     flat[k] = Array.isArray(v) ? v[0] : v;
   }
 
-  const [urgent, all, saved] = await Promise.all([
+  const [urgent, all, saved, dealsRes] = await Promise.all([
     fetchFeed(`${listingServiceUrl()}/listings?sale_type=distress&sort=urgency&page_size=4`),
     fetchFeed(buildFeedUrl(flat)),
     fetchFeed(`${listingServiceUrl()}/listings/saved`),
+    buyerBackendGet<DealsResponse>(`${transactionServiceUrl()}/transactions`),
   ]);
 
   const activeListings = all?.pagination.total ?? 0;
   const savedIds = new Set((saved?.data ?? []).map((i) => i.id));
+  const activeDeals = (dealsRes.ok ? dealsRes.data.data : []).filter((d) => isDealActive(d.stage));
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -173,14 +176,58 @@ export default async function BuyerDashboardPage({
           </SidebarCard>
 
           <SidebarCard>
-            <p className="flex items-center gap-2 font-semibold text-ink-900">💼 Your Active Deals</p>
-            <div className="mt-4 flex flex-col items-center py-4 text-center">
-              <span aria-hidden className="text-2xl text-ink-300">
-                ⓘ
-              </span>
-              <p className="mt-2 text-sm text-ink-500">No active deals yet</p>
-              <p className="mt-1 text-xs font-medium text-emerald-deep">Start exploring properties</p>
+            <div className="flex items-center justify-between">
+              <p className="flex items-center gap-2 font-semibold text-ink-900">💼 Your Active Deals</p>
+              {activeDeals.length > 0 && (
+                <span className="rounded-full bg-emerald-deep/10 px-2 py-0.5 text-xs font-medium text-emerald-deep">
+                  {activeDeals.length} active
+                </span>
+              )}
             </div>
+            {activeDeals.length === 0 ? (
+              <div className="mt-4 flex flex-col items-center py-4 text-center">
+                <span aria-hidden className="text-2xl text-ink-300">
+                  ⓘ
+                </span>
+                <p className="mt-2 text-sm text-ink-500">No active deals yet</p>
+                <p className="mt-1 text-xs font-medium text-emerald-deep">
+                  Start exploring properties
+                </p>
+              </div>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {activeDeals.slice(0, 3).map((d) => (
+                  <li key={d.transaction_id}>
+                    <Link
+                      href={`/deals/${d.transaction_id}`}
+                      className="block rounded-xl border border-ink-300/25 p-3 transition hover:border-ink-500/40"
+                    >
+                      <p className="truncate text-sm font-medium text-ink-900">
+                        {d.property_title ?? 'Property deal'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-500">
+                        Bid {formatNaira(d.agreed_price_kobo)}
+                      </p>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-ink-500">{dealStageLabel(d.stage)}</span>
+                        <span className="text-ink-400">
+                          Step {dealCompletedSteps(d.stage)} of {DEAL_TOTAL_STEPS}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1 rounded-full bg-ink-300/30">
+                        <div
+                          className="h-1 rounded-full bg-emerald-accent"
+                          style={{
+                            width: `${(dealCompletedSteps(d.stage) / DEAL_TOTAL_STEPS) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs font-medium text-emerald-deep">Track progress →</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </SidebarCard>
 
           <SidebarCard>
