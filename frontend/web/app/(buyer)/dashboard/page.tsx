@@ -8,6 +8,7 @@ import type { FeedResponse } from '@/lib/api';
 import { listingServiceUrl } from '@/lib/api';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
+import { formatNaira } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Dashboard · Maiplot' };
 
@@ -73,12 +74,14 @@ export default async function BuyerDashboardPage({
     flat[k] = Array.isArray(v) ? v[0] : v;
   }
 
-  const [urgent, all] = await Promise.all([
+  const [urgent, all, saved] = await Promise.all([
     fetchFeed(`${listingServiceUrl()}/listings?sale_type=distress&sort=urgency&page_size=4`),
     fetchFeed(buildFeedUrl(flat)),
+    fetchFeed(`${listingServiceUrl()}/listings/saved`),
   ]);
 
   const activeListings = all?.pagination.total ?? 0;
+  const savedIds = new Set((saved?.data ?? []).map((i) => i.id));
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -110,7 +113,12 @@ export default async function BuyerDashboardPage({
               </div>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {urgent.data.map((item) => (
-                  <PropertyCard key={item.id} item={item} variant="grid" />
+                  <PropertyCard
+                    key={item.id}
+                    item={item}
+                    variant="grid"
+                    saved={savedIds.has(item.id)}
+                  />
                 ))}
               </div>
             </section>
@@ -129,7 +137,14 @@ export default async function BuyerDashboardPage({
                   No properties match your filters.
                 </div>
               ) : (
-                all.data.map((item) => <PropertyCard key={item.id} item={item} variant="row" />)
+                all.data.map((item) => (
+                  <PropertyCard
+                    key={item.id}
+                    item={item}
+                    variant="row"
+                    saved={savedIds.has(item.id)}
+                  />
+                ))
               )}
             </div>
           </section>
@@ -170,7 +185,29 @@ export default async function BuyerDashboardPage({
 
           <SidebarCard>
             <p className="font-semibold text-ink-900">Saved Properties</p>
-            <p className="mt-4 text-center text-sm text-ink-400">No saved properties yet.</p>
+            {!saved || saved.data.length === 0 ? (
+              <p className="mt-4 text-center text-sm text-ink-400">No saved properties yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {saved.data.slice(0, 4).map((item) => (
+                  <li key={item.id}>
+                    <Link href={`/listings/${item.id}`} className="flex items-center gap-3 group">
+                      <span className="flex h-10 w-12 flex-none items-center justify-center rounded-lg bg-bone text-ink-300">
+                        🏠
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-ink-900 group-hover:underline">
+                          {item.title}
+                        </span>
+                        <span className="block truncate text-xs text-ink-500">
+                          {item.lga} · {formatNaira(item.asking_price_kobo)}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </SidebarCard>
         </aside>
       </div>

@@ -155,6 +155,12 @@ class FeedResponse(BaseModel):
     pagination: Pagination
 
 
+class SavedResponse(BaseModel):
+    # `saved` reflects the state after the call (save -> true, unsave -> false).
+    listing_id: UUID
+    saved: bool
+
+
 class SearchItem(FeedItem):
     # Same shape as a feed item plus the Elasticsearch relevance score.
     search_score: float

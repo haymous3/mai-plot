@@ -22,6 +22,7 @@ from app.dependencies import (
     get_listing_search_service,
     get_listing_update_service,
     get_media_upload_service,
+    get_saved_listing_service,
 )
 from app.repositories.listing_repo import FeedFilters
 from app.schemas.listing import (
@@ -31,6 +32,7 @@ from app.schemas.listing import (
     ListingDetailResponse,
     MediaType,
     MediaUploadResponse,
+    SavedResponse,
     SearchResponse,
     SortOption,
     UpdateListingRequest,
@@ -60,6 +62,7 @@ from app.services.media_upload import (
     MediaUploadService,
 )
 from app.services.poa_guard import PoaNotVerified
+from app.services.saved_listings import SavedListingService
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -145,6 +148,16 @@ async def search_listings(
     return await service.search(params)
 
 
+@router.get("/saved", response_model=FeedResponse)
+async def list_saved_listings(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SavedListingService, Depends(get_saved_listing_service)],
+) -> FeedResponse:
+    """The caller's saved listings as feed cards (SCRUM-95). Declared before
+    /{listing_id} so the literal path wins the match."""
+    return await service.list_saved(current_user.user_id)
+
+
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
 async def get_listing_detail(
     listing_id: UUID,
@@ -210,6 +223,28 @@ async def create_listing(
         )
 
     return CreateListingResponse(listing_id=result.listing_id, status=result.status)
+
+
+@router.post("/{listing_id}/save", response_model=SavedResponse)
+async def save_listing(
+    listing_id: UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SavedListingService, Depends(get_saved_listing_service)],
+) -> SavedResponse:
+    """Save (favourite) a listing for the caller (SCRUM-95). Idempotent."""
+    await service.save(buyer_id=current_user.user_id, listing_id=listing_id)
+    return SavedResponse(listing_id=listing_id, saved=True)
+
+
+@router.delete("/{listing_id}/save", response_model=SavedResponse)
+async def unsave_listing(
+    listing_id: UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SavedListingService, Depends(get_saved_listing_service)],
+) -> SavedResponse:
+    """Remove a listing from the caller's saved list (SCRUM-95). Idempotent."""
+    await service.unsave(buyer_id=current_user.user_id, listing_id=listing_id)
+    return SavedResponse(listing_id=listing_id, saved=False)
 
 
 @router.patch("/{listing_id}", response_model=UpdateListingResponse)

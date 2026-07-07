@@ -18,6 +18,7 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.listing_repo import ListingRepository
+from app.repositories.saved_repo import SavedListingRepository
 from app.repositories.seller_repo import SellerRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
@@ -30,6 +31,7 @@ from app.services.listing_review import ListingReviewService
 from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
 from app.services.media_upload import MediaUploadService
+from app.services.saved_listings import SavedListingService
 from app.services.view_count_dispatch import ViewCountDispatcher, build_view_count_dispatcher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -106,6 +108,16 @@ def _listing_repo(session: SessionDep) -> ListingRepository:
 
 def _audit_repo(session: SessionDep) -> AuditLogRepository:
     return AuditLogRepository(session)
+
+
+def _saved_repo(session: SessionDep) -> SavedListingRepository:
+    return SavedListingRepository(session)
+
+
+def get_saved_listing_service(
+    saved: Annotated[SavedListingRepository, Depends(_saved_repo)],
+) -> SavedListingService:
+    return SavedListingService(saved=saved)
 
 
 def _index_dispatcher(
