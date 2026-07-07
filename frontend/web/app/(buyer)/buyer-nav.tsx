@@ -1,24 +1,31 @@
 import Link from 'next/link';
 
-import { BuyerSignOut } from './buyer-sign-out';
+import { AvatarMenu } from './avatar-menu';
+import { NotificationBell } from './notification-bell';
 import { BUYER_HOME } from '@/lib/buyer-auth';
 
-/** Shared buyer header: brand + a link home + sign out. Minimal by design —
- * the full buyer navigation lands with the buyer dashboard Figma. */
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+/** Shared buyer header (SCRUM-95): brand · greeting · notification bell ·
+ * account menu. Rendered on every buyer page via the (buyer) layout. */
 export function BuyerNav() {
   return (
-    <header className="flex items-center justify-between border-b border-ink-300/30 bg-white px-6 py-3.5">
+    <header className="flex items-center justify-between bg-emerald-deep px-6 py-3">
       <Link href={BUYER_HOME} className="flex items-center gap-2.5">
-        <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-emerald-deep font-display text-sm text-bone">
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 font-display text-sm text-bone">
           M
         </span>
-        <span className="font-display text-lg tracking-tight text-ink-900">Maiplot</span>
+        <span className="font-display text-lg tracking-tight text-bone">Maiplot</span>
       </Link>
-      <div className="flex items-center gap-4">
-        <Link href={BUYER_HOME} className="text-sm text-ink-500 transition hover:text-ink-900">
-          Dashboard
-        </Link>
-        <BuyerSignOut />
+      <p className="hidden text-sm text-bone/80 sm:block">{greeting()}</p>
+      <div className="flex items-center gap-1.5">
+        <NotificationBell />
+        <AvatarMenu />
       </div>
     </header>
   );

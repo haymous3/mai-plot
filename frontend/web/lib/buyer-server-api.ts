@@ -51,7 +51,7 @@ export async function buyerBackendGet<T>(url: string): Promise<BackendResult<T>>
  * status + parsed JSON so the proxy can mirror them to the browser (the token
  * stays server-side). A missing token is 401; an unreachable backend is 502. */
 export async function buyerBackendSend(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
 ): Promise<{ status: number; body: unknown }> {
