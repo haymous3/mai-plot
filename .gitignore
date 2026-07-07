@@ -63,3 +63,6 @@ crash.*.log
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local design reference exports (kept locally, not committed)
+frontend/web/design/
