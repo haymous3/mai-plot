@@ -17,11 +17,13 @@ from app.adapters.search_index import SearchIndex, build_search_index
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
+from app.repositories.interest_repo import InterestRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.saved_repo import SavedListingRepository
 from app.repositories.seller_repo import SellerRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
+from app.services.express_interest import ExpressInterestService
 from app.services.index_dispatch import IndexDispatcher, build_index_dispatcher
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_create import ListingCreateService
@@ -118,6 +120,16 @@ def get_saved_listing_service(
     saved: Annotated[SavedListingRepository, Depends(_saved_repo)],
 ) -> SavedListingService:
     return SavedListingService(saved=saved)
+
+
+def _interest_repo(session: SessionDep) -> InterestRepository:
+    return InterestRepository(session)
+
+
+def get_express_interest_service(
+    interests: Annotated[InterestRepository, Depends(_interest_repo)],
+) -> ExpressInterestService:
+    return ExpressInterestService(interests=interests)
 
 
 def _index_dispatcher(

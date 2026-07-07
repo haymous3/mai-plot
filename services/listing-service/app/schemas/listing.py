@@ -161,6 +161,18 @@ class SavedResponse(BaseModel):
     saved: bool
 
 
+class ExpressInterestRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    message: str | None = Field(default=None, max_length=1000)
+
+
+class ExpressInterestResponse(BaseModel):
+    listing_id: UUID
+    # True on the buyer's first interest; False if they had already expressed it.
+    new_interest: bool
+
+
 class SearchItem(FeedItem):
     # Same shape as a feed item plus the Elasticsearch relevance score.
     search_score: float
