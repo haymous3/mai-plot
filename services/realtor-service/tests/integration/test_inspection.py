@@ -54,14 +54,21 @@ def _seed_transaction(conn: object, *, listing_id: UUID, buyer_id: UUID, seller_
     return tx_id
 
 
-def _seed_approved_realtor(conn: object, *, lng: float, lat: float) -> UUID:
+def _seed_approved_realtor(
+    conn: object, *, lng: float, lat: float, full_name: str = "Ada Realtor"
+) -> tuple[UUID, str]:
     user_id = uuid4()
+    esvarbon = f"ESV/{uuid4().hex[:8].upper()}"
     conn.execute(  # type: ignore[attr-defined]
         text(
             "INSERT INTO users (id, role, verified_status, is_active) "
             "VALUES (:id, 'realtor', 'id_verified', TRUE)"
         ),
         {"id": user_id},
+    )
+    conn.execute(  # type: ignore[attr-defined]
+        text("INSERT INTO user_pii (user_id, phone, full_name) VALUES (:id, :phone, :name)"),
+        {"id": user_id, "phone": f"+234{uuid4().int % 10**10:010d}", "name": full_name},
     )
     conn.execute(  # type: ignore[attr-defined]
         text(
@@ -74,9 +81,9 @@ def _seed_approved_realtor(conn: object, *, lng: float, lat: float) -> UUID:
                  ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography)
             """
         ),
-        {"id": user_id, "esv": f"ESV/{uuid4().hex[:8].upper()}", "lng": lng, "lat": lat},
+        {"id": user_id, "esv": esvarbon, "lng": lng, "lat": lat},
     )
-    return user_id
+    return user_id, esvarbon
 
 
 def _proposed() -> str:
@@ -96,7 +103,7 @@ async def test_request_assigns_nearest_realtor(
     with db_engine.begin() as conn:
         listing_id = _seed_listing(conn, seller)
         tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
-        realtor = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)  # ~0 km
+        realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)  # ~0 km
 
     resp = await http_client.post(
         "/inspections",
@@ -194,3 +201,95 @@ async def test_accept_by_wrong_realtor_is_403(
     )
     assert resp.status_code == 403
     assert resp.json()["error_code"] == "NOT_ASSIGNED_REALTOR"
+
+
+# -- GET /inspections/by-transaction/{tx} (SCRUM-139) ----------------------
+
+
+async def test_assigned_realtor_visible_to_seller(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        realtor, esvarbon = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    # Buyer requests → auto-assigned.
+    await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+
+    # Seller sees the assigned realtor's name + licence (no contact details).
+    resp = await http_client.get(
+        f"/inspections/by-transaction/{tx_id}",
+        headers=auth_header(mint_token(seller, "seller")),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["assigned"] is True
+    assert body["realtor_name"] == "Ada Realtor"
+    assert body["esvarbon_number"] == esvarbon
+    assert body["status"] == "pending"
+    assert "phone" not in body and "email" not in body
+
+
+async def test_assigned_realtor_none_when_no_inspection(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+
+    resp = await http_client.get(
+        f"/inspections/by-transaction/{tx_id}",
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "assigned": False,
+        "inspection_id": None,
+        "realtor_name": None,
+        "esvarbon_number": None,
+        "status": None,
+        "proposed_date": None,
+        "confirmed_date": None,
+    }
+
+
+async def test_assigned_realtor_forbidden_for_non_party(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    stranger = seed_user(role="buyer")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+
+    resp = await http_client.get(
+        f"/inspections/by-transaction/{tx_id}",
+        headers=auth_header(mint_token(stranger, "buyer")),
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error_code"] == "NOT_TRANSACTION_PARTY"

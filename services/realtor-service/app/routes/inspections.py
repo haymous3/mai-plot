@@ -18,7 +18,11 @@ from app.dependencies import (
     get_inspection_service,
     get_report_service,
 )
-from app.schemas.inspection import InspectionRequest, InspectionResponse
+from app.schemas.inspection import (
+    AssignedRealtorResponse,
+    InspectionRequest,
+    InspectionResponse,
+)
 from app.schemas.report import ReportResponse, ReportSubmitResponse
 from app.security import CurrentUser
 from app.services.credentials import InvalidCredential
@@ -89,6 +93,27 @@ async def request_inspection(
             "No realtor is available in range. An admin has been alerted.",
         )
     return InspectionResponse.from_row(inspection)
+
+
+@router.get("/by-transaction/{transaction_id}", response_model=None)
+async def assigned_realtor(
+    transaction_id: UUID, caller: CurrentUserDep, service: InspectionServiceDep
+) -> AssignedRealtorResponse | JSONResponse:
+    """The realtor assigned to a transaction's inspection, for the buyer/seller
+    transaction view (SCRUM-139). Name + ESVARBON + inspection status only."""
+    try:
+        row = await service.assigned_realtor_for_transaction(
+            caller=caller, transaction_id=transaction_id
+        )
+    except TransactionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "TRANSACTION_NOT_FOUND", "No such transaction.")
+    except NotTransactionParty:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_TRANSACTION_PARTY",
+            "Only the buyer or seller can view the assigned realtor.",
+        )
+    return AssignedRealtorResponse.none() if row is None else AssignedRealtorResponse.from_row(row)
 
 
 @router.post("/{inspection_id}/accept", response_model=None)

@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { SaleProgress } from '../sale-progress';
-import type { ListingDetail, SellerDealsResponse } from '@/lib/api';
-import { listingServiceUrl, transactionServiceUrl } from '@/lib/api';
+import type { AssignedRealtor, ListingDetail, SellerDealsResponse } from '@/lib/api';
+import { listingServiceUrl, realtorServiceUrl, transactionServiceUrl } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
@@ -27,6 +27,13 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
   );
   const hero = listing.ok ? (listing.data.media.find((m) => m.type === 'photo')?.url ?? null) : null;
   const address = listing.ok ? listing.data.address_text : null;
+
+  // Assigned realtor (best-effort — the section is hidden if this read fails or
+  // no inspection has been requested yet). Identity only, no contact details.
+  const realtorRes = await sessionBackendGet<AssignedRealtor>(
+    `${realtorServiceUrl()}/inspections/by-transaction/${encodeURIComponent(deal.transaction_id)}`,
+  );
+  const realtor = realtorRes.ok && realtorRes.data.assigned ? realtorRes.data : null;
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-8">
@@ -62,10 +69,50 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
             <SaleProgress stage={deal.stage} />
           </div>
         </div>
+
+        {realtor && (
+          <div className="border-t border-ink-300/20 p-5">
+            <h2 className="font-display text-lg text-ink-900">Assigned Realtor</h2>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-deep/10 font-medium text-emerald-deep">
+                {(realtor.realtor_name ?? 'R').slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-ink-900">{realtor.realtor_name ?? 'Realtor'}</p>
+                <p className="text-xs text-ink-500">
+                  {realtor.esvarbon_number
+                    ? `ESVARBON ${realtor.esvarbon_number}`
+                    : 'ESVARBON licence on file'}
+                </p>
+              </div>
+              <span className="ml-auto shrink-0 rounded-full bg-ink-300/15 px-2.5 py-0.5 text-[11px] font-medium text-ink-600">
+                {INSPECTION_STATUS[realtor.status ?? ''] ?? realtor.status ?? 'assigned'}
+              </span>
+            </div>
+            {realtor.confirmed_date && (
+              <p className="mt-2 text-xs text-ink-500">
+                Inspection confirmed for{' '}
+                {new Date(realtor.confirmed_date).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </main>
   );
 }
+
+const INSPECTION_STATUS: Record<string, string> = {
+  pending: 'awaiting acceptance',
+  accepted: 'inspection scheduled',
+  rescheduled: 'rescheduled',
+  completed: 'inspection complete',
+  no_show: 'no-show',
+};
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
