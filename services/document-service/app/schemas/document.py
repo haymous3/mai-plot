@@ -34,6 +34,23 @@ class ListingDocumentsResponse(BaseModel):
     documents: list[ListingDocumentMeta]
 
 
+class SellerDocumentItem(BaseModel):
+    """A seller's document across their listings (GET /documents/mine —
+    SCRUM-98). verification_notes carries the admin's feedback on rejection."""
+
+    id: UUID
+    listing_id: UUID
+    property_title: str | None
+    document_type: str
+    verification_status: str
+    verification_notes: str | None
+    created_at: datetime
+
+
+class SellerDocumentsResponse(BaseModel):
+    data: list[SellerDocumentItem]
+
+
 # ---- Buyer loan documents (SCRUM-131) --------------------------------------
 
 LoanDocumentType = Literal["bank_statement", "employment_letter", "passport"]

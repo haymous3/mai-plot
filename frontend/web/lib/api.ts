@@ -129,6 +129,31 @@ export interface SellerDealsResponse {
   data: SellerDeal[];
 }
 
+/** A seller's document across their listings (GET /documents/mine — SCRUM-98). */
+export interface SellerDocument {
+  id: string;
+  listing_id: string;
+  property_title: string | null;
+  document_type: string;
+  verification_status: string;
+  verification_notes: string | null;
+  created_at: string;
+}
+
+export interface SellerDocumentsResponse {
+  data: SellerDocument[];
+}
+
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  c_of_o: 'Certificate of Occupancy (C of O)',
+  survey_plan: 'Survey Plan',
+  deed_of_assignment: 'Deed of Assignment',
+  governors_consent: "Governor's Consent",
+  receipt: 'Receipt',
+  poa: 'Power of Attorney',
+  other: 'Other Document',
+};
+
 export interface ListingDetail {
   id: string;
   seller: {

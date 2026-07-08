@@ -356,6 +356,23 @@ services:
               claims_to_verify:
                 - exp
               key_claim_name: iss
+      # Seller Documents list (GET /documents/mine) + watermarked view
+      # (GET /documents/{id}/view) — SCRUM-98.
+      - name: documents
+        paths:
+          - /documents
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: admin-poa
         paths:
           - /admin/poa
