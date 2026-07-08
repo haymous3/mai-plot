@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.dependencies import get_current_user, get_seller_offers_service
-from app.schemas.offer import SellerOffersResponse
+from app.schemas.offer import BuyerOffersResponse, SellerOffersResponse
 from app.security import CurrentUser
 from app.services.seller_offers import SellerOffersService
 
@@ -23,5 +23,14 @@ async def list_offers(
     caller: Annotated[CurrentUser, Depends(get_current_user)],
     service: Annotated[SellerOffersService, Depends(get_seller_offers_service)],
 ) -> SellerOffersResponse:
-    """Every offer on the caller's listings, newest first."""
+    """Every offer on the caller's listings (seller inbox), newest first."""
     return await service.list_for_seller(caller.user_id)
+
+
+@router.get("/placed", response_model=BuyerOffersResponse)
+async def list_placed_offers(
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerOffersService, Depends(get_seller_offers_service)],
+) -> BuyerOffersResponse:
+    """Every offer the caller placed as a buyer, newest first (SCRUM-134)."""
+    return await service.list_for_buyer(caller.user_id)

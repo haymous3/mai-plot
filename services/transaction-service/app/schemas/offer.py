@@ -57,3 +57,23 @@ class SellerOfferItem(BaseModel):
 
 class SellerOffersResponse(BaseModel):
     data: list[SellerOfferItem]
+
+
+class BuyerOfferItem(BaseModel):
+    """An offer the buyer placed (GET /offers/placed — SCRUM-134)."""
+
+    id: UUID
+    listing_id: UUID
+    property_title: str
+    lga: str
+    state: str
+    offered_price_kobo: int
+    asking_price_kobo: int
+    counter_price_kobo: int | None
+    note: str | None
+    status: str
+    created_at: datetime
+
+
+class BuyerOffersResponse(BaseModel):
+    data: list[BuyerOfferItem]

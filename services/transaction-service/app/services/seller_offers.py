@@ -11,7 +11,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.repositories.offer_repo import OfferRepository
-from app.schemas.offer import SellerOfferItem, SellerOffersResponse
+from app.schemas.offer import (
+    BuyerOfferItem,
+    BuyerOffersResponse,
+    SellerOfferItem,
+    SellerOffersResponse,
+)
 
 
 class SellerOffersService:
@@ -29,6 +34,28 @@ class SellerOffersService:
                     lga=r.lga,
                     state=r.state,
                     buyer_ref=str(r.buyer_id)[:8],
+                    offered_price_kobo=r.offered_price_kobo,
+                    asking_price_kobo=r.asking_price_kobo,
+                    counter_price_kobo=r.counter_price_kobo,
+                    note=r.note,
+                    status=r.status,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+        )
+
+    async def list_for_buyer(self, buyer_id: UUID) -> BuyerOffersResponse:
+        """The offers the buyer placed, for their "Active Offers" view (SCRUM-134)."""
+        rows = await self._offers.list_for_buyer(buyer_id)
+        return BuyerOffersResponse(
+            data=[
+                BuyerOfferItem(
+                    id=r.id,
+                    listing_id=r.listing_id,
+                    property_title=r.property_title,
+                    lga=r.lga,
+                    state=r.state,
                     offered_price_kobo=r.offered_price_kobo,
                     asking_price_kobo=r.asking_price_kobo,
                     counter_price_kobo=r.counter_price_kobo,

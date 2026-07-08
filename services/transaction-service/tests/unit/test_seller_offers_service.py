@@ -7,20 +7,28 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.repositories.offer_repo import SellerOfferRow
+from app.repositories.offer_repo import BuyerOfferRow, SellerOfferRow
 from app.services.seller_offers import SellerOffersService
 
 pytestmark = pytest.mark.asyncio
 
 
 class _StubOffers:
-    def __init__(self, rows: list[SellerOfferRow]) -> None:
+    def __init__(
+        self, rows: list[SellerOfferRow], buyer_rows: list[BuyerOfferRow] | None = None
+    ) -> None:
         self._rows = rows
+        self._buyer_rows = buyer_rows or []
         self.seen: UUID | None = None
+        self.seen_buyer: UUID | None = None
 
     async def list_for_seller(self, seller_id: UUID) -> list[SellerOfferRow]:
         self.seen = seller_id
         return self._rows
+
+    async def list_for_buyer(self, buyer_id: UUID) -> list[BuyerOfferRow]:
+        self.seen_buyer = buyer_id
+        return self._buyer_rows
 
 
 def _row(buyer_id: UUID, *, note: str | None = None) -> SellerOfferRow:
@@ -59,3 +67,30 @@ async def test_maps_and_masks_buyer() -> None:
 async def test_empty_list() -> None:
     resp = await SellerOffersService(offers=_StubOffers([])).list_for_seller(uuid4())  # type: ignore[arg-type]
     assert resp.data == []
+
+
+async def test_buyer_placed_offers() -> None:
+    buyer = uuid4()
+    row = BuyerOfferRow(
+        id=uuid4(),
+        listing_id=uuid4(),
+        property_title="4 Bedroom Duplex",
+        lga="Ikeja",
+        state="Lagos",
+        asking_price_kobo=8_500_000_000,
+        offered_price_kobo=8_000_000_000,
+        counter_price_kobo=8_200_000_000,
+        note="Ready to proceed.",
+        status="countered",
+        created_at=datetime.now(UTC),
+    )
+    repo = _StubOffers([], buyer_rows=[row])
+    resp = await SellerOffersService(offers=repo).list_for_buyer(buyer)  # type: ignore[arg-type]
+
+    assert repo.seen_buyer == buyer
+    item = resp.data[0]
+    assert item.status == "countered"
+    assert item.counter_price_kobo == 8_200_000_000
+    assert item.offered_price_kobo == 8_000_000_000
+    # No buyer_ref on the buyer's own view.
+    assert not hasattr(item, "buyer_ref")

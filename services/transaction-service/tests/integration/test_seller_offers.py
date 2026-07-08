@@ -79,3 +79,31 @@ async def test_lists_only_my_offers(
 async def test_offers_requires_auth(clean_tables: None, http_client: AsyncClient) -> None:
     resp = await http_client.get("/offers")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_buyer_lists_only_their_placed_offers(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    seller = seed_user(role="seller")
+    me = seed_user(role="buyer")
+    other_buyer = seed_user(role="buyer")
+    listing = seed_listing(seller_id=seller)
+
+    _seed_offer(db_engine, listing_id=listing, buyer_id=me, note="Mine.")
+    _seed_offer(db_engine, listing_id=listing, buyer_id=me, status="countered")
+    _seed_offer(db_engine, listing_id=listing, buyer_id=other_buyer)
+
+    resp = await http_client.get("/offers/placed", headers=auth_header(mint_token(me, "buyer")))
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert len(data) == 2
+    assert all("buyer_ref" not in d for d in data)
+    mine = next(d for d in data if d["note"] == "Mine.")
+    assert mine["asking_price_kobo"] == 5_000_000_000
