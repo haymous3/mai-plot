@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { projectedExpiry } from '@/lib/countdown';
 import { formatNaira } from '@/lib/format';
 
 type PropertyType = 'land' | 'residential' | 'commercial';
@@ -82,6 +83,7 @@ export function CreateListingWizard() {
   const [authority, setAuthority] = useState<Authority>('owner');
 
   const priceKobo = Math.round(Number(priceNaira.replace(/[^0-9.]/g, '')) * 100);
+  const expiry = saleType === 'distress' ? projectedExpiry(urgency) : null;
 
   function canAdvance(): boolean {
     if (step === 0) return title.trim().length > 0 && sizeSqm.trim().length > 0;
@@ -260,6 +262,15 @@ export function CreateListingWizard() {
                     </button>
                   ))}
                 </div>
+                {expiry && (
+                  <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    ⏳ This distress listing will auto-expire on{' '}
+                    <span className="font-medium">
+                      {expiry.date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </span>{' '}
+                    (in {expiry.days} days). You&rsquo;ll be notified 48 hours before it lapses.
+                  </p>
+                )}
               </Field>
             )}
           </Section>

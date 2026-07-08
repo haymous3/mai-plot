@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
+import { ExpiryCountdown } from './expiry-countdown';
 import { ListingActions } from './listing-actions';
 import { SellerHeader } from '../seller-header';
 import type { SellerListingItem, SellerListingsResponse } from '@/lib/api';
@@ -41,6 +42,9 @@ function ListingCard({ item }: { item: SellerListingItem }) {
               <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-600">
                 Distress
               </span>
+            )}
+            {item.sale_type === 'distress' && item.urgency_expires_at && (
+              <ExpiryCountdown expiresAt={item.urgency_expires_at} />
             )}
           </div>
           <p className="mt-0.5 text-xs text-ink-500">
