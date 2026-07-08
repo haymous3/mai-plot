@@ -34,6 +34,7 @@ curl -sS http://localhost:8000/auth/health
 | `/auth/logout`           | auth-service         | JWT                         | 60/min     |
 | `/auth/token/refresh`    | auth-service         | JWT                         | 60/min     |
 | `/auth/verify/*`         | auth-service         | JWT                         | 60/min     |
+| `/auth/seller/*`         | auth-service         | JWT                         | 60/min     |
 | `GET /listings/*`        | listing-service      | public                      | 100/min    |
 | `POST PATCH DELETE /listings/*` | listing-service | JWT                       | 30/min     |
 | `/transactions/*`        | transaction-service  | JWT                         | 60/min     |

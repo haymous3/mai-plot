@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { DocumentsList } from './documents-list';
-import type { SellerDocumentsResponse } from '@/lib/api';
-import { documentServiceUrl } from '@/lib/api';
+import { PoaStatusCard } from './poa-status-card';
+import type { SellerDocumentsResponse, SellerPoaStatus } from '@/lib/api';
+import { authServiceUrl, documentServiceUrl } from '@/lib/api';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 
@@ -23,6 +24,13 @@ export default async function SellerDocumentsPage() {
   if (!result.ok && result.status === 401) redirect(`${SESSION_LOGIN}?role=seller`);
   const docs = result.ok ? result.data.data : [];
 
+  // PoA is an auth-level document (not a listing document), so it lives in
+  // auth-service. Best-effort — the card is simply hidden if this read fails.
+  const poaRes = await sessionBackendGet<SellerPoaStatus>(
+    `${authServiceUrl()}/auth/seller/poa-status`,
+  );
+  const poa = poaRes.ok ? poaRes.data : null;
+
   const count = (fn: (s: string) => boolean) => docs.filter((d) => fn(d.verification_status)).length;
 
   return (
@@ -34,6 +42,7 @@ export default async function SellerDocumentsPage() {
 
       <div className="mt-2 grid gap-6 lg:grid-cols-[1fr_300px]">
         <div>
+          {poa && <PoaStatusCard poa={poa} />}
           {!result.ok ? (
             <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
               Could not load your documents. Please retry.

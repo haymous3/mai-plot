@@ -43,6 +43,7 @@ from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
 from app.services.seller_authority import SellerAuthorityService
+from app.services.seller_poa_status import SellerPoaStatusService
 from app.services.set_password import SetPasswordService
 from app.services.token_refresh import TokenRefreshService
 
@@ -220,6 +221,13 @@ def get_seller_authority_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
 ) -> SellerAuthorityService:
     return SellerAuthorityService(users=users)
+
+
+def get_seller_poa_status_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> SellerPoaStatusService:
+    return SellerPoaStatusService(users=users, audit=audit)
 
 
 def get_buyer_profile_service(

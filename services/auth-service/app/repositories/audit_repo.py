@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditLog
@@ -50,3 +51,23 @@ class AuditLogRepository:
             )
         )
         await self._session.flush()
+
+    async def latest_poa_rejection_reason(self, user_id: UUID) -> str | None:
+        """The reason from a seller's most recent PoA rejection (SCRUM-137).
+        Read-only — the append-only contract only forbids update/delete. Returns
+        None if the last decision was not a rejection or carried no reason."""
+        stmt = (
+            select(AuditLog.new_value)
+            .where(
+                AuditLog.entity_type == "user",
+                AuditLog.entity_id == user_id,
+                AuditLog.action == "poa.rejected",
+            )
+            .order_by(AuditLog.created_at.desc())
+            .limit(1)
+        )
+        new_value = (await self._session.execute(stmt)).scalar_one_or_none()
+        if not isinstance(new_value, dict):
+            return None
+        reason = new_value.get("reason")
+        return reason if isinstance(reason, str) and reason.strip() else None

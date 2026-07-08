@@ -74,6 +74,7 @@ services:
           - /auth/logout
           - /auth/token
           - /auth/verify
+          - /auth/seller
         strip_path: false
         plugins:
           - name: rate-limiting

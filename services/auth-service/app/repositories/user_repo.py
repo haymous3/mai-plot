@@ -63,6 +63,17 @@ class PoaReviewTarget:
 
 
 @dataclass(frozen=True)
+class SellerPoaStatus:
+    """A seller's own PoA tracking view (SCRUM-137): authority + verification
+    status + whether a document is on file + when it was last submitted."""
+
+    seller_authority_type: str | None
+    poa_verified_status: str
+    has_document: bool
+    submitted_at: datetime | None
+
+
+@dataclass(frozen=True)
 class PoaState:
     """Role + authority + current PoA verification status, plus whether a
     document is already on file. Drives the PoA upload eligibility/conflict
@@ -263,6 +274,35 @@ class UserRepository:
             seller_authority_type=row.seller_authority_type,
             poa_verified_status=row.poa_verified_status,
             has_document=row.poa_document_s3_key is not None,
+        )
+
+    async def get_seller_poa_status(self, user_id: UUID) -> SellerPoaStatus | None:
+        """A live seller's own PoA status view (SCRUM-137). submitted_at is the
+        PoA row's last-touch time when a document is on file (mirrors the queue's
+        submitted_at). None if the user is not live."""
+        stmt = (
+            select(
+                User.seller_authority_type,
+                User.poa_verified_status,
+                UserPii.poa_document_s3_key,
+                UserPii.updated_at,
+            )
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+            )
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        has_document = row.poa_document_s3_key is not None
+        return SellerPoaStatus(
+            seller_authority_type=row.seller_authority_type,
+            poa_verified_status=row.poa_verified_status,
+            has_document=has_document,
+            submitted_at=row.updated_at if has_document else None,
         )
 
     async def set_poa_document(self, user_id: UUID, *, s3_key: str) -> None:
