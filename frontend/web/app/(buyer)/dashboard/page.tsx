@@ -2,10 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { LoanStatusCard } from './loan-status-card';
 import { PropertyCard } from './property-card';
 import { SearchFilterBar } from './search-filter-bar';
-import type { DealsResponse, FeedResponse } from '@/lib/api';
-import { listingServiceUrl, transactionServiceUrl } from '@/lib/api';
+import type { BuyerLoansResponse, DealsResponse, FeedResponse } from '@/lib/api';
+import { listingServiceUrl, loanServiceUrl, transactionServiceUrl } from '@/lib/api';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 import { dealCompletedSteps, dealStageLabel, DEAL_TOTAL_STEPS, isDealActive } from '@/lib/deal-stage';
@@ -75,12 +76,16 @@ export default async function BuyerDashboardPage({
     flat[k] = Array.isArray(v) ? v[0] : v;
   }
 
-  const [urgent, all, saved, dealsRes] = await Promise.all([
+  const [urgent, all, saved, dealsRes, loansRes] = await Promise.all([
     fetchFeed(`${listingServiceUrl()}/listings?sale_type=distress&sort=urgency&page_size=4`),
     fetchFeed(buildFeedUrl(flat)),
     fetchFeed(`${listingServiceUrl()}/listings/saved`),
     buyerBackendGet<DealsResponse>(`${transactionServiceUrl()}/transactions`),
+    buyerBackendGet<BuyerLoansResponse>(`${loanServiceUrl()}/loans/me`),
   ]);
+
+  // Most recent loan, if any — surfaced as a status card (SCRUM-135).
+  const latestLoan = loansRes.ok ? (loansRes.data.items[0] ?? null) : null;
 
   const activeListings = all?.pagination.total ?? 0;
   const savedIds = new Set((saved?.data ?? []).map((i) => i.id));
@@ -163,6 +168,8 @@ export default async function BuyerDashboardPage({
               ✓ Verified properties close 3x faster
             </p>
           </div>
+
+          {latestLoan && <LoanStatusCard loan={latestLoan} />}
 
           <SidebarCard>
             <p className="flex items-center gap-2 font-semibold text-ink-900">💳 Get Financing</p>
