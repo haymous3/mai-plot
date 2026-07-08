@@ -16,7 +16,11 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.repositories.inspection_repo import InspectionRepository, InspectionRow
+from app.repositories.inspection_repo import (
+    AssignedRealtorRow,
+    InspectionRepository,
+    InspectionRow,
+)
 from app.repositories.realtor_repo import RealtorRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import CurrentUser
@@ -114,6 +118,19 @@ class InspectionService:
             extra={"inspection_id": str(inspection.id), "transaction_id": str(transaction_id)},
         )
         return inspection
+
+    async def assigned_realtor_for_transaction(
+        self, *, caller: CurrentUser, transaction_id: UUID
+    ) -> AssignedRealtorRow | None:
+        """Who is assigned to inspect this transaction's property (SCRUM-139).
+        Only a party to the transaction may see it; returns None when no
+        inspection has been requested yet. Identity only — no contact details."""
+        txn = await self._transactions.get(transaction_id)
+        if txn is None:
+            raise TransactionNotFound()
+        if caller.user_id not in (txn.buyer_id, txn.seller_id):
+            raise NotTransactionParty()
+        return await self._inspections.latest_assignment_for_transaction(transaction_id)
 
     async def accept(self, *, caller: CurrentUser, inspection_id: UUID) -> InspectionRow:
         inspection = await self._inspections.get(inspection_id)

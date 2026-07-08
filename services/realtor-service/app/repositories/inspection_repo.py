@@ -45,6 +45,21 @@ _COLUMNS = (
 
 
 @dataclass(frozen=True)
+class AssignedRealtorRow:
+    """The realtor assigned to a transaction's (latest) inspection, with the
+    non-contact identity a party is allowed to see (SCRUM-139). Name + licence +
+    inspection status only — never phone/email (contact masking, CLAUDE.md §10)."""
+
+    inspection_id: UUID
+    realtor_id: UUID
+    realtor_name: str | None
+    esvarbon_number: str | None
+    status: str
+    proposed_date: datetime
+    confirmed_date: datetime | None
+
+
+@dataclass(frozen=True)
 class LapsedInspection:
     """A pending inspection whose acceptance window has lapsed, with the data the
     reassignment sweep needs (SCRUM-123)."""
@@ -80,6 +95,44 @@ class InspectionRepository:
             )
         ).first()
         return self._to_row(row) if row is not None else None
+
+    async def latest_assignment_for_transaction(
+        self, transaction_id: UUID
+    ) -> AssignedRealtorRow | None:
+        """The most recent inspection on a transaction, joined to the assigned
+        realtor's display name (user_pii) + ESVARBON licence (realtors) — for the
+        seller/buyer "who's inspecting" view (SCRUM-139). None if never assigned.
+        Returns identity only, no contact details."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT i.id AS inspection_id, i.realtor_id, i.status,
+                           i.proposed_date, i.confirmed_date,
+                           p.full_name AS realtor_name, r.esvarbon_number
+                    FROM inspections i
+                    LEFT JOIN user_pii p ON p.user_id = i.realtor_id
+                    LEFT JOIN realtors r ON r.id = i.realtor_id
+                    WHERE i.transaction_id = :tx
+                    ORDER BY i.created_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"tx": transaction_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        name = row.realtor_name if row.realtor_name and str(row.realtor_name).strip() else None
+        return AssignedRealtorRow(
+            inspection_id=row.inspection_id,
+            realtor_id=row.realtor_id,
+            realtor_name=name,
+            esvarbon_number=row.esvarbon_number,
+            status=row.status,
+            proposed_date=row.proposed_date,
+            confirmed_date=row.confirmed_date,
+        )
 
     async def create(
         self,

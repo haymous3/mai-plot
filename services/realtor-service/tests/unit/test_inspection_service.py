@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.repositories.inspection_repo import InspectionRow
+from app.repositories.inspection_repo import AssignedRealtorRow, InspectionRow
 from app.repositories.transaction_repo import TransactionInfo
 from app.security import CurrentUser
 from app.services.inspection_service import (
@@ -78,10 +78,15 @@ class _StubRealtorRepo:
 
 class _StubInspectionRepo:
     def __init__(
-        self, *, active: InspectionRow | None = None, get_row: InspectionRow | None = None
+        self,
+        *,
+        active: InspectionRow | None = None,
+        get_row: InspectionRow | None = None,
+        assigned: AssignedRealtorRow | None = None,
     ) -> None:
         self._active = active
         self._get_row = get_row
+        self._assigned = assigned
         self.created_realtor: UUID | None = None
         self.accepted: list[UUID] = []
 
@@ -105,6 +110,11 @@ class _StubInspectionRepo:
     async def mark_accepted(self, inspection_id: UUID) -> bool:
         self.accepted.append(inspection_id)
         return True
+
+    async def latest_assignment_for_transaction(
+        self, transaction_id: UUID
+    ) -> AssignedRealtorRow | None:
+        return self._assigned
 
 
 class _RecordingNotifier:
@@ -216,3 +226,52 @@ async def test_accept_happy() -> None:
 
     await svc.accept(caller=_REALTOR, inspection_id=row.id)
     assert insp.accepted == [row.id]
+
+
+# -- assigned_realtor_for_transaction (SCRUM-139) --------------------------
+
+
+def _assigned(realtor_id: UUID) -> AssignedRealtorRow:
+    now = datetime.now(UTC)
+    return AssignedRealtorRow(
+        inspection_id=uuid4(),
+        realtor_id=realtor_id,
+        realtor_name="Ada Realtor",
+        esvarbon_number="ESV-12345",
+        status="accepted",
+        proposed_date=now + timedelta(days=1),
+        confirmed_date=now + timedelta(days=1),
+    )
+
+
+async def test_assigned_realtor_unknown_transaction() -> None:
+    svc, _, _ = _service(txn=None, nearest=uuid4())
+    with pytest.raises(TransactionNotFound):
+        await svc.assigned_realtor_for_transaction(caller=_BUYER, transaction_id=uuid4())
+
+
+async def test_assigned_realtor_non_party_forbidden() -> None:
+    stranger = CurrentUser(user_id=uuid4(), role="seller")
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4())
+    with pytest.raises(NotTransactionParty):
+        await svc.assigned_realtor_for_transaction(caller=stranger, transaction_id=uuid4())
+
+
+async def test_assigned_realtor_none_when_no_inspection() -> None:
+    svc, _, _ = _service(
+        txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(assigned=None)
+    )
+    result = await svc.assigned_realtor_for_transaction(caller=_BUYER, transaction_id=uuid4())
+    assert result is None
+
+
+async def test_assigned_realtor_returns_identity() -> None:
+    realtor = uuid4()
+    svc, _, _ = _service(
+        txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(assigned=_assigned(realtor))
+    )
+    result = await svc.assigned_realtor_for_transaction(caller=_BUYER, transaction_id=uuid4())
+    assert result is not None
+    assert result.realtor_id == realtor
+    assert result.realtor_name == "Ada Realtor"
+    assert result.esvarbon_number == "ESV-12345"

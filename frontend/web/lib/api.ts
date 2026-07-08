@@ -148,6 +148,19 @@ export interface SellerDealsResponse {
   data: SellerDeal[];
 }
 
+/** The realtor assigned to a transaction's inspection (SCRUM-139).
+ * `assigned` is false before any inspection is requested. Identity only —
+ * no contact details (masking, CLAUDE.md §10). */
+export interface AssignedRealtor {
+  assigned: boolean;
+  inspection_id: string | null;
+  realtor_name: string | null;
+  esvarbon_number: string | null;
+  status: string | null;
+  proposed_date: string | null;
+  confirmed_date: string | null;
+}
+
 /** A seller's document across their listings (GET /documents/mine — SCRUM-98). */
 export interface SellerDocument {
   id: string;
