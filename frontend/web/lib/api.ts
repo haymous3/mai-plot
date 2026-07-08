@@ -148,6 +148,18 @@ export interface SellerDealsResponse {
   data: SellerDeal[];
 }
 
+/** A seller's own PoA verification status (SCRUM-137).
+ * `status`: not_applicable | pending | verified | rejected. `can_publish`
+ * is false while a PoA seller is unverified (business rule §8.1). */
+export interface SellerPoaStatus {
+  authority_type: string | null;
+  status: string;
+  has_document: boolean;
+  submitted_at: string | null;
+  rejection_reason: string | null;
+  can_publish: boolean;
+}
+
 /** The realtor assigned to a transaction's inspection (SCRUM-139).
  * `assigned` is false before any inspection is requested. Identity only —
  * no contact details (masking, CLAUDE.md §10). */

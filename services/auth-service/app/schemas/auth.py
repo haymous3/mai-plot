@@ -140,6 +140,17 @@ class SellerAuthorityResponse(BaseModel):
     authority_type: SellerAuthorityType
 
 
+class SellerPoaStatusResponse(BaseModel):
+    """A seller's own PoA verification tracking (SCRUM-137)."""
+
+    authority_type: str | None
+    status: str
+    has_document: bool
+    submitted_at: str | None
+    rejection_reason: str | None
+    can_publish: bool
+
+
 # Mirrors the loan-service employment values so the two stay consistent.
 EmploymentStatus = Literal["employed", "self_employed", "business_owner", "unemployed"]
 

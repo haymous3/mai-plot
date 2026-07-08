@@ -24,6 +24,7 @@ from app.dependencies import (
     get_profile_service,
     get_registration_service,
     get_seller_authority_service,
+    get_seller_poa_status_service,
     get_set_password_service,
     get_token_refresh_service,
 )
@@ -47,6 +48,7 @@ from app.schemas.auth import (
     RegisterResponse,
     SellerAuthorityRequest,
     SellerAuthorityResponse,
+    SellerPoaStatusResponse,
     SetPasswordRequest,
     SetPasswordResponse,
     TokenRefreshRequest,
@@ -90,6 +92,8 @@ from app.services.registration import (
     RegistrationService,
 )
 from app.services.seller_authority import NotSeller, SellerAuthorityService
+from app.services.seller_poa_status import NotSeller as PoaNotSeller
+from app.services.seller_poa_status import SellerNotFound, SellerPoaStatusService
 from app.services.set_password import SetPasswordService, WeakPassword
 from app.services.token_refresh import (
     RefreshTokenExpired,
@@ -267,6 +271,30 @@ async def declare_seller_authority(
     except NotSeller:
         return _error(403, "SELLER_ROLE_REQUIRED", "Only sellers can declare a selling authority.")
     return SellerAuthorityResponse(message="Authority declared", authority_type=body.authority_type)
+
+
+@router.get("/seller/poa-status", response_model=None)
+async def seller_poa_status(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SellerPoaStatusService, Depends(get_seller_poa_status_service)],
+) -> SellerPoaStatusResponse | JSONResponse:
+    """The caller's own PoA verification status (SCRUM-137) — authority type,
+    pending/verified/rejected status, rejection reason, and whether they may yet
+    publish. Powers the seller dashboard's PoA tracking card. Seller-scoped."""
+    try:
+        result = await service.get(user_id=current_user.user_id, role=current_user.role)
+    except PoaNotSeller:
+        return _error(403, "SELLER_ROLE_REQUIRED", "Only sellers have a PoA status.")
+    except SellerNotFound:
+        return _error(404, "SELLER_NOT_FOUND", "No seller account found.")
+    return SellerPoaStatusResponse(
+        authority_type=result.authority_type,
+        status=result.status,
+        has_document=result.has_document,
+        submitted_at=result.submitted_at,
+        rejection_reason=result.rejection_reason,
+        can_publish=result.can_publish,
+    )
 
 
 @router.post("/buyer/profile", response_model=BuyerProfileResponse)
