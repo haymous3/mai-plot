@@ -50,6 +50,13 @@ export function AvatarMenu() {
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl border border-ink-300/30 bg-white py-1 shadow-lg">
           <Link
+            href="/offers"
+            className="block px-4 py-2.5 text-sm text-ink-700 transition hover:bg-bone"
+            onClick={() => setOpen(false)}
+          >
+            My Offers
+          </Link>
+          <Link
             href="/wallet"
             className="block px-4 py-2.5 text-sm text-ink-700 transition hover:bg-bone"
             onClick={() => setOpen(false)}

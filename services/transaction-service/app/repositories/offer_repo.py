@@ -48,6 +48,24 @@ class SellerOfferRow:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class BuyerOfferRow:
+    """An offer the buyer placed, for their "Active Offers" list (SCRUM-134).
+    Joins property_listings for the title/asking price."""
+
+    id: UUID
+    listing_id: UUID
+    property_title: str
+    lga: str
+    state: str
+    asking_price_kobo: int
+    offered_price_kobo: int
+    counter_price_kobo: int | None
+    note: str | None
+    status: str
+    created_at: datetime
+
+
 class OfferRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -132,6 +150,41 @@ class OfferRepository:
                 id=r.id,
                 listing_id=r.listing_id,
                 buyer_id=r.buyer_id,
+                property_title=r.property_title,
+                lga=r.lga,
+                state=r.state,
+                asking_price_kobo=r.asking_price_kobo,
+                offered_price_kobo=r.offered_price_kobo,
+                counter_price_kobo=r.counter_price_kobo,
+                note=r.note,
+                status=r.status,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def list_for_buyer(self, buyer_id: UUID) -> list[BuyerOfferRow]:
+        """Every offer the buyer placed, newest first."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT o.id, o.listing_id, pl.title AS property_title, pl.lga, pl.state,
+                           pl.asking_price_kobo, o.offered_price_kobo, o.counter_price_kobo,
+                           o.note, o.status, o.created_at
+                    FROM offers o
+                    JOIN property_listings pl ON pl.id = o.listing_id
+                    WHERE o.buyer_id = :bid
+                    ORDER BY o.created_at DESC
+                    """
+                ),
+                {"bid": buyer_id},
+            )
+        ).all()
+        return [
+            BuyerOfferRow(
+                id=r.id,
+                listing_id=r.listing_id,
                 property_title=r.property_title,
                 lga=r.lga,
                 state=r.state,

@@ -113,6 +113,25 @@ export interface SellerOffersResponse {
   data: SellerOffer[];
 }
 
+/** An offer the buyer placed (GET /offers/placed — SCRUM-134). */
+export interface BuyerOffer {
+  id: string;
+  listing_id: string;
+  property_title: string;
+  lga: string;
+  state: string;
+  offered_price_kobo: number;
+  asking_price_kobo: number;
+  counter_price_kobo: number | null;
+  note: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface BuyerOffersResponse {
+  data: BuyerOffer[];
+}
+
 /** A seller's transaction (GET /sales — SCRUM-98). Buyer masked. */
 export interface SellerDeal {
   transaction_id: string;
