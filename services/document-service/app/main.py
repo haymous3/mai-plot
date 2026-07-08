@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.routes.admin import router as admin_router
 from app.routes.documents import router as documents_router
 from app.routes.loan_documents import router as loan_documents_router
+from app.routes.my_documents import router as my_documents_router
 from app.routes.view import router as view_router
 from app.security import AdminAccessError, AuthenticationError
 from app.telemetry import setup_telemetry
@@ -25,6 +26,7 @@ app = FastAPI(title="Maiplot Document Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(documents_router)
 app.include_router(loan_documents_router)
+app.include_router(my_documents_router)
 app.include_router(view_router)
 app.include_router(admin_router)
 

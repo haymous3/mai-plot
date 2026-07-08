@@ -27,6 +27,7 @@ from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.listing_document_list import ListingDocumentListService
 from app.services.loan_document_upload import LoanDocumentService
 from app.services.ocr_dispatch import OcrDispatcher, build_ocr_dispatcher
+from app.services.seller_documents import SellerDocumentsService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -123,6 +124,12 @@ def get_listing_document_list_service(
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
 ) -> ListingDocumentListService:
     return ListingDocumentListService(documents=documents)
+
+
+def get_seller_documents_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+) -> SellerDocumentsService:
+    return SellerDocumentsService(documents=documents)
 
 
 def get_document_review_service(

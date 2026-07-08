@@ -42,6 +42,20 @@ class DocMetaRow:
     verification_status: str
 
 
+@dataclass(frozen=True)
+class SellerDocRow:
+    """A seller's document across their listings, for the Documents section
+    (SCRUM-98). Includes the admin's verification note (feedback on rejection)."""
+
+    id: UUID
+    listing_id: UUID
+    property_title: str | None
+    document_type: str
+    verification_status: str
+    verification_notes: str | None
+    created_at: datetime
+
+
 class DocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -83,6 +97,37 @@ class DocumentRepository:
         ).all()
         return [
             DocMetaRow(document_type=r.document_type, verification_status=r.verification_status)
+            for r in rows
+        ]
+
+    async def list_for_seller(self, seller_id: UUID) -> list[SellerDocRow]:
+        """Every document on the seller's listings, newest first, joined with the
+        property title. property_listings is a shared-DB cross-service read."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT d.id, d.listing_id, pl.title AS property_title, d.document_type,
+                           d.verification_status, d.verification_notes, d.created_at
+                    FROM listing_documents d
+                    JOIN property_listings pl ON pl.id = d.listing_id
+                    WHERE pl.seller_id = :sid
+                    ORDER BY d.created_at DESC
+                    """
+                ),
+                {"sid": seller_id},
+            )
+        ).all()
+        return [
+            SellerDocRow(
+                id=r.id,
+                listing_id=r.listing_id,
+                property_title=r.property_title,
+                document_type=r.document_type,
+                verification_status=r.verification_status,
+                verification_notes=r.verification_notes,
+                created_at=r.created_at,
+            )
             for r in rows
         ]
 
