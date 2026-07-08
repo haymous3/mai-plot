@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { LoanStatusCard } from './loan-status-card';
 import { PropertyCard } from './property-card';
+import { RecentlyViewedCard } from './recently-viewed-card';
 import { SearchFilterBar } from './search-filter-bar';
 import type { BuyerLoansResponse, DealsResponse, FeedResponse } from '@/lib/api';
 import { listingServiceUrl, loanServiceUrl, transactionServiceUrl } from '@/lib/api';
@@ -263,6 +264,8 @@ export default async function BuyerDashboardPage({
               </ul>
             )}
           </SidebarCard>
+
+          <RecentlyViewedCard />
         </aside>
       </div>
     </main>

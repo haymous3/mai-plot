@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import { Carousel } from './carousel';
 import { PropertyActions } from './property-actions';
+import { RecordView } from './record-view';
 import type {
   DealsResponse,
   FeedResponse,
@@ -85,6 +86,16 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-6">
+      <RecordView
+        listing={{
+          id: listing.id,
+          title: listing.title,
+          location: listing.address_text,
+          asking_price_kobo: listing.asking_price_kobo,
+          sale_type: listing.sale_type,
+          thumbnail_url: listing.media[0]?.url ?? null,
+        }}
+      />
       <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-900">
         ← Back to listings
       </Link>

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { BuyerNav } from './buyer-nav';
+import { OfflineBanner } from './offline-banner';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerAccessToken } from '@/lib/buyer-server-api';
 
@@ -14,6 +15,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-bone">
+      <OfflineBanner />
       <BuyerNav />
       {children}
     </div>
