@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.repositories.commission_repo import CommissionRepository, CommissionTotals
+from app.repositories.commission_repo import (
+    CommissionRepository,
+    CommissionTotals,
+    RealtorCommissionRow,
+)
 from app.services.business_days import add_business_days
 
 logger = logging.getLogger(__name__)
@@ -71,3 +75,8 @@ class CommissionService:
 
     async def summary(self, realtor_id: UUID) -> CommissionTotals:
         return await self._commissions.totals_for_realtor(realtor_id)
+
+    async def history(self, realtor_id: UUID, *, limit: int = 100) -> list[RealtorCommissionRow]:
+        """The realtor's commission line items, newest first — the Earnings
+        transaction history (SCRUM-140)."""
+        return await self._commissions.list_for_realtor(realtor_id, limit=limit)

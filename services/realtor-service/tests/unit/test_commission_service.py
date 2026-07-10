@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.repositories.commission_repo import CommissionAccrual, CommissionTotals
+from app.repositories.commission_repo import (
+    CommissionAccrual,
+    CommissionTotals,
+    RealtorCommissionRow,
+)
 from app.services.commission_service import CommissionService, compute_commission_kobo
 
 pytestmark = pytest.mark.asyncio
@@ -51,6 +55,24 @@ class _StubCommissionRepo:
     async def totals_for_realtor(self, realtor_id: UUID) -> CommissionTotals:
         return CommissionTotals(pending_kobo=100, available_kobo=50, withdrawn_kobo=0)
 
+    async def list_for_realtor(
+        self, realtor_id: UUID, *, limit: int = 100
+    ) -> list[RealtorCommissionRow]:
+        self.listed_realtor = realtor_id
+        return [
+            RealtorCommissionRow(
+                commission_id=uuid4(),
+                transaction_id=uuid4(),
+                amount_kobo=100_000_000,
+                rate_bps=200,
+                status="available",
+                created_at=datetime(2026, 7, 1),
+                available_at=datetime(2026, 7, 4),
+                disbursed_at=None,
+                property_title="Plot 5, Lekki",
+            )
+        ]
+
 
 def _accrual(price: int = 5_000_000_000) -> CommissionAccrual:
     return CommissionAccrual(
@@ -90,3 +112,13 @@ async def test_summary_returns_totals() -> None:
     totals = await _service(repo).summary(uuid4())
     assert totals.pending_kobo == 100
     assert totals.available_kobo == 50
+
+
+async def test_history_returns_line_items_for_caller() -> None:
+    repo = _StubCommissionRepo(accruable=[])
+    realtor = uuid4()
+    rows = await _service(repo).history(realtor)
+    assert repo.listed_realtor == realtor
+    assert len(rows) == 1
+    assert rows[0].amount_kobo == 100_000_000
+    assert rows[0].property_title == "Plot 5, Lekki"

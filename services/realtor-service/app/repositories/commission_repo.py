@@ -34,6 +34,22 @@ class CommissionTotals:
 
 
 @dataclass(frozen=True)
+class RealtorCommissionRow:
+    """One commission line for the realtor's Earnings transaction history
+    (SCRUM-140), joined to its deal's property. amount_kobo is BIGINT kobo."""
+
+    commission_id: UUID
+    transaction_id: UUID
+    amount_kobo: int
+    rate_bps: int
+    status: str
+    created_at: datetime
+    available_at: datetime
+    disbursed_at: datetime | None
+    property_title: str | None
+
+
+@dataclass(frozen=True)
 class DisbursableCommission:
     """An available commission ready to disburse, with the deal's seller (read
     cross-service) — the payer on the disbursement payment_event."""
@@ -198,6 +214,44 @@ class CommissionRepository:
             )
         ).first()
         return row is not None
+
+    async def list_for_realtor(
+        self, realtor_id: UUID, *, limit: int = 100
+    ) -> list[RealtorCommissionRow]:
+        """The realtor's commission line items, newest first, joined to each
+        deal's property — the Earnings transaction history (SCRUM-140)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT c.id AS commission_id, c.transaction_id, c.amount_kobo,
+                           c.rate_bps, c.status, c.created_at, c.available_at,
+                           c.disbursed_at, pl.title AS property_title
+                    FROM commissions c
+                    JOIN transactions t ON t.id = c.transaction_id
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE c.realtor_id = :rid
+                    ORDER BY c.created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"rid": realtor_id, "limit": limit},
+            )
+        ).all()
+        return [
+            RealtorCommissionRow(
+                commission_id=r.commission_id,
+                transaction_id=r.transaction_id,
+                amount_kobo=int(r.amount_kobo),
+                rate_bps=r.rate_bps,
+                status=r.status,
+                created_at=r.created_at,
+                available_at=r.available_at,
+                disbursed_at=r.disbursed_at,
+                property_title=r.property_title,
+            )
+            for r in rows
+        ]
 
     async def totals_for_realtor(self, realtor_id: UUID) -> CommissionTotals:
         rows = (
