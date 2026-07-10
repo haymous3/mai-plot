@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -127,10 +128,17 @@ export function InspectionCard({ insp }: { insp: RealtorInspection }) {
       )}
 
       {insp.status === 'accepted' || insp.status === 'rescheduled' ? (
-        <p className="mt-4 rounded-xl bg-emerald-deep/5 px-4 py-3 text-xs text-ink-700">
-          You&apos;ve accepted this inspection. You can submit your GPS-stamped report on inspection
-          day.
-        </p>
+        <div className="mt-4 rounded-xl bg-emerald-deep/5 px-4 py-3">
+          <p className="text-xs text-ink-700">
+            You&apos;ve accepted this inspection. Submit your GPS-stamped report on inspection day.
+          </p>
+          <Link
+            href={`/realtor/inspections/${insp.inspection_id}/report`}
+            className="mt-3 block rounded-lg bg-emerald-deep px-4 py-2.5 text-center text-sm font-semibold text-bone transition hover:bg-emerald-accent"
+          >
+            Submit Report
+          </Link>
+        </div>
       ) : null}
     </div>
   );
