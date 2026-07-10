@@ -20,6 +20,7 @@ from app.repositories.inspection_repo import (
     AssignedRealtorRow,
     InspectionRepository,
     InspectionRow,
+    RealtorInspectionRow,
 )
 from app.repositories.realtor_repo import RealtorRepository
 from app.repositories.transaction_repo import TransactionRepository
@@ -131,6 +132,14 @@ class InspectionService:
         if caller.user_id not in (txn.buyer_id, txn.seller_id):
             raise NotTransactionParty()
         return await self._inspections.latest_assignment_for_transaction(transaction_id)
+
+    async def list_for_realtor(
+        self, *, caller: CurrentUser, limit: int = 100
+    ) -> list[RealtorInspectionRow]:
+        """Every inspection assigned to the calling realtor, newest first — the
+        realtor portal's dashboard + assigned-inspections feed (SCRUM-140). A
+        non-realtor caller simply has no assignments, so this returns []."""
+        return await self._inspections.list_for_realtor(caller.user_id, limit=limit)
 
     async def accept(self, *, caller: CurrentUser, inspection_id: UUID) -> InspectionRow:
         inspection = await self._inspections.get(inspection_id)

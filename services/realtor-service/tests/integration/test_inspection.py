@@ -293,3 +293,89 @@ async def test_assigned_realtor_forbidden_for_non_party(
     )
     assert resp.status_code == 403
     assert resp.json()["error_code"] == "NOT_TRANSACTION_PARTY"
+
+
+# -- GET /inspections/mine (SCRUM-140) -------------------------------------
+
+
+async def test_mine_lists_assigned_inspection_with_property(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    # Buyer requests → auto-assigned to the realtor.
+    created = await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    inspection_id = created.json()["id"]
+
+    resp = await http_client.get(
+        "/inspections/mine", headers=auth_header(mint_token(realtor, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["inspection_id"] == inspection_id
+    assert item["transaction_id"] == str(tx_id)
+    assert item["status"] == "pending"
+    assert item["property_title"] == "Plot"
+    assert item["address_text"] == "1 St"
+    assert item["state"] == "Lagos"
+
+
+async def test_mine_empty_for_realtor_without_assignments(
+    clean_tables: None,
+    http_client: AsyncClient,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    realtor = seed_user(role="realtor")
+    resp = await http_client.get(
+        "/inspections/mine", headers=auth_header(mint_token(realtor, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"data": []}
+
+
+async def test_mine_excludes_other_realtors_assignments(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+
+    # A different realtor sees none of it.
+    other = seed_user(role="realtor")
+    resp = await http_client.get(
+        "/inspections/mine", headers=auth_header(mint_token(other, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"data": []}

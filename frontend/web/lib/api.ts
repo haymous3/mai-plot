@@ -346,6 +346,47 @@ export interface RealtorQueueResponse {
   items: RealtorQueueItem[];
 }
 
+/** One inspection assigned to the calling realtor (GET /inspections/mine,
+ * SCRUM-140). Property fields are the location being inspected — no party
+ * contact details (masking, CLAUDE.md §10). */
+export interface RealtorInspection {
+  inspection_id: string;
+  transaction_id: string;
+  status: string;
+  proposed_date: string;
+  confirmed_date: string | null;
+  assignment_expires_at: string;
+  created_at: string;
+  report_submitted_at: string | null;
+  property_title: string | null;
+  address_text: string | null;
+  lga: string | null;
+  state: string | null;
+}
+
+export interface RealtorInspectionsResponse {
+  data: RealtorInspection[];
+}
+
+/** The calling realtor's commission balance in kobo (GET /realtors/me/commission,
+ * SCRUM-74). */
+export interface CommissionSummary {
+  pending_kobo: number;
+  available_kobo: number;
+  withdrawn_kobo: number;
+}
+
+/** The calling realtor's profile (GET /realtors/me, SCRUM-71). */
+export interface RealtorProfile {
+  id: string;
+  esvarbon_number: string | null;
+  years_of_experience: number | null;
+  coverage_states: string[];
+  coverage_lgas: string[];
+  completed_deals: number;
+  approval_status: string;
+}
+
 /** A row in the in-app notification centre (GET /notifications, SCRUM-82). */
 export interface NotificationItem {
   id: string;

@@ -60,6 +60,26 @@ class AssignedRealtorRow:
 
 
 @dataclass(frozen=True)
+class RealtorInspectionRow:
+    """An inspection assigned to a realtor, joined with its property, for the
+    realtor portal's dashboard + assigned-inspections list (SCRUM-140). Property
+    fields are the location the realtor is inspecting — no party contact details."""
+
+    inspection_id: UUID
+    transaction_id: UUID
+    status: str
+    proposed_date: datetime
+    confirmed_date: datetime | None
+    assignment_expires_at: datetime
+    created_at: datetime
+    report_submitted_at: datetime | None
+    property_title: str | None
+    address_text: str | None
+    lga: str | None
+    state: str | None
+
+
+@dataclass(frozen=True)
 class LapsedInspection:
     """A pending inspection whose acceptance window has lapsed, with the data the
     reassignment sweep needs (SCRUM-123)."""
@@ -133,6 +153,49 @@ class InspectionRepository:
             proposed_date=row.proposed_date,
             confirmed_date=row.confirmed_date,
         )
+
+    async def list_for_realtor(
+        self, realtor_id: UUID, *, limit: int = 100
+    ) -> list[RealtorInspectionRow]:
+        """Every inspection assigned to a realtor, newest first, joined to its
+        property (title/address for the card) — the realtor portal's dashboard +
+        assigned-inspections feed (SCRUM-140)."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT i.id AS inspection_id, i.transaction_id, i.status,
+                           i.proposed_date, i.confirmed_date, i.assignment_expires_at,
+                           i.created_at, i.report_submitted_at,
+                           pl.title AS property_title, pl.address_text, pl.lga, pl.state
+                    FROM inspections i
+                    JOIN transactions t ON t.id = i.transaction_id
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE i.realtor_id = :realtor
+                    ORDER BY i.created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"realtor": realtor_id, "limit": limit},
+            )
+        ).all()
+        return [
+            RealtorInspectionRow(
+                inspection_id=r.inspection_id,
+                transaction_id=r.transaction_id,
+                status=r.status,
+                proposed_date=r.proposed_date,
+                confirmed_date=r.confirmed_date,
+                assignment_expires_at=r.assignment_expires_at,
+                created_at=r.created_at,
+                report_submitted_at=r.report_submitted_at,
+                property_title=r.property_title,
+                address_text=r.address_text,
+                lga=r.lga,
+                state=r.state,
+            )
+            for r in rows
+        ]
 
     async def create(
         self,
