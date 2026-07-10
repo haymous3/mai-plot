@@ -22,6 +22,7 @@ from app.schemas.inspection import (
     AssignedRealtorResponse,
     InspectionRequest,
     InspectionResponse,
+    RealtorInspectionsResponse,
 )
 from app.schemas.report import ReportResponse, ReportSubmitResponse
 from app.security import CurrentUser
@@ -93,6 +94,16 @@ async def request_inspection(
             "No realtor is available in range. An admin has been alerted.",
         )
     return InspectionResponse.from_row(inspection)
+
+
+@router.get("/mine", response_model=RealtorInspectionsResponse)
+async def my_inspections(
+    caller: CurrentUserDep, service: InspectionServiceDep
+) -> RealtorInspectionsResponse:
+    """The calling realtor's assigned inspections, newest first — the realtor
+    portal's dashboard + assigned-inspections feed (SCRUM-140)."""
+    rows = await service.list_for_realtor(caller=caller)
+    return RealtorInspectionsResponse.from_rows(rows)
 
 
 @router.get("/by-transaction/{transaction_id}", response_model=None)

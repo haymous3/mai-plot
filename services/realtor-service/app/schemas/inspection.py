@@ -7,7 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.repositories.inspection_repo import AssignedRealtorRow, InspectionRow
+from app.repositories.inspection_repo import (
+    AssignedRealtorRow,
+    InspectionRow,
+    RealtorInspectionRow,
+)
 
 
 class InspectionRequest(BaseModel):
@@ -65,3 +69,46 @@ class AssignedRealtorResponse(BaseModel):
             proposed_date=row.proposed_date,
             confirmed_date=row.confirmed_date,
         )
+
+
+class RealtorInspectionItem(BaseModel):
+    """One inspection assigned to the calling realtor, with its property, for the
+    realtor portal (SCRUM-140)."""
+
+    inspection_id: UUID
+    transaction_id: UUID
+    status: str
+    proposed_date: datetime
+    confirmed_date: datetime | None
+    assignment_expires_at: datetime
+    created_at: datetime
+    report_submitted_at: datetime | None
+    property_title: str | None
+    address_text: str | None
+    lga: str | None
+    state: str | None
+
+    @classmethod
+    def from_row(cls, row: RealtorInspectionRow) -> RealtorInspectionItem:
+        return cls(
+            inspection_id=row.inspection_id,
+            transaction_id=row.transaction_id,
+            status=row.status,
+            proposed_date=row.proposed_date,
+            confirmed_date=row.confirmed_date,
+            assignment_expires_at=row.assignment_expires_at,
+            created_at=row.created_at,
+            report_submitted_at=row.report_submitted_at,
+            property_title=row.property_title,
+            address_text=row.address_text,
+            lga=row.lga,
+            state=row.state,
+        )
+
+
+class RealtorInspectionsResponse(BaseModel):
+    data: list[RealtorInspectionItem]
+
+    @classmethod
+    def from_rows(cls, rows: list[RealtorInspectionRow]) -> RealtorInspectionsResponse:
+        return cls(data=[RealtorInspectionItem.from_row(r) for r in rows])

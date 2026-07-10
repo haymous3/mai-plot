@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.repositories.inspection_repo import AssignedRealtorRow, InspectionRow
+from app.repositories.inspection_repo import (
+    AssignedRealtorRow,
+    InspectionRow,
+    RealtorInspectionRow,
+)
 from app.repositories.transaction_repo import TransactionInfo
 from app.security import CurrentUser
 from app.services.inspection_service import (
@@ -83,12 +87,15 @@ class _StubInspectionRepo:
         active: InspectionRow | None = None,
         get_row: InspectionRow | None = None,
         assigned: AssignedRealtorRow | None = None,
+        realtor_rows: list[RealtorInspectionRow] | None = None,
     ) -> None:
         self._active = active
         self._get_row = get_row
         self._assigned = assigned
+        self._realtor_rows = realtor_rows or []
         self.created_realtor: UUID | None = None
         self.accepted: list[UUID] = []
+        self.listed_realtor: UUID | None = None
 
     async def get_active_for_transaction(self, transaction_id: UUID) -> InspectionRow | None:
         return self._active
@@ -115,6 +122,12 @@ class _StubInspectionRepo:
         self, transaction_id: UUID
     ) -> AssignedRealtorRow | None:
         return self._assigned
+
+    async def list_for_realtor(
+        self, realtor_id: UUID, *, limit: int = 100
+    ) -> list[RealtorInspectionRow]:
+        self.listed_realtor = realtor_id
+        return self._realtor_rows
 
 
 class _RecordingNotifier:
@@ -275,3 +288,40 @@ async def test_assigned_realtor_returns_identity() -> None:
     assert result.realtor_id == realtor
     assert result.realtor_name == "Ada Realtor"
     assert result.esvarbon_number == "ESV-12345"
+
+
+# -- list_for_realtor (SCRUM-140) ------------------------------------------
+
+
+def _realtor_inspection() -> RealtorInspectionRow:
+    now = datetime.now(UTC)
+    return RealtorInspectionRow(
+        inspection_id=uuid4(),
+        transaction_id=uuid4(),
+        status="accepted",
+        proposed_date=now + timedelta(days=1),
+        confirmed_date=now + timedelta(days=1),
+        assignment_expires_at=now + timedelta(hours=2),
+        created_at=now,
+        report_submitted_at=None,
+        property_title="Plot 5, Lekki",
+        address_text="1 Admiralty Way",
+        lga="Eti-Osa",
+        state="Lagos",
+    )
+
+
+async def test_list_for_realtor_filters_by_caller() -> None:
+    repo = _StubInspectionRepo(realtor_rows=[_realtor_inspection()])
+    svc, insp, _ = _service(txn=_txn(), nearest=uuid4(), inspections=repo)
+
+    rows = await svc.list_for_realtor(caller=_REALTOR)
+
+    assert insp.listed_realtor == _REALTOR.user_id
+    assert len(rows) == 1
+    assert rows[0].property_title == "Plot 5, Lekki"
+
+
+async def test_list_for_realtor_empty_when_no_assignments() -> None:
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo())
+    assert await svc.list_for_realtor(caller=_REALTOR) == []
