@@ -80,3 +80,27 @@ export function inspectionLocation(insp: RealtorInspection): string {
   const parts = [insp.address_text, insp.lga, insp.state].filter(Boolean);
   return parts.length > 0 ? parts.join(', ') : 'Location unavailable';
 }
+
+export interface AcceptanceWindow {
+  expired: boolean;
+  /** Live remaining-time label, e.g. "1h 23m left" or "4m 07s left". */
+  label: string;
+  /** True in the final stretch (<15 min) — drives the red emphasis. */
+  urgent: boolean;
+}
+
+/** Time left in a 2-hour acceptance window, relative to `now` (ms since epoch).
+ * Shows h+m while there's an hour+, then m+s in the final stretch so the ticking
+ * seconds are visible near expiry. */
+export function acceptanceWindow(expiresAtIso: string, now: number = Date.now()): AcceptanceWindow {
+  const ms = Date.parse(expiresAtIso) - now;
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return { expired: true, label: 'Window elapsed', urgent: true };
+  }
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const label = h > 0 ? `${h}h ${m}m left` : `${m}m ${String(s).padStart(2, '0')}s left`;
+  return { expired: false, label, urgent: totalSec < 900 };
+}

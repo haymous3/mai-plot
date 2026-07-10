@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { RealtorInspection } from './api';
 import {
+  acceptanceWindow,
   countInspections,
   inspectionLocation,
   inspectionStatusMeta,
@@ -80,5 +81,29 @@ describe('inspectionLocation', () => {
     expect(
       inspectionLocation(insp({ address_text: null, lga: null, state: null })),
     ).toBe('Location unavailable');
+  });
+});
+
+describe('acceptanceWindow', () => {
+  const now = Date.parse('2026-07-10T12:00:00Z');
+
+  it('shows h+m while over an hour remains', () => {
+    const w = acceptanceWindow('2026-07-10T13:23:00Z', now);
+    expect(w).toEqual({ expired: false, label: '1h 23m left', urgent: false });
+  });
+
+  it('shows m+s and flags urgent in the final 15 minutes', () => {
+    const w = acceptanceWindow('2026-07-10T12:04:07Z', now);
+    expect(w.label).toBe('4m 07s left');
+    expect(w.urgent).toBe(true);
+    expect(w.expired).toBe(false);
+  });
+
+  it('is expired once the window has elapsed', () => {
+    expect(acceptanceWindow('2026-07-10T11:59:59Z', now)).toEqual({
+      expired: true,
+      label: 'Window elapsed',
+      urgent: true,
+    });
   });
 });
