@@ -5,8 +5,10 @@ import {
   acceptanceWindow,
   countInspections,
   inspectionLocation,
+  inspectionMatchesQuery,
   inspectionStatusMeta,
   isAwaitingAcceptance,
+  isSameMonth,
   upcomingInspections,
 } from './realtor-inspection';
 
@@ -81,6 +83,34 @@ describe('inspectionLocation', () => {
     expect(
       inspectionLocation(insp({ address_text: null, lga: null, state: null })),
     ).toBe('Location unavailable');
+  });
+});
+
+describe('inspectionMatchesQuery', () => {
+  it('matches on property title and location, case-insensitively', () => {
+    const i = insp({ property_title: 'Lekki Duplex', address_text: '1 Admiralty Way' });
+    expect(inspectionMatchesQuery(i, 'lekki')).toBe(true);
+    expect(inspectionMatchesQuery(i, 'ADMIRALTY')).toBe(true);
+    expect(inspectionMatchesQuery(i, 'ikoyi')).toBe(false);
+  });
+
+  it('matches everything on an empty query', () => {
+    expect(inspectionMatchesQuery(insp(), '   ')).toBe(true);
+  });
+});
+
+describe('isSameMonth', () => {
+  const now = Date.parse('2026-07-10T00:00:00Z');
+
+  it('is true within the same calendar month', () => {
+    expect(isSameMonth('2026-07-01T23:00:00Z', now)).toBe(true);
+    expect(isSameMonth('2026-06-30T23:00:00Z', now)).toBe(false);
+    expect(isSameMonth('2025-07-10T00:00:00Z', now)).toBe(false);
+  });
+
+  it('is false for null or unparseable input', () => {
+    expect(isSameMonth(null, now)).toBe(false);
+    expect(isSameMonth('nonsense', now)).toBe(false);
   });
 });
 

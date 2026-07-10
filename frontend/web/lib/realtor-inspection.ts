@@ -81,6 +81,26 @@ export function inspectionLocation(insp: RealtorInspection): string {
   return parts.length > 0 ? parts.join(', ') : 'Location unavailable';
 }
 
+/** Case-insensitive match of a search query against an inspection's property
+ * title + location — the Report History search (SCRUM-140, PR4). An empty query
+ * matches everything. */
+export function inspectionMatchesQuery(insp: RealtorInspection, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = `${insp.property_title ?? ''} ${inspectionLocation(insp)}`.toLowerCase();
+  return haystack.includes(q);
+}
+
+/** Whether an ISO timestamp falls in the same calendar month as `now` — the
+ * "This Month" report tile. */
+export function isSameMonth(iso: string | null, now: number = Date.now()): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const ref = new Date(now);
+  return d.getUTCFullYear() === ref.getUTCFullYear() && d.getUTCMonth() === ref.getUTCMonth();
+}
+
 export interface AcceptanceWindow {
   expired: boolean;
   /** Live remaining-time label, e.g. "1h 23m left" or "4m 07s left". */

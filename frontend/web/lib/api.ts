@@ -368,6 +368,21 @@ export interface RealtorInspectionsResponse {
   data: RealtorInspection[];
 }
 
+/** A submitted inspection report (GET /inspections/{id}/report, SCRUM-73).
+ * `photo_urls` are short-TTL pre-signed S3 URLs. */
+export interface InspectionReport {
+  inspection_id: string;
+  status: string;
+  report_submitted_at: string | null;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  property_condition: string | null;
+  amenities: string[];
+  discrepancies: string | null;
+  remarks: string | null;
+  photo_urls: string[];
+}
+
 /** The calling realtor's commission balance in kobo (GET /realtors/me/commission,
  * SCRUM-74). */
 export interface CommissionSummary {
