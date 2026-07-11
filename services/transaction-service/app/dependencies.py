@@ -8,6 +8,10 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.paystack_charge import PaystackChargeClient, build_paystack_charge_client
+from app.adapters.paystack_recipient import (
+    PaystackRecipientClient,
+    build_paystack_recipient_client,
+)
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
@@ -15,6 +19,7 @@ from app.repositories.escrow_repo import EscrowLedgerRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.offer_repo import OfferRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.repositories.wallet_repo import WalletRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
@@ -24,6 +29,7 @@ from app.services.escrow_ledger import EscrowLedgerService
 from app.services.financing_summary import FinancingSummaryService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
+from app.services.payout_account import PayoutAccountService
 from app.services.paystack_webhook import PaystackWebhookService
 from app.services.seller_deals import SellerDealsService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
@@ -103,6 +109,32 @@ def get_deposit_service(
         charge_client=charge_client,
         callback_url=settings.paystack_callback_url,
     )
+
+
+def _payout_account_repo(session: SessionDep) -> PayoutAccountRepository:
+    return PayoutAccountRepository(session)
+
+
+# Process-singleton Paystack recipient client (the real one holds an HTTP client).
+_recipient_client: PaystackRecipientClient | None = None
+
+
+def get_recipient_client(settings: SettingsDep) -> PaystackRecipientClient:
+    global _recipient_client
+    if _recipient_client is None:
+        _recipient_client = build_paystack_recipient_client(
+            enabled=settings.paystack_enabled,
+            secret_key=settings.paystack_secret_key,
+            base_url=settings.paystack_base_url,
+        )
+    return _recipient_client
+
+
+def get_payout_account_service(
+    accounts: Annotated[PayoutAccountRepository, Depends(_payout_account_repo)],
+    recipient_client: Annotated[PaystackRecipientClient, Depends(get_recipient_client)],
+) -> PayoutAccountService:
+    return PayoutAccountService(accounts=accounts, recipient_client=recipient_client)
 
 
 def get_webhook_service(

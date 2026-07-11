@@ -28,6 +28,7 @@ _TABLES = (
     "offers",
     "escrow_ledger",
     "payment_events",
+    "payout_accounts",
     "transaction_events",
     "transactions",
     "property_listings",
