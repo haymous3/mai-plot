@@ -119,6 +119,53 @@ async def test_accrual_is_idempotent(
         assert count == 1
 
 
+async def test_commission_history_lists_line_items(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    realtor = seed_user(role="realtor")
+    tx_id = _seed_completed_deal(db_engine, realtor=realtor)
+
+    await _accrue()
+
+    resp = await http_client.get(
+        "/realtors/me/commissions", headers=auth_header(mint_token(realtor, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["transaction_id"] == str(tx_id)
+    assert item["amount_kobo"] == 100_000_000  # 2% of ₦50,000,000
+    assert item["rate_bps"] == 200
+    assert item["status"] == "pending"
+    assert item["disbursed_at"] is None
+
+
+async def test_commission_history_empty_for_other_realtor(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    realtor = seed_user(role="realtor")
+    _seed_completed_deal(db_engine, realtor=realtor)
+    await _accrue()
+
+    other = seed_user(role="realtor")
+    resp = await http_client.get(
+        "/realtors/me/commissions", headers=auth_header(mint_token(other, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"data": []}
+
+
 async def test_release_makes_due_commission_available(
     clean_tables: None,
     http_client: AsyncClient,

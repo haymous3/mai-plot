@@ -19,7 +19,7 @@ from app.dependencies import (
     get_realtor_repo,
 )
 from app.repositories.realtor_repo import RealtorRepository
-from app.schemas.commission import CommissionSummaryResponse
+from app.schemas.commission import CommissionHistoryResponse, CommissionSummaryResponse
 from app.schemas.realtor import RealtorProfile
 from app.security import CurrentUser
 from app.services.commission_service import CommissionService
@@ -116,3 +116,13 @@ async def my_commission(
     """The caller's commission balance (pending + available + withdrawn), in kobo."""
     totals = await service.summary(caller.user_id)
     return CommissionSummaryResponse.from_totals(totals)
+
+
+@router.get("/me/commissions", response_model=CommissionHistoryResponse)
+async def my_commission_history(
+    caller: CurrentUserDep, service: CommissionServiceDep
+) -> CommissionHistoryResponse:
+    """The caller's commission line items, newest first — the Earnings
+    transaction history (SCRUM-140). Read-only; no money moves here."""
+    rows = await service.history(caller.user_id)
+    return CommissionHistoryResponse.from_rows(rows)

@@ -391,6 +391,24 @@ export interface CommissionSummary {
   withdrawn_kobo: number;
 }
 
+/** One commission line in the realtor's Earnings history
+ * (GET /realtors/me/commissions, SCRUM-140). amount_kobo is BIGINT kobo. */
+export interface CommissionHistoryItem {
+  commission_id: string;
+  transaction_id: string;
+  amount_kobo: number;
+  rate_bps: number;
+  status: string;
+  created_at: string;
+  available_at: string;
+  disbursed_at: string | null;
+  property_title: string | null;
+}
+
+export interface CommissionHistoryResponse {
+  data: CommissionHistoryItem[];
+}
+
 /** The calling realtor's profile (GET /realtors/me, SCRUM-71). */
 export interface RealtorProfile {
   id: string;
