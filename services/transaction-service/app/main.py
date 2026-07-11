@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.routes.escrow import router as escrow_router
 from app.routes.offers import router as offers_router
 from app.routes.payments import router as payments_router
+from app.routes.payout_accounts import router as payout_accounts_router
 from app.routes.sales import router as sales_router
 from app.routes.transactions import router as transactions_router
 from app.routes.wallet import router as wallet_router
@@ -29,6 +30,7 @@ app.include_router(offers_router)
 app.include_router(sales_router)
 app.include_router(escrow_router)
 app.include_router(payments_router)
+app.include_router(payout_accounts_router)
 app.include_router(wallet_router)
 app.include_router(webhooks_router)
 
