@@ -27,6 +27,7 @@ from app.adapters.paystack import PaystackTransferClient
 from app.adapters.receipt_storage import ReceiptStorage
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.repositories.transaction_repo import SettleableDeal, TransactionRepository
 from app.services.escrow_ledger import EscrowLedgerService, InsufficientEscrowBalance
 
@@ -41,6 +42,13 @@ class SettleOutcome(StrEnum):
     pending_approval = "pending_approval"
     commission_not_ready = "commission_not_ready"
     insufficient_escrow = "insufficient_escrow"
+    # The seller hasn't registered a payout account yet — nothing is debited for
+    # the seller leg; a later sweep retries once they do (SCRUM-145).
+    no_payout_account = "no_payout_account"
+    # A real (async) transfer is in flight; the transfer webhook completes it.
+    processing = "processing"
+    # Paystack rejected the seller transfer outright (rare).
+    transfer_failed = "transfer_failed"
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,7 @@ class SellerDisbursementService:
         escrow: EscrowLedgerService,
         receipts: ReceiptStorage,
         transfer_client: PaystackTransferClient,
+        payout_accounts: PayoutAccountRepository,
         audit: AuditLogRepository,
         actor_id: UUID,
         hold_hours: int,
@@ -71,6 +80,7 @@ class SellerDisbursementService:
         self._escrow = escrow
         self._receipts = receipts
         self._transfer = transfer_client
+        self._payout_accounts = payout_accounts
         self._audit = audit
         self._actor_id = actor_id
         self._hold_hours = hold_hours
@@ -86,9 +96,14 @@ class SellerDisbursementService:
             outcome = await self._settle(deal)
             if outcome == SettleOutcome.disbursed:
                 disbursed += 1
-            elif outcome == SettleOutcome.pending_approval:
+            elif outcome in (SettleOutcome.pending_approval, SettleOutcome.processing):
                 pending += 1
-            elif outcome in (SettleOutcome.commission_not_ready, SettleOutcome.insufficient_escrow):
+            elif outcome in (
+                SettleOutcome.commission_not_ready,
+                SettleOutcome.insufficient_escrow,
+                SettleOutcome.no_payout_account,
+                SettleOutcome.transfer_failed,
+            ):
                 waiting += 1
         return SettleResult(
             scanned=len(deals), disbursed=disbursed, pending=pending, waiting=waiting
@@ -169,6 +184,13 @@ class SellerDisbursementService:
         )
         if pe.status == "completed":
             return SettleOutcome.already_disbursed
+
+        # Resolve the seller's payout destination BEFORE the debit — never debit
+        # proceeds we can't send. No account yet -> retry next sweep.
+        recipient_code = await self._recipient_code(deal.seller_id)
+        if recipient_code is None:
+            return SettleOutcome.no_payout_account
+
         effective = await self._ensure_debit(
             deal.transaction_id, pe.id, seller_net, "Seller proceeds"
         )
@@ -180,8 +202,26 @@ class SellerDisbursementService:
             return SettleOutcome.pending_approval
 
         transfer = await self._transfer.transfer(
-            reference_hint=str(pe.id), amount_kobo=seller_net, recipient_id=deal.seller_id
+            reference_hint=str(pe.id), amount_kobo=seller_net, recipient_code=recipient_code
         )
+        if transfer.status == "pending":
+            await self._payments.update_status(
+                pe.id, "processing", provider_reference=transfer.reference
+            )
+            logger.info(
+                "seller.disburse.processing",
+                extra={"payment_event_id": str(pe.id), "provider_reference": transfer.reference},
+            )
+            return SettleOutcome.processing
+        if transfer.status == "failed":
+            await self._payments.update_status(
+                pe.id, "failed", provider_reference=transfer.reference
+            )
+            logger.warning(
+                "seller.disburse.transfer_failed", extra={"payment_event_id": str(pe.id)}
+            )
+            return SettleOutcome.transfer_failed
+
         await self._payments.update_status(
             pe.id, "completed", provider_reference=transfer.reference
         )
@@ -214,6 +254,10 @@ class SellerDisbursementService:
             extra={"payment_event_id": str(pe.id), "amount_kobo": seller_net},
         )
         return SettleOutcome.disbursed
+
+    async def _recipient_code(self, payee_id: UUID) -> str | None:
+        account = await self._payout_accounts.get(payee_id)
+        return account.recipient_code if account is not None else None
 
     async def _ensure_debit(
         self, transaction_id: UUID, payment_event_id: UUID, amount_kobo: int, description: str

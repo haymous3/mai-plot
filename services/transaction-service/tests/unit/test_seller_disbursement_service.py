@@ -119,14 +119,33 @@ class _StubReceipts:
 
 
 class _StubTransfer:
-    def __init__(self) -> None:
+    def __init__(self, status: str = "success") -> None:
         self.calls = 0
+        self._status = status
 
     async def transfer(
-        self, *, reference_hint: str, amount_kobo: int, recipient_id: UUID
+        self, *, reference_hint: str, amount_kobo: int, recipient_code: str
     ) -> TransferResult:
         self.calls += 1
-        return TransferResult(reference=f"FAKE-{reference_hint}", status="success")
+        return TransferResult(reference=f"FAKE-{reference_hint}", status=self._status)  # type: ignore[arg-type]
+
+
+class _StubAccount:
+    def __init__(self, recipient_code: str) -> None:
+        self.recipient_code = recipient_code
+
+
+class _StubPayoutAccounts:
+    """Returns a payout account (with recipient_code) for any user, or None to
+    simulate a seller who hasn't registered one yet."""
+
+    def __init__(self, *, recipient_code: str | None = "RCP_stub") -> None:
+        self._recipient_code = recipient_code
+
+    async def get(self, user_id: UUID) -> _StubAccount | None:
+        if self._recipient_code is None:
+            return None
+        return _StubAccount(self._recipient_code)
 
 
 class _StubAudit:
@@ -143,6 +162,7 @@ def _service(
     escrow: _StubEscrow,
     receipts: _StubReceipts,
     transfer: _StubTransfer,
+    payout_accounts: _StubPayoutAccounts | None = None,
 ) -> SellerDisbursementService:
     return SellerDisbursementService(
         transactions=transactions,  # type: ignore[arg-type]
@@ -150,6 +170,7 @@ def _service(
         escrow=escrow,  # type: ignore[arg-type]
         receipts=receipts,
         transfer_client=transfer,
+        payout_accounts=payout_accounts or _StubPayoutAccounts(),  # type: ignore[arg-type]
         audit=_StubAudit(),  # type: ignore[arg-type]
         actor_id=_ACTOR,
         hold_hours=48,
@@ -244,6 +265,54 @@ async def test_seller_already_disbursed_is_idempotent() -> None:
     # platform fee settles, seller already done -> no transfer this run.
     assert result.disbursed == 0
     assert transfer.calls == 0
+
+
+async def test_seller_no_payout_account_waits_after_fee() -> None:
+    # The platform fee (internal) still settles, but the seller leg finds no
+    # payout account -> the seller net is never debited; a later sweep retries.
+    deal = _deal()
+    escrow, transfer = _StubEscrow(), _StubTransfer()
+    gate = CommissionGate(amount_kobo=_COMMISSION, has_completed_inspection=True)
+    result = await _service(
+        _StubTransactions(deal, gate),
+        _StubPayments(),
+        escrow,
+        _StubReceipts(),
+        transfer,
+        _StubPayoutAccounts(recipient_code=None),
+    ).run()
+
+    assert result.waiting == 1
+    assert escrow.debits == [_FEE]  # only the fee moved, never the seller net
+    assert transfer.calls == 0
+
+
+async def test_seller_pending_transfer_counts_pending() -> None:
+    # A real async seller transfer returns 'pending' -> the seller net is debited
+    # and the payment_event is left open for the transfer webhook; no PDF yet.
+    deal = _deal()
+    escrow, receipts, transfer = _StubEscrow(), _StubReceipts(), _StubTransfer(status="pending")
+    gate = CommissionGate(amount_kobo=_COMMISSION, has_completed_inspection=True)
+    result = await _service(
+        _StubTransactions(deal, gate), _StubPayments(), escrow, receipts, transfer
+    ).run()
+
+    assert result.pending == 1
+    assert escrow.debits == [_FEE, _PRICE - _FEE - _COMMISSION]
+    assert transfer.calls == 1
+    assert receipts.pdfs == []  # receipt only on completion
+
+
+async def test_seller_transfer_failed_waits() -> None:
+    deal = _deal()
+    escrow, transfer = _StubEscrow(), _StubTransfer(status="failed")
+    gate = CommissionGate(amount_kobo=_COMMISSION, has_completed_inspection=True)
+    result = await _service(
+        _StubTransactions(deal, gate), _StubPayments(), escrow, _StubReceipts(), transfer
+    ).run()
+
+    assert result.waiting == 1
+    assert transfer.calls == 1
 
 
 async def test_render_receipt_pdf_produces_pdf_bytes() -> None:
