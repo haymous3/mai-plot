@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.escrow_repo import EscrowLedgerRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.services.disbursement import (
     CommissionDisbursementService,
     DisburseRequest,
@@ -51,7 +52,9 @@ async def _run(req: DisburseRequest) -> str:
                 transfer_client=build_paystack_transfer_client(
                     enabled=settings.paystack_enabled,
                     secret_key=settings.paystack_secret_key,
+                    base_url=settings.paystack_base_url,
                 ),
+                payout_accounts=PayoutAccountRepository(session),
                 audit=AuditLogRepository(session),
                 actor_id=UUID(settings.disbursement_actor_id),
             )

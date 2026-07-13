@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.escrow_repo import EscrowLedgerRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.services.disbursement import (
     CommissionDisbursementService,
     DisburseOutcome,
@@ -47,6 +48,7 @@ async def _disburse(req: DisburseRequest) -> DisburseOutcome:
                 ),
                 receipts=InMemoryReceiptStorage(),
                 transfer_client=FakePaystackTransferClient(),
+                payout_accounts=PayoutAccountRepository(session),
                 audit=AuditLogRepository(session),
                 actor_id=_ACTOR_ID,
             )
@@ -67,15 +69,31 @@ def _seed_user(conn: object, user_id: UUID, role: str) -> None:
     )
 
 
-def _seed_deal(db_engine: Engine, *, fund_escrow_kobo: int | None) -> tuple[UUID, UUID, UUID]:
+def _seed_payout_account(conn: object, user_id: UUID) -> None:
+    conn.execute(  # type: ignore[attr-defined]
+        text(
+            "INSERT INTO payout_accounts (user_id, account_number, bank_code, "
+            "account_name, recipient_code) VALUES "
+            "(:uid, '0123456789', '058', 'Payee', :rcp) ON CONFLICT (user_id) DO NOTHING"
+        ),
+        {"uid": user_id, "rcp": f"RCP_{str(user_id)[:8]}"},
+    )
+
+
+def _seed_deal(
+    db_engine: Engine, *, fund_escrow_kobo: int | None, realtor_has_payout: bool = True
+) -> tuple[UUID, UUID, UUID]:
     """Seed actor + buyer + seller + realtor + a completed transaction. Optionally
-    fund its escrow with a credit. Returns (transaction_id, seller_id, realtor_id)."""
+    fund its escrow with a credit and register the realtor's payout account.
+    Returns (transaction_id, seller_id, realtor_id)."""
     tx_id, buyer, seller, realtor = uuid4(), uuid4(), uuid4(), uuid4()
     with db_engine.begin() as conn:
         _seed_user(conn, _ACTOR_ID, "admin")  # the disbursement system actor
         _seed_user(conn, buyer, "buyer")
         _seed_user(conn, seller, "seller")
         _seed_user(conn, realtor, "realtor")
+        if realtor_has_payout:
+            _seed_payout_account(conn, realtor)
         conn.execute(
             text(
                 "INSERT INTO transactions (id, listing_id, buyer_id, seller_id, "
@@ -170,6 +188,35 @@ async def test_unfunded_escrow_fails_without_moving_money(
             {"tid": tx_id},
         ).scalar_one()
         assert debits == 0
+
+
+async def test_no_payout_account_waits_without_moving_money(
+    clean_tables: None, db_engine: Engine
+) -> None:
+    # Escrow IS funded, but the realtor has no payout account -> the recipient
+    # gate short-circuits before any debit; a later sweep retries once they add one.
+    tx_id, seller, realtor = _seed_deal(
+        db_engine, fund_escrow_kobo=5_000_000_000, realtor_has_payout=False
+    )
+    req = DisburseRequest(
+        commission_id=uuid4(),
+        transaction_id=tx_id,
+        realtor_id=realtor,
+        seller_id=seller,
+        amount_kobo=100_000_000,
+    )
+
+    assert await _disburse(req) == DisburseOutcome.no_payout_account
+
+    with db_engine.connect() as conn:
+        debits = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM escrow_ledger "
+                "WHERE transaction_id = :tid AND entry_type='debit'"
+            ),
+            {"tid": tx_id},
+        ).scalar_one()
+        assert debits == 0  # nothing moved
 
 
 async def test_disbursement_is_idempotent(clean_tables: None, db_engine: Engine) -> None:

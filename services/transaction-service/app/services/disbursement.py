@@ -27,6 +27,7 @@ from app.adapters.paystack import PaystackTransferClient
 from app.adapters.receipt_storage import ReceiptStorage
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.services.escrow_ledger import EscrowLedgerService, InsufficientEscrowBalance
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,14 @@ class DisburseOutcome(StrEnum):
     already_disbursed = "already_disbursed"
     pending_approval = "pending_approval"
     insufficient_escrow = "insufficient_escrow"
+    # The payee hasn't registered a payout account yet — nothing is debited; a
+    # later sweep retries once they do (SCRUM-145).
+    no_payout_account = "no_payout_account"
+    # A real (async) transfer was accepted and is in flight; the transfer webhook
+    # will complete the payment_event (SCRUM-145 PR3).
+    processing = "processing"
+    # Paystack rejected the transfer outright (rare — usually it goes pending).
+    transfer_failed = "transfer_failed"
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,7 @@ class CommissionDisbursementService:
         escrow: EscrowLedgerService,
         receipts: ReceiptStorage,
         transfer_client: PaystackTransferClient,
+        payout_accounts: PayoutAccountRepository,
         audit: AuditLogRepository,
         actor_id: UUID,
         provider: str = "paystack",
@@ -74,6 +84,7 @@ class CommissionDisbursementService:
         self._escrow = escrow
         self._receipts = receipts
         self._transfer = transfer_client
+        self._payout_accounts = payout_accounts
         self._audit = audit
         self._actor_id = actor_id
         self._provider = provider
@@ -94,6 +105,16 @@ class CommissionDisbursementService:
         )
         if pe.status == "completed":
             return DisburseResult(DisburseOutcome.already_disbursed, pe.id)
+
+        # Resolve the realtor's payout destination BEFORE touching escrow — never
+        # debit money we have nowhere to send. No account yet -> retry next sweep.
+        recipient_code = await self._recipient_code(req.realtor_id)
+        if recipient_code is None:
+            logger.info(
+                "commission.disburse.no_payout_account",
+                extra={"payment_event_id": str(pe.id), "realtor_id": str(req.realtor_id)},
+            )
+            return DisburseResult(DisburseOutcome.no_payout_account, pe.id)
 
         debit = await self._debit_for(req.transaction_id, pe.id)
         if debit is None:
@@ -124,8 +145,30 @@ class CommissionDisbursementService:
             return DisburseResult(DisburseOutcome.pending_approval, pe.id)
 
         transfer = await self._transfer.transfer(
-            reference_hint=str(pe.id), amount_kobo=req.amount_kobo, recipient_id=req.realtor_id
+            reference_hint=str(pe.id), amount_kobo=req.amount_kobo, recipient_code=recipient_code
         )
+        if transfer.status == "pending":
+            # Real async transfer accepted; the transfer webhook (PR3) completes
+            # the event + writes the receipt once Paystack confirms settlement.
+            await self._payments.update_status(
+                pe.id, "processing", provider_reference=transfer.reference
+            )
+            logger.info(
+                "commission.disburse.processing",
+                extra={"payment_event_id": str(pe.id), "provider_reference": transfer.reference},
+            )
+            return DisburseResult(DisburseOutcome.processing, pe.id)
+        if transfer.status == "failed":
+            await self._payments.update_status(
+                pe.id, "failed", provider_reference=transfer.reference
+            )
+            logger.warning(
+                "commission.disburse.transfer_failed", extra={"payment_event_id": str(pe.id)}
+            )
+            return DisburseResult(DisburseOutcome.transfer_failed, pe.id)
+
+        # Synchronous settle (the fake, or a Paystack transfer that returns
+        # 'success' immediately).
         await self._payments.update_status(
             pe.id, "completed", provider_reference=transfer.reference
         )
@@ -158,6 +201,10 @@ class CommissionDisbursementService:
             extra={"payment_event_id": str(pe.id), "amount_kobo": req.amount_kobo},
         )
         return DisburseResult(DisburseOutcome.disbursed, pe.id)
+
+    async def _recipient_code(self, payee_id: UUID) -> str | None:
+        account = await self._payout_accounts.get(payee_id)
+        return account.recipient_code if account is not None else None
 
     async def _debit_for(self, transaction_id: UUID, payment_event_id: UUID):  # type: ignore[no-untyped-def]
         entries = await self._escrow.list_entries(transaction_id)

@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.escrow_repo import EscrowLedgerRepository
 from app.repositories.payment_repo import PaymentEventRepository
+from app.repositories.payout_account_repo import PayoutAccountRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.services.escrow_ledger import EscrowLedgerService
 from app.services.seller_disbursement import SellerDisbursementService
@@ -48,6 +49,7 @@ async def _run_sweep() -> Any:
                 ),
                 receipts=InMemoryReceiptStorage(),
                 transfer_client=FakePaystackTransferClient(),
+                payout_accounts=PayoutAccountRepository(session),
                 audit=AuditLogRepository(session),
                 actor_id=_ACTOR_ID,
                 hold_hours=48,
@@ -69,7 +71,20 @@ def _user(conn: object, uid: UUID, role: str) -> None:
     )
 
 
-def _seed_completed_deal(db_engine: Engine, *, completed_hours_ago: int = 49) -> tuple[UUID, UUID]:
+def _seed_payout_account(conn: object, user_id: UUID) -> None:
+    conn.execute(  # type: ignore[attr-defined]
+        text(
+            "INSERT INTO payout_accounts (user_id, account_number, bank_code, "
+            "account_name, recipient_code) VALUES "
+            "(:uid, '0123456789', '058', 'Payee', :rcp) ON CONFLICT (user_id) DO NOTHING"
+        ),
+        {"uid": user_id, "rcp": f"RCP_{str(user_id)[:8]}"},
+    )
+
+
+def _seed_completed_deal(
+    db_engine: Engine, *, completed_hours_ago: int = 49, seller_has_payout: bool = True
+) -> tuple[UUID, UUID]:
     """A funded, completed deal that reached 'completed' completed_hours_ago."""
     tx_id, buyer, seller = uuid4(), uuid4(), uuid4()
     completed_at = datetime.now(UTC) - timedelta(hours=completed_hours_ago)
@@ -77,6 +92,8 @@ def _seed_completed_deal(db_engine: Engine, *, completed_hours_ago: int = 49) ->
         _user(conn, _ACTOR_ID, "admin")
         _user(conn, buyer, "buyer")
         _user(conn, seller, "seller")
+        if seller_has_payout:
+            _seed_payout_account(conn, seller)
         conn.execute(
             text(
                 "INSERT INTO transactions (id, listing_id, buyer_id, seller_id, "
@@ -194,6 +211,24 @@ async def test_reserves_realtor_commission(clean_tables: None, db_engine: Engine
     assert seller_pe.amount_kobo == _PRICE - _FEE - commission
     # The commission stays in escrow (debited later by SCRUM-86).
     assert _balance(db_engine, tx_id) == commission
+
+
+async def test_seller_without_payout_account_waits(clean_tables: None, db_engine: Engine) -> None:
+    # The platform fee still settles (internal), but the seller has no payout
+    # account -> the seller net stays in escrow for a later sweep to disburse.
+    tx_id, _seller = _seed_completed_deal(db_engine, seller_has_payout=False)
+
+    result = await _run_sweep()
+    assert result.waiting == 1
+    assert result.disbursed == 0
+
+    fee = _pe(db_engine, tx_id, "platform_fee")
+    assert fee is not None and fee.status == "completed"
+    seller_pe = _pe(db_engine, tx_id, "seller_disbursement")
+    # The PE anchor exists but is never completed (recipient gate short-circuits
+    # before the debit), so no seller money moves.
+    assert seller_pe is not None and seller_pe.status != "completed"
+    assert _balance(db_engine, tx_id) == _PRICE - _FEE  # seller net still held
 
 
 async def test_not_yet_48h_is_skipped(clean_tables: None, db_engine: Engine) -> None:

@@ -86,14 +86,33 @@ class _StubReceipts:
 
 
 class _StubTransfer:
-    def __init__(self) -> None:
+    def __init__(self, status: str = "success") -> None:
         self.calls = 0
+        self._status = status
 
     async def transfer(
-        self, *, reference_hint: str, amount_kobo: int, recipient_id: UUID
+        self, *, reference_hint: str, amount_kobo: int, recipient_code: str
     ) -> TransferResult:
         self.calls += 1
-        return TransferResult(reference=f"FAKE-{reference_hint}", status="success")
+        return TransferResult(reference=f"FAKE-{reference_hint}", status=self._status)  # type: ignore[arg-type]
+
+
+class _StubAccount:
+    def __init__(self, recipient_code: str) -> None:
+        self.recipient_code = recipient_code
+
+
+class _StubPayoutAccounts:
+    """Returns a payout account (with recipient_code) for any user, or None to
+    simulate a payee who hasn't registered one yet."""
+
+    def __init__(self, *, recipient_code: str | None = "RCP_stub") -> None:
+        self._recipient_code = recipient_code
+
+    async def get(self, user_id: UUID) -> _StubAccount | None:
+        if self._recipient_code is None:
+            return None
+        return _StubAccount(self._recipient_code)
 
 
 class _StubAudit:
@@ -123,13 +142,18 @@ def _debit_entry(
 
 
 def _service(
-    payments: _StubPayments, escrow: _StubEscrow, receipts: _StubReceipts, transfer: _StubTransfer
+    payments: _StubPayments,
+    escrow: _StubEscrow,
+    receipts: _StubReceipts,
+    transfer: _StubTransfer,
+    payout_accounts: _StubPayoutAccounts | None = None,
 ) -> CommissionDisbursementService:
     return CommissionDisbursementService(
         payments=payments,  # type: ignore[arg-type]
         escrow=escrow,  # type: ignore[arg-type]
         receipts=receipts,
         transfer_client=transfer,
+        payout_accounts=payout_accounts or _StubPayoutAccounts(),  # type: ignore[arg-type]
         audit=_StubAudit(),  # type: ignore[arg-type]
         actor_id=_ACTOR,
     )
@@ -216,3 +240,43 @@ async def test_reentrant_completes_existing_effective_debit() -> None:
     assert result.outcome == DisburseOutcome.disbursed
     assert escrow.debits == []  # no NEW debit recorded
     assert transfer.calls == 1
+
+
+async def test_no_payout_account_skips_debit() -> None:
+    # The realtor hasn't registered a payout account -> resolve returns None
+    # BEFORE any escrow debit; nothing is moved and a later sweep retries.
+    payments = _StubPayments(pe_id=uuid4())
+    escrow, transfer = _StubEscrow(), _StubTransfer()
+    result = await _service(
+        payments, escrow, _StubReceipts(), transfer, _StubPayoutAccounts(recipient_code=None)
+    ).disburse(_req())
+
+    assert result.outcome == DisburseOutcome.no_payout_account
+    assert escrow.debits == []  # never debited
+    assert transfer.calls == 0
+
+
+async def test_pending_transfer_marks_processing() -> None:
+    # A real async transfer returns 'pending' -> the payment_event is left open
+    # (processing) for the transfer webhook to finalise; no receipt yet.
+    pe = uuid4()
+    payments = _StubPayments(pe_id=pe)
+    escrow, receipts, transfer = _StubEscrow(), _StubReceipts(), _StubTransfer(status="pending")
+    result = await _service(payments, escrow, receipts, transfer).disburse(_req())
+
+    assert result.outcome == DisburseOutcome.processing
+    assert escrow.debits == [100_000_000]  # money debited, transfer in flight
+    assert transfer.calls == 1
+    assert ("processing", f"FAKE-{pe}") in payments.updates
+    assert receipts.written == []  # receipt written only on completion
+
+
+async def test_transfer_failed_marks_failed() -> None:
+    pe = uuid4()
+    payments = _StubPayments(pe_id=pe)
+    escrow, transfer = _StubEscrow(), _StubTransfer(status="failed")
+    result = await _service(payments, escrow, _StubReceipts(), transfer).disburse(_req())
+
+    assert result.outcome == DisburseOutcome.transfer_failed
+    assert transfer.calls == 1
+    assert ("failed", f"FAKE-{pe}") in payments.updates
