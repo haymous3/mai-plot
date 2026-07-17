@@ -1,4 +1,4 @@
-"""Unit tests for PaystackWebhookService (SCRUM-83)."""
+"""Unit tests for PaystackWebhookService (SCRUM-83 deposit; SCRUM-145 payout)."""
 
 from __future__ import annotations
 
@@ -49,32 +49,67 @@ class _StubEscrow:
 
 
 class _StubAudit:
+    def __init__(self) -> None:
+        self.actions: list[str] = []
+
     async def record(self, **kwargs: object) -> None:
-        return None
+        self.actions.append(str(kwargs["action"]))
 
 
-def _detail(*, pe_id: UUID, status: str = "initiated") -> PaymentEventDetail:
+class _StubReceipts:
+    def __init__(self) -> None:
+        self.written: list[UUID] = []
+
+    async def write_receipt(self, payment_event_id: UUID, data: dict[str, object]) -> str:
+        self.written.append(payment_event_id)
+        return f"receipts/{payment_event_id}.json"
+
+    async def write_pdf_receipt(
+        self, payment_event_id: UUID, *, title: str, fields: dict[str, object]
+    ) -> str:
+        self.written.append(payment_event_id)
+        return f"receipts/{payment_event_id}.pdf"
+
+
+def _detail(
+    *, pe_id: UUID, status: str = "initiated", payment_type: str = "buyer_deposit"
+) -> PaymentEventDetail:
     return PaymentEventDetail(
         id=pe_id,
         status=status,
-        payment_type="buyer_deposit",
+        payment_type=payment_type,
         amount_kobo=_AMOUNT,
         transaction_id=uuid4(),
         payer_id=uuid4(),
     )
 
 
-def _service(payments: _StubPayments, escrow: _StubEscrow) -> PaystackWebhookService:
+def _service(
+    payments: _StubPayments,
+    escrow: _StubEscrow,
+    receipts: _StubReceipts | None = None,
+    audit: _StubAudit | None = None,
+) -> PaystackWebhookService:
     return PaystackWebhookService(
         payments=payments,  # type: ignore[arg-type]
         escrow=escrow,  # type: ignore[arg-type]
-        audit=_StubAudit(),  # type: ignore[arg-type]
+        receipts=receipts or _StubReceipts(),
+        audit=audit or _StubAudit(),  # type: ignore[arg-type]
         secret=_SECRET,
     )
 
 
 def _charge_success(pe_id: UUID, amount: int = _AMOUNT) -> dict[str, object]:
     return {"event": "charge.success", "data": {"reference": str(pe_id), "amount": amount}}
+
+
+def _transfer_event(
+    event: str, pe_id: UUID, *, transfer_code: str | None = "TRF_xyz"
+) -> dict[str, object]:
+    data: dict[str, object] = {"reference": str(pe_id)}
+    if transfer_code is not None:
+        data["transfer_code"] = transfer_code
+    return {"event": event, "data": data}
 
 
 async def test_verify_signature() -> None:
@@ -115,9 +150,9 @@ async def test_amount_mismatch_does_not_credit() -> None:
     assert escrow.credits == []
 
 
-async def test_non_charge_event_ignored() -> None:
+async def test_unhandled_event_ignored() -> None:
     outcome = await _service(_StubPayments(None), _StubEscrow()).handle(
-        {"event": "transfer.success"}
+        {"event": "subscription.create"}
     )
     assert outcome == WebhookOutcome.ignored
 
@@ -127,3 +162,125 @@ async def test_unknown_reference_ignored() -> None:
     outcome = await _service(payments, escrow).handle(_charge_success(uuid4()))
     assert outcome == WebhookOutcome.ignored
     assert escrow.credits == []
+
+
+# --- transfer (payout) webhooks — SCRUM-145 ---------------------------------
+
+
+async def test_transfer_success_settles_processing_payout() -> None:
+    pe = uuid4()
+    payments = _StubPayments(
+        _detail(pe_id=pe, status="processing", payment_type="realtor_commission")
+    )
+    receipts, audit = _StubReceipts(), _StubAudit()
+    outcome = await _service(payments, _StubEscrow(), receipts, audit).handle(
+        _transfer_event("transfer.success", pe)
+    )
+
+    assert outcome == WebhookOutcome.settled
+    assert ("completed", "TRF_xyz") in payments.updates
+    assert receipts.written == [pe]  # immutable receipt written on settle
+    assert "transfer.settled" in audit.actions
+
+
+async def test_transfer_success_falls_back_to_pe_id_reference() -> None:
+    pe = uuid4()
+    payments = _StubPayments(
+        _detail(pe_id=pe, status="processing", payment_type="seller_disbursement")
+    )
+    outcome = await _service(payments, _StubEscrow()).handle(
+        _transfer_event("transfer.success", pe, transfer_code=None)
+    )
+
+    assert outcome == WebhookOutcome.settled
+    assert ("completed", str(pe)) in payments.updates
+
+
+async def test_transfer_success_on_completed_is_duplicate() -> None:
+    pe = uuid4()
+    payments = _StubPayments(
+        _detail(pe_id=pe, status="completed", payment_type="realtor_commission")
+    )
+    receipts = _StubReceipts()
+    outcome = await _service(payments, _StubEscrow(), receipts).handle(
+        _transfer_event("transfer.success", pe)
+    )
+
+    assert outcome == WebhookOutcome.duplicate
+    assert payments.updates == []  # no re-write
+    assert receipts.written == []  # no second receipt
+
+
+async def test_transfer_success_on_failed_is_ignored_not_resurrected() -> None:
+    # A late success must never resurrect a payout already marked failed.
+    pe = uuid4()
+    payments = _StubPayments(_detail(pe_id=pe, status="failed", payment_type="realtor_commission"))
+    outcome = await _service(payments, _StubEscrow()).handle(
+        _transfer_event("transfer.success", pe)
+    )
+
+    assert outcome == WebhookOutcome.ignored
+    assert payments.updates == []
+
+
+async def test_transfer_failed_marks_payout_failed() -> None:
+    pe = uuid4()
+    payments = _StubPayments(
+        _detail(pe_id=pe, status="processing", payment_type="seller_disbursement")
+    )
+    receipts, audit = _StubReceipts(), _StubAudit()
+    outcome = await _service(payments, _StubEscrow(), receipts, audit).handle(
+        _transfer_event("transfer.failed", pe)
+    )
+
+    assert outcome == WebhookOutcome.failed
+    assert ("failed", "TRF_xyz") in payments.updates
+    assert receipts.written == []  # no receipt for a failed payout
+    assert "transfer.failed" in audit.actions
+
+
+async def test_transfer_failed_on_failed_is_duplicate() -> None:
+    pe = uuid4()
+    payments = _StubPayments(_detail(pe_id=pe, status="failed", payment_type="realtor_commission"))
+    outcome = await _service(payments, _StubEscrow()).handle(_transfer_event("transfer.failed", pe))
+
+    assert outcome == WebhookOutcome.duplicate
+    assert payments.updates == []
+
+
+async def test_transfer_failed_on_completed_is_ignored() -> None:
+    # A settled payout can't be un-settled by a late failure event.
+    pe = uuid4()
+    payments = _StubPayments(
+        _detail(pe_id=pe, status="completed", payment_type="seller_disbursement")
+    )
+    outcome = await _service(payments, _StubEscrow()).handle(_transfer_event("transfer.failed", pe))
+
+    assert outcome == WebhookOutcome.ignored
+    assert payments.updates == []
+
+
+async def test_transfer_event_for_non_payout_type_ignored() -> None:
+    # A transfer event whose reference points at a deposit is not ours to settle.
+    pe = uuid4()
+    payments = _StubPayments(_detail(pe_id=pe, status="processing", payment_type="buyer_deposit"))
+    outcome = await _service(payments, _StubEscrow()).handle(
+        _transfer_event("transfer.success", pe)
+    )
+
+    assert outcome == WebhookOutcome.ignored
+    assert payments.updates == []
+
+
+async def test_transfer_event_unknown_reference_ignored() -> None:
+    outcome = await _service(_StubPayments(None), _StubEscrow()).handle(
+        _transfer_event("transfer.success", uuid4())
+    )
+    assert outcome == WebhookOutcome.ignored
+
+
+async def test_transfer_event_non_uuid_reference_ignored() -> None:
+    outcome = await _service(_StubPayments(None), _StubEscrow()).handle(
+        {"event": "transfer.success", "data": {"reference": "not-a-uuid"}}
+    )
+    assert outcome == WebhookOutcome.ignored
