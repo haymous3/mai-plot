@@ -12,6 +12,7 @@ from app.adapters.paystack_recipient import (
     PaystackRecipientClient,
     build_paystack_recipient_client,
 )
+from app.adapters.receipt_storage import ReceiptStorage, build_receipt_storage
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
@@ -137,15 +138,33 @@ def get_payout_account_service(
     return PayoutAccountService(accounts=accounts, recipient_client=recipient_client)
 
 
+# Process-singleton receipt storage (the real one holds a boto3 S3 client).
+_receipt_storage: ReceiptStorage | None = None
+
+
+def get_receipt_storage(settings: SettingsDep) -> ReceiptStorage:
+    global _receipt_storage
+    if _receipt_storage is None:
+        _receipt_storage = build_receipt_storage(
+            use_fake=settings.receipts_storage_use_fake,
+            bucket=settings.receipts_s3_bucket,
+            region=settings.receipts_s3_region,
+            endpoint_url=settings.receipts_s3_endpoint_url,
+        )
+    return _receipt_storage
+
+
 def get_webhook_service(
     settings: SettingsDep,
     payments: Annotated[PaymentEventRepository, Depends(_payment_repo)],
     escrow: Annotated[EscrowLedgerService, Depends(get_escrow_service)],
+    receipts: Annotated[ReceiptStorage, Depends(get_receipt_storage)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
 ) -> PaystackWebhookService:
     return PaystackWebhookService(
         payments=payments,
         escrow=escrow,
+        receipts=receipts,
         audit=audit,
         secret=settings.paystack_webhook_secret,
     )
