@@ -40,6 +40,98 @@ def _seed_transaction(
     return txn_id
 
 
+def _fund_escrow(
+    db_engine: Engine, *, transaction_id: UUID, buyer_id: UUID, amount_kobo: int
+) -> None:
+    """Credit the deal's escrow with a completed buyer deposit (a ledger CREDIT
+    linked to a payment_event) so the payment_held funding gate is satisfied."""
+    pe_id = uuid4()
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO payment_events (id, idempotency_key, payer_id, transaction_id, "
+                "amount_kobo, payment_type, provider, status) VALUES "
+                "(:id, :ik, :payer, :tid, :amt, 'buyer_deposit', 'paystack', 'completed')"
+            ),
+            {
+                "id": pe_id,
+                "ik": uuid4(),
+                "payer": buyer_id,
+                "tid": transaction_id,
+                "amt": amount_kobo,
+            },
+        )
+        conn.execute(
+            text(
+                "INSERT INTO escrow_ledger (transaction_id, entry_type, amount_kobo, "
+                "description, payment_event_id, requires_dual_approval) "
+                "VALUES (:tid, 'credit', :amt, 'buyer deposit', :peid, FALSE)"
+            ),
+            {"tid": transaction_id, "amt": amount_kobo, "peid": pe_id},
+        )
+
+
+@pytest.mark.asyncio
+async def test_payment_held_blocked_when_escrow_unfunded_is_422(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    txn_id = _seed_transaction(
+        db_engine, buyer_id=buyer, seller_id=seller, stage="inspection_completed"
+    )
+
+    response = await http_client.patch(
+        f"/transactions/{txn_id}/status",
+        json={"status": "payment_held"},  # legal edge, but escrow is empty
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "ESCROW_NOT_FULLY_FUNDED"
+
+    with db_engine.connect() as conn:
+        stage = conn.execute(
+            text("SELECT stage FROM transactions WHERE id = :id"), {"id": txn_id}
+        ).scalar_one()
+        assert stage == "inspection_completed"  # unchanged — no partial write
+
+
+@pytest.mark.asyncio
+async def test_payment_held_allowed_when_escrow_fully_funded(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    txn_id = _seed_transaction(
+        db_engine, buyer_id=buyer, seller_id=seller, stage="inspection_completed"
+    )
+    _fund_escrow(db_engine, transaction_id=txn_id, buyer_id=buyer, amount_kobo=5_000_000_000)
+
+    response = await http_client.patch(
+        f"/transactions/{txn_id}/status",
+        json={"status": "payment_held"},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["stage"] == "payment_held"
+
+    with db_engine.connect() as conn:
+        stage = conn.execute(
+            text("SELECT stage FROM transactions WHERE id = :id"), {"id": txn_id}
+        ).scalar_one()
+        assert stage == "payment_held"
+
+
 @pytest.mark.asyncio
 async def test_valid_transition_updates_stage_event_and_audit(
     clean_tables: None,
