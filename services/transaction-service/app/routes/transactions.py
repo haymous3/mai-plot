@@ -47,6 +47,7 @@ from app.services.offer_service import (
     OfferService,
 )
 from app.services.transaction_status import (
+    EscrowNotFullyFunded,
     InvalidStateTransition,
     NotTransactionParty,
     TransactionNotFound,
@@ -145,6 +146,12 @@ async def change_status(
         )
     except InvalidStateTransition:
         return _error(422, "INVALID_STATE_TRANSITION", "That stage transition is not allowed.")
+    except EscrowNotFullyFunded:
+        return _error(
+            422,
+            "ESCROW_NOT_FULLY_FUNDED",
+            "Escrow must hold the full agreed price before the deal can be marked payment_held.",
+        )
     return StatusResponse(transaction_id=transaction_id, stage=stage)
 
 

@@ -1,9 +1,13 @@
-"""Transaction status transitions (SCRUM-67).
+"""Transaction status transitions (SCRUM-67; funding gate SCRUM-146 §11).
 
 Applies a stage change to a transaction, enforced by the state machine. Every
 transition is recorded twice: an append-only transaction_events row (the deal's
 own log) and an audit_log entry (CLAUDE.md — audit on every state change). Only
 a party to the transaction (buyer/seller) or an admin may drive a transition.
+
+The state machine says which transitions are *shaped* right; a guard can still
+refuse one whose money precondition isn't met — today that's `payment_held`,
+which requires escrow to actually hold the full agreed price (SCRUM-146).
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.transaction_repo import TransactionRepository, TransactionStatus
 from app.security import CurrentUser
 from app.services import state_machine
+from app.services.escrow_ledger import EscrowLedgerService
 from app.services.fees import compute_platform_fee_kobo
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,10 @@ class InvalidStateTransition(TransactionStatusError):
     """The requested stage is not reachable from the current one."""
 
 
+class EscrowNotFullyFunded(TransactionStatusError):
+    """payment_held was requested but escrow doesn't hold the full agreed price."""
+
+
 class TransactionStatusService:
     def __init__(
         self,
@@ -44,11 +53,13 @@ class TransactionStatusService:
         transactions: TransactionRepository,
         audit: AuditLogRepository,
         listings: ListingRepository,
+        escrow: EscrowLedgerService,
         platform_fee_bps: int,
     ) -> None:
         self._transactions = transactions
         self._audit = audit
         self._listings = listings
+        self._escrow = escrow
         self._platform_fee_bps = platform_fee_bps
 
     async def change_status(
@@ -67,6 +78,8 @@ class TransactionStatusService:
             raise NotTransactionParty()
         if not state_machine.can_transition(status.stage, target_stage):
             raise InvalidStateTransition()
+        if target_stage == "payment_held":
+            await self._require_full_funding(transaction_id, status)
 
         await self._transactions.update_stage(transaction_id, stage=target_stage)
         await self._transactions.append_event(
@@ -104,6 +117,32 @@ class TransactionStatusService:
             },
         )
         return target_stage
+
+    async def _require_full_funding(self, transaction_id: UUID, status: TransactionStatus) -> None:
+        """A deal may only claim `payment_held` once escrow actually holds the
+        full agreed price (SCRUM-146, §11) — otherwise a party could mark a deal
+        "paid" with an empty escrow.
+
+        `balance_kobo` (credits − effective debits) is the right measure: no
+        debits happen before settlement, so it is what escrow really holds now.
+        A loan deal satisfies this the same way — the buyer's reduced deposit
+        PLUS the loan_disbursement credit must together reach the price.
+
+        There is deliberately NO admin override: an admin override on a financial
+        record is its own §11 decision, not something this gate grants implicitly.
+        """
+        balance = await self._escrow.balance(transaction_id)
+        if balance.balance_kobo >= status.agreed_price_kobo:
+            return
+        logger.warning(
+            "transaction.payment_held_underfunded",
+            extra={
+                "transaction_id": str(transaction_id),
+                "balance_kobo": balance.balance_kobo,
+                "agreed_price_kobo": status.agreed_price_kobo,
+            },
+        )
+        raise EscrowNotFullyFunded()
 
     async def _set_platform_fee(
         self,

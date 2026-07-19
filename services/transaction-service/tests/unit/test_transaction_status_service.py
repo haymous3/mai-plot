@@ -6,9 +6,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from app.repositories.escrow_repo import EscrowBalance
 from app.repositories.transaction_repo import TransactionStatus
 from app.security import CurrentUser
 from app.services.transaction_status import (
+    EscrowNotFullyFunded,
     InvalidStateTransition,
     NotTransactionParty,
     TransactionNotFound,
@@ -65,6 +67,19 @@ class _StubListingRepo:
         self.sold.append(listing_id)
 
 
+class _StubEscrow:
+    """Reports a fixed escrow balance — only consulted by the payment_held gate.
+    Defaults high so non-payment_held transitions are unaffected."""
+
+    def __init__(self, *, balance_kobo: int = 1_000_000_000_000) -> None:
+        self._balance_kobo = balance_kobo
+
+    async def balance(self, transaction_id: UUID) -> EscrowBalance:
+        return EscrowBalance(
+            transaction_id=transaction_id, balance_kobo=self._balance_kobo, pending_kobo=0
+        )
+
+
 def _status(
     stage: str = "offer_accepted",
     *,
@@ -85,6 +100,7 @@ def _service(
     status: TransactionStatus | None,
     *,
     platform_fee_bps: int = 250,
+    escrow_balance_kobo: int = 1_000_000_000_000,
 ) -> tuple[TransactionStatusService, _StubTxnRepo, _StubAudit, _StubListingRepo]:
     repo = _StubTxnRepo(status)
     audit = _StubAudit()
@@ -93,6 +109,7 @@ def _service(
         transactions=repo,  # type: ignore[arg-type]
         audit=audit,  # type: ignore[arg-type]
         listings=listings,  # type: ignore[arg-type]
+        escrow=_StubEscrow(balance_kobo=escrow_balance_kobo),  # type: ignore[arg-type]
         platform_fee_bps=platform_fee_bps,
     )
     return svc, repo, audit, listings
@@ -186,3 +203,66 @@ async def test_illegal_transition_raises_and_does_not_write() -> None:
     assert repo.events == []
     assert audit.actions == []
     assert listings.released == [] and listings.sold == []
+
+
+# --- payment_held full-funding gate (SCRUM-146, §11) ------------------------
+
+
+@pytest.mark.asyncio
+async def test_payment_held_allowed_when_escrow_fully_funded() -> None:
+    svc, repo, _, _ = _service(
+        _status("inspection_completed", agreed_price_kobo=5_000_000_000),
+        escrow_balance_kobo=5_000_000_000,  # exactly the agreed price
+    )
+    stage = await svc.change_status(
+        transaction_id=uuid4(), caller=_BUYER, target_stage="payment_held"
+    )
+    assert stage == "payment_held"
+    assert repo.updated_to == "payment_held"
+
+
+@pytest.mark.asyncio
+async def test_payment_held_allowed_when_over_funded() -> None:
+    svc, repo, _, _ = _service(
+        _status("inspection_completed", agreed_price_kobo=5_000_000_000),
+        escrow_balance_kobo=6_000_000_000,
+    )
+    await svc.change_status(transaction_id=uuid4(), caller=_BUYER, target_stage="payment_held")
+    assert repo.updated_to == "payment_held"
+
+
+@pytest.mark.asyncio
+async def test_payment_held_blocked_when_underfunded_and_does_not_write() -> None:
+    svc, repo, audit, _ = _service(
+        _status("inspection_completed", agreed_price_kobo=5_000_000_000),
+        escrow_balance_kobo=4_999_999_999,  # one kobo short
+    )
+    with pytest.raises(EscrowNotFullyFunded):
+        await svc.change_status(transaction_id=uuid4(), caller=_BUYER, target_stage="payment_held")
+    assert repo.updated_to is None
+    assert repo.events == []
+    assert audit.actions == []
+
+
+@pytest.mark.asyncio
+async def test_payment_held_blocked_when_escrow_empty() -> None:
+    svc, repo, _, _ = _service(
+        _status("inspection_completed", agreed_price_kobo=5_000_000_000),
+        escrow_balance_kobo=0,
+    )
+    with pytest.raises(EscrowNotFullyFunded):
+        await svc.change_status(transaction_id=uuid4(), caller=_SELLER, target_stage="payment_held")
+    assert repo.updated_to is None
+
+
+@pytest.mark.asyncio
+async def test_payment_held_gate_applies_to_admin_too() -> None:
+    # No admin bypass (SCRUM-146 decision) — an admin cannot force an underfunded
+    # deal to payment_held.
+    svc, repo, _, _ = _service(
+        _status("inspection_completed", agreed_price_kobo=5_000_000_000),
+        escrow_balance_kobo=0,
+    )
+    with pytest.raises(EscrowNotFullyFunded):
+        await svc.change_status(transaction_id=uuid4(), caller=_ADMIN, target_stage="payment_held")
+    assert repo.updated_to is None

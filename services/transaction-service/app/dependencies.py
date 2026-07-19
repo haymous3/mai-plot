@@ -207,12 +207,14 @@ def get_transaction_status_service(
     transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    escrow: Annotated[EscrowLedgerService, Depends(get_escrow_service)],
     settings: SettingsDep,
 ) -> TransactionStatusService:
     return TransactionStatusService(
         transactions=transactions,
         audit=audit,
         listings=listings,
+        escrow=escrow,
         platform_fee_bps=settings.platform_fee_bps,
     )
 
