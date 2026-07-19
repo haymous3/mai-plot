@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.tasks.seller_disbursement",
         "app.tasks.loan_disbursement",
         "app.tasks.loan_stage",
+        "app.tasks.payout_reconciliation",
     ],
 )
 
@@ -40,6 +41,11 @@ celery_app.conf.update(
         "disburse-seller-proceeds": {
             "task": "app.tasks.seller_disbursement.run_seller_disbursement",
             "schedule": _settings.seller_disbursement_beat_interval_seconds,
+        },
+        # Reverse the escrow debit of any payout whose Paystack transfer failed.
+        "reconcile-failed-payouts": {
+            "task": "app.tasks.payout_reconciliation.run_payout_reconciliation",
+            "schedule": _settings.payout_reconciliation_beat_interval_seconds,
         },
     },
 )

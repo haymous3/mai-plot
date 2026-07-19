@@ -126,6 +126,34 @@ async def test_credit_increases_balance() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reverse_debit_credits_back_and_audits() -> None:
+    # A ₦1M payout debit that later failed → reversal credits the amount back and
+    # audits distinctly, restoring the balance. (SCRUM-147)
+    svc, repo, audit = _service()
+    await _credit(svc, 5_000_000_000)
+    await svc.record_debit(
+        transaction_id=_TXN,
+        amount_kobo=100_000_000,
+        description="commission",
+        payment_event_id=_PE,
+        initiated_by=_ADMIN_1,
+    )
+    assert (await svc.balance(_TXN)).balance_kobo == 4_900_000_000
+
+    entry_id = await svc.reverse_debit(
+        transaction_id=_TXN,
+        amount_kobo=100_000_000,
+        payment_event_id=_PE,
+        reason="paystack transfer failed",
+    )
+    assert entry_id in repo.entries
+    assert repo.entries[entry_id]["entry_type"] == "credit"
+    assert repo.entries[entry_id]["requires_dual_approval"] is False
+    assert (await svc.balance(_TXN)).balance_kobo == 5_000_000_000  # debit undone
+    assert "escrow.debit_reversed" in audit.actions
+
+
+@pytest.mark.asyncio
 async def test_small_debit_is_effective_immediately() -> None:
     svc, _, _ = _service()
     await _credit(svc, 5_000_000_000)

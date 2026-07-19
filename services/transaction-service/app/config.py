@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     seller_disbursement_hold_hours: int = 48
     seller_disbursement_beat_interval_seconds: float = 3600.0  # hourly
 
+    # Failed-payout escrow reversal sweep (SCRUM-147). §11 — reverses the standing
+    # escrow debit of a payout whose Paystack transfer failed. Idempotent.
+    payout_reconciliation_beat_interval_seconds: float = 3600.0  # hourly
+
     # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
     # local/CI never reach S3; production sets receipts_storage_use_fake=false.
     receipts_storage_use_fake: bool = True

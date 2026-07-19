@@ -58,6 +58,15 @@ class PendingApproval:
     amount_kobo: int
 
 
+@dataclass(frozen=True)
+class FailedPayout:
+    """A failed payout whose escrow debit is still standing and unreversed."""
+
+    payment_event_id: UUID
+    transaction_id: UUID
+    debit_kobo: int
+
+
 class EscrowLedgerRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -186,6 +195,53 @@ class EscrowLedgerRepository:
         ).all()
         return [
             PendingApproval(entry_id=r.id, approved_by_1=r.approved_by_1, amount_kobo=r.amount_kobo)
+            for r in rows
+        ]
+
+    async def list_failed_payouts_needing_reversal(
+        self, *, payout_types: tuple[str, ...], limit: int = 500
+    ) -> list[FailedPayout]:
+        """Failed payout payment_events whose escrow DEBIT is still effective and
+        has no compensating reversal credit yet (SCRUM-147). The debit total per
+        event is what a reversal must credit back. Ordering is oldest-first so a
+        long backlog drains deterministically.
+
+        A payout event's only ledger entry is its debit, so a `credit` linked to
+        the same payment_event_id can only be a prior reversal — that NOT EXISTS
+        is the idempotency guard the sweep relies on."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pe.id AS payment_event_id,
+                           pe.transaction_id AS transaction_id,
+                           SUM(led.amount_kobo) AS debit_kobo
+                    FROM payment_events pe
+                    JOIN escrow_ledger led
+                      ON led.payment_event_id = pe.id
+                     AND led.entry_type = 'debit'
+                     AND (NOT led.requires_dual_approval OR led.approved_by_2 IS NOT NULL)
+                    WHERE pe.status = 'failed'
+                      AND pe.payment_type = ANY(:ptypes)
+                      AND pe.transaction_id IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM escrow_ledger rev
+                        WHERE rev.payment_event_id = pe.id AND rev.entry_type = 'credit'
+                      )
+                    GROUP BY pe.id, pe.transaction_id
+                    ORDER BY MIN(led.created_at)
+                    LIMIT :limit
+                    """
+                ),
+                {"ptypes": list(payout_types), "limit": limit},
+            )
+        ).all()
+        return [
+            FailedPayout(
+                payment_event_id=r.payment_event_id,
+                transaction_id=r.transaction_id,
+                debit_kobo=int(r.debit_kobo),
+            )
             for r in rows
         ]
 

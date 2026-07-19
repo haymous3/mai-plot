@@ -133,6 +133,53 @@ class EscrowLedgerService:
         )
         return entry_id
 
+    async def reverse_debit(
+        self,
+        *,
+        transaction_id: UUID,
+        amount_kobo: int,
+        payment_event_id: UUID,
+        reason: str,
+        recorded_by: UUID | None = None,
+    ) -> UUID:
+        """Compensating CREDIT that undoes a standing debit (SCRUM-147) — used to
+        put back into escrow the amount of a payout whose transfer failed. The
+        ledger is append-only, so a reversal is a new credit entry, not an edit;
+        credits never require dual approval (they only increase what escrow holds),
+        so even a >₦10M reversal needs none. Audited distinctly as
+        `escrow.debit_reversed` so reconciliation is traceable."""
+        entry_id = await self._ledger.record_entry(
+            transaction_id=transaction_id,
+            entry_type="credit",
+            amount_kobo=amount_kobo,
+            description=f"Reversal of failed payout {payment_event_id}: {reason}",
+            payment_event_id=payment_event_id,
+            requires_dual_approval=False,
+            approved_by_1=recorded_by,
+        )
+        await self._audit.record(
+            actor_id=recorded_by,
+            actor_role="system" if recorded_by is None else "admin",
+            action="escrow.debit_reversed",
+            entity_type="escrow_ledger",
+            entity_id=entry_id,
+            new_value={
+                "transaction_id": str(transaction_id),
+                "amount_kobo": amount_kobo,
+                "payment_event_id": str(payment_event_id),
+                "reason": reason,
+            },
+        )
+        logger.info(
+            "escrow.debit_reversed",
+            extra={
+                "transaction_id": str(transaction_id),
+                "payment_event_id": str(payment_event_id),
+                "amount_kobo": amount_kobo,
+            },
+        )
+        return entry_id
+
     async def second_approval(
         self,
         *,
