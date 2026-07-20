@@ -13,9 +13,12 @@ dependencies = [
     "pyjwt>=2.9",
     # Real bank-partner HTTP adapter (SCRUM-76); also used for /loans/apply proxy.
     "httpx>=0.27",
-    # Producer-only: enqueues the notification-service dispatch task on the shared
-    # broker for the loan-decision webhook (SCRUM-76). Plain celery (NOT
-    # celery[redis]) per the workspace redis-version constraint; imported lazily.
+    # Celery over the shared Redis broker: producer for the notification dispatch
+    # task (SCRUM-76) and, since SCRUM-130, a real worker + beat for the loan
+    # status-poll fallback. Plain celery (NOT celery[redis]) + a direct redis dep,
+    # per the workspace's redis-version constraint — kombu's redis:// transport
+    # imports the redis lib at worker startup, so it must be a runtime dependency.
+    "redis>=5.0",
     "celery>=5.3",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp>=1.27",
