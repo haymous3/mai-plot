@@ -15,7 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.validators.phone import InvalidPhoneError, normalise_nigerian_phone
 
+# Roles a user may SELF-REGISTER as via POST /auth/register. Deliberately
+# narrow — the public endpoint must never be able to mint a privileged account.
 Role = Literal["seller", "buyer", "realtor"]
+# Every role the DB may hold (mirrors the users_role_check constraint). Used on
+# response bodies, where the account's actual role is reflected back — including
+# admin/legal_team/bank_partner accounts, which are provisioned out-of-band, not
+# through registration. Keeping this separate from `Role` is what stops the
+# login response from 500-ing on an admin account (SCRUM-151).
+AccountRole = Literal["seller", "buyer", "realtor", "bank_partner", "admin", "legal_team"]
 SellerAuthorityType = Literal["owner", "power_of_attorney"]
 OtpPurpose = Literal["registration", "login"]
 
@@ -73,7 +81,9 @@ class OtpVerifyRequest(BaseModel):
 
 class UserPublic(BaseModel):
     id: UUID
-    role: Role
+    # AccountRole (not Role): this reflects the account's real role back to the
+    # caller, so admin / legal_team / bank_partner logins must validate here.
+    role: AccountRole
     verified_status: str
 
 
