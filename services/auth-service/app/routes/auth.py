@@ -133,6 +133,7 @@ async def register(
             email=body.email,
             password=body.password,
             seller_authority_type=body.seller_authority_type,
+            full_name=body.full_name,
         )
     except EmailAlreadyRegistered:
         return _error(

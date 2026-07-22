@@ -133,6 +133,40 @@ async def test_happy_path_creates_user_and_sends_email() -> None:
 
 
 @pytest.mark.asyncio
+async def test_full_name_is_passed_to_user_creation() -> None:
+    user_repo = _StubUserRepo()
+    service = _build_service(user_repo=user_repo)
+
+    await service.register(
+        phone="+2348012345678",
+        role="buyer",
+        email="buyer@example.com",
+        password=None,
+        seller_authority_type=None,
+        full_name="Ada Obi",
+    )
+
+    assert user_repo.created[0]["full_name"] == "Ada Obi"
+
+
+@pytest.mark.asyncio
+async def test_absent_full_name_persists_empty_string() -> None:
+    user_repo = _StubUserRepo()
+    service = _build_service(user_repo=user_repo)
+
+    await service.register(
+        phone="+2348012345678",
+        role="buyer",
+        email="buyer@example.com",
+        password=None,
+        seller_authority_type=None,
+    )
+
+    # create_with_pii is called with "" (not None) so the column stays non-null.
+    assert user_repo.created[0]["full_name"] == ""
+
+
+@pytest.mark.asyncio
 async def test_password_is_hashed_and_stored_when_provided() -> None:
     user_repo = _StubUserRepo()
     creds_repo = _StubCredsRepo()

@@ -23,7 +23,7 @@ async def test_register_buyer_happy_path(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": _EMAIL},
+        json={"phone": "08012345678", "role": "buyer", "email": _EMAIL, "full_name": "Ada Obi"},
     )
 
     assert response.status_code == 201, response.text
@@ -47,11 +47,12 @@ async def test_register_buyer_happy_path(
         assert user_row.email == _EMAIL
 
         pii_row = conn.execute(
-            text("SELECT phone FROM user_pii WHERE user_id = :id"),
+            text("SELECT phone, full_name FROM user_pii WHERE user_id = :id"),
             {"id": body["user_id"]},
         ).first()
         assert pii_row is not None
         assert pii_row.phone == "+2348012345678"
+        assert pii_row.full_name == "Ada Obi"
 
         token_count = conn.execute(
             text(

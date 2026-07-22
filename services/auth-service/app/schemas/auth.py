@@ -44,6 +44,10 @@ class RegisterRequest(BaseModel):
     # password is optional at register; when supplied it is stored so the user
     # can log in via email/password (SCRUM-45).
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    # full_name is optional at register (SCRUM-155): the funnel collects it up
+    # front now that there is no post-OTP session step to capture it. Persisted
+    # to user_pii via create_with_pii; blank-after-strip is treated as absent.
+    full_name: str | None = Field(default=None, max_length=120)
     seller_authority_type: SellerAuthorityType | None = None
 
     @model_validator(mode="after")
@@ -57,6 +61,11 @@ class RegisterRequest(BaseModel):
             object.__setattr__(self, "email", normalise_email(self.email))
         except InvalidEmailError as exc:
             raise ValueError(str(exc)) from exc
+
+        # Trim the display name; collapse a blank/whitespace value to None so the
+        # repo stores "" rather than stray spaces.
+        trimmed_name = self.full_name.strip() if self.full_name else ""
+        object.__setattr__(self, "full_name", trimmed_name or None)
 
         # A seller may register without declaring authority yet — it is collected
         # later on the "Seller Verification" onboarding screen via

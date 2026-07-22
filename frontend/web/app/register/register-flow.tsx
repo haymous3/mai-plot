@@ -1,11 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
-// Onboarding: intro carousel → role select → phone → OTP → password → personal
-// details (SCRUM-132). Mobile-styled Figma built as a responsive web funnel.
+// Onboarding (SCRUM-132 → reworked SCRUM-155 for email verification):
+// intro carousel → role select → account details (name/email/phone/password)
+// → [seller: selling authority] → register → "check your email".
+//
+// Verification is now an email magic link (SCRUM-152): registration no longer
+// establishes a session, so the old post-OTP steps (set-password, personal
+// details, KYC) are gone. KYC moves to point-of-need (buyer BVN at loan-apply,
+// seller NIN/PoA at listing creation — both already gate there). The session is
+// established when the user clicks the email link and lands on /verify-email.
 
 const SLIDES = [
   {
@@ -29,371 +35,121 @@ const ROLES = [
 ];
 
 const REGISTER_ERRORS: Record<string, string> = {
+  EMAIL_ALREADY_REGISTERED: 'An account with this email already exists. Try signing in.',
   PHONE_ALREADY_REGISTERED: 'An account with this phone number already exists. Try signing in.',
-  OTP_RATE_LIMITED: 'Too many requests for this number. Please try again later.',
-  OTP_DISPATCH_FAILED: 'We could not send the code. Please retry.',
-  INVALID_REQUEST: 'Please enter a valid phone number.',
+  VERIFICATION_RATE_LIMITED: 'Too many attempts for this email. Please try again later.',
+  VERIFICATION_EMAIL_FAILED: 'We could not send the verification email. Please retry.',
+  VALIDATION_ERROR: 'Please check your details and try again.',
+  INVALID_REQUEST: 'Please complete all required fields.',
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step =
-  | 'intro'
-  | 'role'
-  | 'phone'
-  | 'otp'
-  | 'password'
-  | 'personal'
-  | 'buyer-kyc'
-  | 'realtor-kyc'
-  | 'seller-kyc'
-  | 'success';
+type Step = 'intro' | 'role' | 'account' | 'seller-authority' | 'check-email';
+type SellerAuthority = 'owner' | 'power_of_attorney';
 
 export function RegisterFlow() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
   const [role, setRole] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [redirect, setRedirect] = useState('/dashboard');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function submitRegister(sellerAuthority?: SellerAuthority) {
+    setError(null);
+    setBusy(true);
+    try {
+      const local = phone.replace(/\D/g, '').replace(/^0/, '');
+      const resp = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          phone: `+234${local}`,
+          role,
+          email: email.trim(),
+          password,
+          full_name: fullName.trim(),
+          ...(role === 'seller' && sellerAuthority
+            ? { seller_authority_type: sellerAuthority }
+            : {}),
+        }),
+      });
+      if (resp.ok) {
+        setStep('check-email');
+        return;
+      }
+      const b = (await resp.json()) as { error_code?: string };
+      setError(REGISTER_ERRORS[b.error_code ?? ''] ?? 'Could not create your account. Please retry.');
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
         {step === 'intro' && <Intro onDone={() => setStep('role')} />}
+
         {step === 'role' && (
           <RoleSelect
             role={role}
             setRole={setRole}
             onContinue={() => {
               setError(null);
-              setStep('phone');
+              setStep('account');
             }}
           />
         )}
-        {step === 'phone' && (
-          <PhoneStep
+
+        {step === 'account' && (
+          <AccountStep
+            fullName={fullName}
+            setFullName={setFullName}
+            email={email}
+            setEmail={setEmail}
             phone={phone}
             setPhone={setPhone}
+            password={password}
+            setPassword={setPassword}
             busy={busy}
             error={error}
-            onBack={() => setStep('role')}
-            onSubmit={async () => {
+            onBack={() => {
               setError(null);
-              const local = phone.replace(/\D/g, '').replace(/^0/, '');
-              if (local.length !== 10) {
-                setError('Enter a valid 10-digit phone number.');
-                return;
-              }
-              setBusy(true);
-              try {
-                const resp = await fetch('/api/auth/register', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ phone: `+234${local}`, role }),
-                });
-                if (resp.ok) {
-                  setStep('otp');
-                  return;
-                }
-                const b = (await resp.json()) as { error_code?: string };
-                setError(REGISTER_ERRORS[b.error_code ?? ''] ?? 'Could not start sign-up.');
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
+              setStep('role');
             }}
-          />
-        )}
-        {step === 'otp' && (
-          <OtpStep
-            phone={`+234${phone.replace(/\D/g, '').replace(/^0/, '')}`}
-            busy={busy}
-            error={error}
-            onVerify={async (code) => {
-              setError(null);
-              setBusy(true);
-              try {
-                const resp = await fetch('/api/auth/verify-otp', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({
-                    phone: `+234${phone.replace(/\D/g, '').replace(/^0/, '')}`,
-                    otp: code,
-                  }),
-                });
-                const b = (await resp.json()) as {
-                  ok?: boolean;
-                  redirect?: string;
-                  error_code?: string;
-                };
-                if (resp.ok && b.ok) {
-                  setRedirect(b.redirect ?? '/dashboard');
-                  setStep('password');
-                  return;
-                }
-                setError(
-                  b.error_code === 'OTP_EXPIRED'
-                    ? 'That code has expired. Request a new one.'
-                    : 'That code is invalid. Please check and retry.',
-                );
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        )}
-        {step === 'password' && (
-          <PasswordStep
-            busy={busy}
-            error={error}
-            onSubmit={async (password) => {
-              setError(null);
-              setBusy(true);
-              try {
-                const resp = await fetch('/api/auth/set-password', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ password }),
-                });
-                if (resp.ok) {
-                  setStep('personal');
-                  return;
-                }
-                const b = (await resp.json()) as { error_code?: string };
-                setError(
-                  b.error_code === 'PASSWORD_TOO_WEAK'
-                    ? 'Password must be at least 8 characters with an uppercase letter and a number.'
-                    : 'Could not set your password. Please retry.',
-                );
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        )}
-        {step === 'personal' && (
-          <PersonalDetailsStep
-            busy={busy}
-            error={error}
-            onSubmit={async (fullName, email) => {
-              setError(null);
-              setBusy(true);
-              try {
-                const resp = await fetch('/api/auth/profile', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ full_name: fullName, email: email || null }),
-                });
-                if (resp.ok) {
-                  setFirstName(fullName.trim().split(/\s+/)[0] ?? '');
-                  // Each role completes a verification / capacity step before
-                  // the success screen.
-                  setStep(
-                    role === 'realtor'
-                      ? 'realtor-kyc'
-                      : role === 'seller'
-                        ? 'seller-kyc'
-                        : 'buyer-kyc',
-                  );
-                  return;
-                }
-                const b = (await resp.json()) as { error_code?: string };
-                setError(
-                  b.error_code === 'EMAIL_ALREADY_IN_USE'
-                    ? 'That email is already linked to another account.'
-                    : b.error_code === 'FULL_NAME_REQUIRED'
-                      ? 'Please enter your full name.'
-                      : 'Could not save your details. Please retry.',
-                );
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        )}
-
-        {step === 'realtor-kyc' && (
-          <RealtorProfileStep
-            busy={busy}
-            error={error}
-            onSubmit={async ({ esvarbon, coverage, file }) => {
-              setError(null);
-              setBusy(true);
-              try {
-                const form = new FormData();
-                form.append('esvarbon_number', esvarbon);
-                coverage
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-                  .forEach((state) => form.append('coverage_states', state));
-                form.append('file', file);
-                const resp = await fetch('/api/realtor/onboarding', {
-                  method: 'POST',
-                  body: form,
-                });
-                if (resp.ok) {
-                  setStep('success');
-                  return;
-                }
-                const b = (await resp.json()) as { error_code?: string };
-                setError(
-                  b.error_code === 'REALTOR_ALREADY_REGISTERED'
-                    ? 'A realtor application already exists for this account.'
-                    : b.error_code === 'STORAGE_UNAVAILABLE'
-                      ? 'Document upload is temporarily unavailable. Please retry.'
-                      : b.error_code?.startsWith('CREDENTIAL') || b.error_code === 'INVALID_CREDENTIAL'
-                        ? 'That document must be a PDF, PNG, or JPG under 5MB.'
-                        : 'Could not complete your profile. Please retry.',
-                );
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        )}
-
-        {step === 'buyer-kyc' && (
-          <BuyerInfoStep
-            busy={busy}
-            error={error}
-            onSubmit={async ({ bvn, employment, location, budget }) => {
-              setError(null);
-              setBusy(true);
-              try {
-                if (bvn) {
-                  const bvnResp = await fetch('/api/buyer/bvn-verify', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ bvn }),
-                  });
-                  if (!bvnResp.ok) {
-                    const b = (await bvnResp.json()) as { error_code?: string };
-                    setError(
-                      b.error_code === 'BVN_FORMAT_INVALID'
-                        ? 'Enter a valid 11-digit BVN.'
-                        : b.error_code === 'BVN_ALREADY_VERIFIED'
-                          ? 'This BVN is already verified.'
-                          : 'Could not verify your BVN. Please retry.',
-                    );
-                    return;
-                  }
-                }
-                if (employment || location.trim() || budget.trim()) {
-                  const profileResp = await fetch('/api/auth/buyer/profile', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                      employment_status: employment || null,
-                      preferred_location: location.trim() || null,
-                      budget_kobo: budget.trim() ? Number(budget.replace(/\D/g, '')) * 100 : null,
-                    }),
-                  });
-                  if (!profileResp.ok) {
-                    setError('Could not save your details. Please retry.');
-                    return;
-                  }
-                }
-                setStep('success');
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-            onSkip={() => setStep('success')}
-          />
-        )}
-
-        {step === 'seller-kyc' && (
-          <SellerVerificationStep
-            busy={busy}
-            error={error}
-            onSubmit={async ({ nin, authority, poaFile }) => {
-              setError(null);
-              setBusy(true);
-              try {
-                const authResp = await fetch('/api/auth/seller/authority', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ authority_type: authority }),
-                });
-                if (!authResp.ok) {
-                  setError('Could not save your selling authority. Please retry.');
-                  return;
-                }
-                if (authority === 'owner') {
-                  const ninResp = await fetch('/api/auth/seller/nin', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ nin }),
-                  });
-                  if (!ninResp.ok) {
-                    const b = (await ninResp.json()) as { error_code?: string };
-                    setError(
-                      b.error_code === 'NIN_FORMAT_INVALID'
-                        ? 'Enter a valid 11-digit NIN.'
-                        : b.error_code === 'NIN_ALREADY_VERIFIED'
-                          ? 'This NIN is already verified.'
-                          : 'Could not verify your NIN. Please retry.',
-                    );
-                    return;
-                  }
-                } else if (poaFile) {
-                  const form = new FormData();
-                  form.append('file', poaFile);
-                  const poaResp = await fetch('/api/auth/seller/poa', {
-                    method: 'POST',
-                    body: form,
-                  });
-                  if (!poaResp.ok) {
-                    const b = (await poaResp.json()) as { error_code?: string };
-                    setError(
-                      b.error_code === 'POA_ALREADY_SUBMITTED'
-                        ? 'A Power of Attorney document is already on file.'
-                        : 'Could not upload your document. Please retry.',
-                    );
-                    return;
-                  }
-                }
-                setStep('success');
-              } catch {
-                setError('Could not reach the server. Please try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        )}
-
-        {step === 'success' && (
-          <SuccessStep
-            role={role}
-            firstName={firstName}
             onContinue={() => {
-              router.replace(redirect);
-              router.refresh();
+              setError(null);
+              // Sellers pick a selling authority before we create the account;
+              // everyone else registers straight away.
+              if (role === 'seller') {
+                setStep('seller-authority');
+              } else {
+                void submitRegister();
+              }
             }}
           />
         )}
 
-        {step !== 'personal' &&
-          step !== 'buyer-kyc' &&
-          step !== 'realtor-kyc' &&
-          step !== 'seller-kyc' &&
-          step !== 'success' && (
-            <p className="mt-8 text-center text-sm text-ink-500">
+        {step === 'seller-authority' && (
+          <SellerAuthorityStep
+            busy={busy}
+            error={error}
+            onBack={() => {
+              setError(null);
+              setStep('account');
+            }}
+            onContinue={(authority) => void submitRegister(authority)}
+          />
+        )}
+
+        {step === 'check-email' && <CheckEmailStep email={email.trim()} />}
+
+        {step !== 'check-email' && (
+          <p className="mt-8 text-center text-sm text-ink-500">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-emerald-deep hover:underline">
               Sign in
@@ -490,29 +246,104 @@ function RoleSelect({
   );
 }
 
-function PhoneStep({
+function passwordChecks(pw: string) {
+  return {
+    length: pw.length >= 8,
+    upper: /[A-Z]/.test(pw),
+    digit: /\d/.test(pw),
+  };
+}
+
+// A light client-side check only — normalise_email on the backend is the real
+// gate. Just enough to catch obvious typos before we hit the API.
+function looksLikeEmail(value: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(value.trim());
+}
+
+function AccountStep({
+  fullName,
+  setFullName,
+  email,
+  setEmail,
   phone,
   setPhone,
+  password,
+  setPassword,
   busy,
   error,
   onBack,
-  onSubmit,
+  onContinue,
 }: {
+  fullName: string;
+  setFullName: (v: string) => void;
+  email: string;
+  setEmail: (v: string) => void;
   phone: string;
-  setPhone: (p: string) => void;
+  setPhone: (v: string) => void;
+  password: string;
+  setPassword: (v: string) => void;
   busy: boolean;
   error: string | null;
   onBack: () => void;
-  onSubmit: () => void;
+  onContinue: () => void;
 }) {
+  const [confirm, setConfirm] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const checks = passwordChecks(password);
+  const passed = Object.values(checks).filter(Boolean).length;
+  const strong = passed === 3;
+  const strength = passed <= 1 ? 'Weak' : passed === 2 ? 'Medium' : 'Strong';
+  const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-accent';
+
+  const local = phone.replace(/\D/g, '').replace(/^0/, '');
+  const nameOk = fullName.trim().length > 0;
+  const emailOk = looksLikeEmail(email);
+  const phoneOk = local.length === 10;
+  const passwordOk = strong && confirm === password;
+  const canContinue = nameOk && emailOk && phoneOk && passwordOk;
+
+  function submit() {
+    if (!nameOk) return setLocalError('Please enter your full name.');
+    if (!emailOk) return setLocalError('Please enter a valid email address.');
+    if (!phoneOk) return setLocalError('Enter a valid 10-digit phone number.');
+    if (!strong) return setLocalError('Choose a stronger password (see the requirements below).');
+    if (confirm !== password) return setLocalError('Passwords do not match.');
+    setLocalError(null);
+    onContinue();
+  }
+
   return (
     <div>
       <button onClick={onBack} className="mb-6 text-sm text-ink-500 hover:text-ink-900">
         ← Back
       </button>
-      <h1 className="text-center font-display text-3xl text-ink-900">Enter your phone number</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">We&rsquo;ll send you a verification code</p>
-      <label className="mt-8 block text-sm font-medium text-ink-700">Phone Number</label>
+      <h1 className="text-center font-display text-3xl text-ink-900">Create your account</h1>
+      <p className="mt-2 text-center text-sm text-ink-500">
+        We&rsquo;ll email you a link to verify your account.
+      </p>
+
+      <label className="mt-8 block text-sm font-medium text-ink-700">Full Name</label>
+      <input
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        placeholder="John Doe"
+        autoComplete="name"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Email Address</label>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="john@example.com"
+        autoComplete="email"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      <p className="mt-1.5 text-xs text-ink-500">You&rsquo;ll use your email to sign in.</p>
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Phone Number</label>
       <div className="mt-1.5 flex gap-2">
         <span className="flex items-center rounded-md border border-ink-300/60 px-3.5 text-sm text-ink-700">
           +234
@@ -522,135 +353,21 @@ function PhoneStep({
           value={phone}
           onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
           placeholder="8012345678"
+          autoComplete="tel-national"
           className="w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
         />
       </div>
-      <div className="mt-4 flex gap-2 rounded-lg bg-bone px-4 py-3 text-xs text-ink-500">
-        <span aria-hidden>🛡</span> Your number is safe with us. We use encryption to protect your data.
-      </div>
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onSubmit}
-        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {busy ? 'Sending…' : 'Send OTP'}
-      </button>
-    </div>
-  );
-}
 
-function OtpStep({
-  phone,
-  busy,
-  error,
-  onVerify,
-}: {
-  phone: string;
-  busy: boolean;
-  error: string | null;
-  onVerify: (code: string) => void;
-}) {
-  const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const code = digits.join('');
-
-  function setDigit(i: number, v: string) {
-    const d = v.replace(/\D/g, '').slice(-1);
-    setDigits((prev) => {
-      const next = [...prev];
-      next[i] = d;
-      return next;
-    });
-    if (d && i < 5) refs.current[i + 1]?.focus();
-  }
-
-  return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Verify your number</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">
-        Enter the 6-digit code sent to <span className="font-medium text-ink-900">{phone}</span>
-      </p>
-      <div className="mt-8 flex justify-center gap-2">
-        {digits.map((d, i) => (
-          <input
-            key={i}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            inputMode="numeric"
-            maxLength={1}
-            value={d}
-            onChange={(e) => setDigit(i, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Backspace' && !digits[i] && i > 0) refs.current[i - 1]?.focus();
-            }}
-            className="h-12 w-12 rounded-lg border border-ink-300/60 text-center text-lg text-ink-900 outline-none transition focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-          />
-        ))}
-      </div>
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-center text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={busy || code.length !== 6}
-        onClick={() => onVerify(code)}
-        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {busy ? 'Verifying…' : 'Verify'}
-      </button>
-    </div>
-  );
-}
-
-function passwordChecks(pw: string) {
-  return {
-    length: pw.length >= 8,
-    upper: /[A-Z]/.test(pw),
-    digit: /\d/.test(pw),
-  };
-}
-
-function PasswordStep({
-  busy,
-  error,
-  onSubmit,
-}: {
-  busy: boolean;
-  error: string | null;
-  onSubmit: (password: string) => void;
-}) {
-  const [pw, setPw] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const checks = passwordChecks(pw);
-  const passed = Object.values(checks).filter(Boolean).length;
-  const strong = passed === 3;
-  const meets = strong && confirm === pw;
-  const strength = passed <= 1 ? 'Weak' : passed === 2 ? 'Medium' : 'Strong';
-  const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-accent';
-
-  return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Create a password</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">Secure your account with a strong password</p>
-
-      <label className="mt-8 block text-sm font-medium text-ink-700">Password</label>
+      <label className="mt-5 block text-sm font-medium text-ink-700">Password</label>
       <input
         type="password"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
         placeholder="Enter password"
+        autoComplete="new-password"
         className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
       />
-      {pw && (
+      {password && (
         <>
           <div className="mt-2 flex gap-1">
             {[0, 1, 2].map((n) => (
@@ -670,9 +387,10 @@ function PasswordStep({
         value={confirm}
         onChange={(e) => setConfirm(e.target.value)}
         placeholder="Re-enter password"
+        autoComplete="new-password"
         className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
       />
-      {confirm && confirm !== pw && (
+      {confirm && confirm !== password && (
         <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
       )}
 
@@ -683,18 +401,18 @@ function PasswordStep({
         <Requirement ok={checks.digit}>One number</Requirement>
       </div>
 
-      {error && (
+      {(localError || error) && (
         <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
+          {localError ?? error}
         </p>
       )}
       <button
         type="button"
-        disabled={busy || !meets}
-        onClick={() => onSubmit(pw)}
+        disabled={busy || !canContinue}
+        onClick={submit}
         className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? 'Finishing…' : 'Continue'}
+        {busy ? 'Creating account…' : 'Continue'}
       </button>
     </div>
   );
@@ -709,274 +427,35 @@ function Requirement({ ok, children }: { ok: boolean; children: React.ReactNode 
   );
 }
 
-function PersonalDetailsStep({
+function SellerAuthorityStep({
   busy,
   error,
-  onSubmit,
-}: {
-  busy: boolean;
-  error: string | null;
-  onSubmit: (fullName: string, email: string) => void;
-}) {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const canSubmit = fullName.trim().length > 0;
-
-  return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Personal details</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">Tell us a bit about yourself</p>
-
-      <div className="mx-auto mt-8 flex h-20 w-20 items-center justify-center rounded-full bg-bone text-emerald-deep">
-        <span aria-hidden className="text-2xl">
-          {fullName.trim() ? fullName.trim()[0].toUpperCase() : '👤'}
-        </span>
-      </div>
-
-      <label className="mt-8 block text-sm font-medium text-ink-700">
-        Full Name <span className="text-red-500">*</span>
-      </label>
-      <input
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-        placeholder="John Doe"
-        autoComplete="name"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-
-      <label className="mt-5 block text-sm font-medium text-ink-700">
-        Email Address <span className="text-ink-500">(Optional)</span>
-      </label>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="john@example.com"
-        autoComplete="email"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-      <p className="mt-1.5 text-xs text-ink-500">You&rsquo;ll use your email to sign in.</p>
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={busy || !canSubmit}
-        onClick={() => onSubmit(fullName.trim(), email.trim())}
-        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {busy ? 'Saving…' : 'Continue'}
-      </button>
-    </div>
-  );
-}
-
-const SUCCESS_COPY: Record<string, { label: string; blurb: string }> = {
-  buyer: {
-    label: 'Buyer',
-    blurb: 'Start exploring verified properties and get instant loan pre-approval',
-  },
-  seller: {
-    label: 'Seller',
-    blurb: 'List your properties and connect with verified buyers instantly',
-  },
-  realtor: {
-    label: 'Realtor',
-    blurb: 'Access your professional dashboard and manage listings',
-  },
-};
-
-function SuccessStep({
-  role,
-  firstName,
+  onBack,
   onContinue,
 }: {
-  role: string;
-  firstName: string;
-  onContinue: () => void;
-}) {
-  const copy = SUCCESS_COPY[role] ?? SUCCESS_COPY.buyer;
-  const greeting = firstName ? `Welcome, ${firstName}!` : 'Welcome!';
-  return (
-    <div className="text-center">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-bone">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-deep text-2xl text-emerald-deep">
-          ✓
-        </span>
-      </div>
-      <h1 className="mt-6 font-display text-3xl text-ink-900">{greeting}</h1>
-      <p className="mx-auto mt-3 max-w-sm text-sm text-ink-500">{copy.blurb}</p>
-
-      <div className="mt-8 rounded-2xl bg-emerald-deep p-6 text-left text-bone">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-bone/70">Your Profile</p>
-            <p className="mt-1 font-display text-2xl">{copy.label}</p>
-          </div>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm">
-            ✓
-          </span>
-        </div>
-        <div className="my-4 h-px bg-white/15" />
-        <p className="text-xs uppercase tracking-wide text-bone/70">Account Status</p>
-        <p className="mt-1 flex items-center gap-2 text-sm">
-          <span aria-hidden className="h-2 w-2 rounded-full bg-amber-400" />
-          Verification in progress
-        </p>
-      </div>
-
-      <button
-        type="button"
-        onClick={onContinue}
-        className="mt-4 w-full rounded-xl bg-emerald-deep px-4 py-3.5 text-sm font-semibold text-bone transition hover:bg-emerald-accent"
-      >
-        Go to Dashboard →
-      </button>
-
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        {[
-          { stat: '2.5K+', label: 'Properties' },
-          { stat: '98%', label: 'Verified' },
-          { stat: 'Fast', label: 'Loans' },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl bg-bone px-3 py-4">
-            <p className="font-display text-lg text-emerald-deep">{s.stat}</p>
-            <p className="mt-0.5 text-xs text-ink-500">{s.label}</p>
-          </div>
-        ))}
-      </div>
-      <p className="mt-6 text-xs text-ink-500">Secure • Transparent • Trusted</p>
-    </div>
-  );
-}
-
-function RealtorProfileStep({
-  busy,
-  error,
-  onSubmit,
-}: {
   busy: boolean;
   error: string | null;
-  onSubmit: (v: { esvarbon: string; coverage: string; file: File }) => void;
+  onBack: () => void;
+  onContinue: (authority: SellerAuthority) => void;
 }) {
-  const [esvarbon, setEsvarbon] = useState('');
-  const [coverage, setCoverage] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const canSubmit = esvarbon.trim().length > 0 && coverage.trim().length > 0 && file !== null;
-
-  return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Realtor Profile</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">Complete your professional profile</p>
-
-      <label className="mt-8 block text-sm font-medium text-ink-700">
-        ESVARBON License Number <span className="text-red-500">*</span>
-      </label>
-      <input
-        value={esvarbon}
-        onChange={(e) => setEsvarbon(e.target.value)}
-        placeholder="ESV/2024/123456"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-
-      <label className="mt-5 block text-sm font-medium text-ink-700">
-        Professional Credentials <span className="text-red-500">*</span>
-      </label>
-      <label className="mt-1.5 flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed border-ink-300/70 px-4 py-8 text-center transition hover:border-emerald-accent">
-        <span aria-hidden className="text-2xl text-ink-500">
-          ⬆
-        </span>
-        <span className="text-sm font-medium text-ink-900">
-          {file ? file.name : 'Upload credentials'}
-        </span>
-        <span className="text-xs text-ink-500">License, certification, or registration (PDF/PNG/JPG, max 5MB)</span>
-        <input
-          type="file"
-          accept="application/pdf,image/png,image/jpeg"
-          className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-
-      <label className="mt-5 block text-sm font-medium text-ink-700">
-        Coverage Area <span className="text-red-500">*</span>
-      </label>
-      <input
-        value={coverage}
-        onChange={(e) => setCoverage(e.target.value)}
-        placeholder="e.g., Lagos, Lekki, Victoria Island"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-      <p className="mt-1.5 text-xs text-ink-500">Comma-separated areas where you provide services.</p>
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={busy || !canSubmit}
-        onClick={() => file && onSubmit({ esvarbon: esvarbon.trim(), coverage, file })}
-        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {busy ? 'Submitting…' : 'Complete Profile'}
-      </button>
-    </div>
-  );
-}
-
-type SellerAuthority = 'owner' | 'power_of_attorney';
-
-function SellerVerificationStep({
-  busy,
-  error,
-  onSubmit,
-}: {
-  busy: boolean;
-  error: string | null;
-  onSubmit: (v: { nin: string; authority: SellerAuthority; poaFile: File | null }) => void;
-}) {
-  const [nin, setNin] = useState('');
   const [authority, setAuthority] = useState<SellerAuthority | ''>('');
-  const [poaFile, setPoaFile] = useState<File | null>(null);
-  const isPoa = authority === 'power_of_attorney';
-  const canSubmit =
-    nin.trim().length > 0 && authority !== '' && (!isPoa || poaFile !== null);
-
   const options: { value: SellerAuthority; title: string; desc: string }[] = [
     { value: 'owner', title: 'Property Owner', desc: 'I own the property' },
-    { value: 'power_of_attorney', title: 'Power of Attorney', desc: 'Authorized to sell' },
+    { value: 'power_of_attorney', title: 'Power of Attorney', desc: 'Authorized to sell on the owner’s behalf' },
   ];
 
   return (
     <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Seller Verification</h1>
+      <button onClick={onBack} className="mb-6 text-sm text-ink-500 hover:text-ink-900">
+        ← Back
+      </button>
+      <h1 className="text-center font-display text-3xl text-ink-900">How do you sell?</h1>
       <p className="mt-2 text-center text-sm text-ink-500">
-        Required for property listing authorization
+        This sets up your listing authority. You&rsquo;ll verify the details (NIN or Power of
+        Attorney) when you create your first listing.
       </p>
 
-      <label className="mt-8 block text-sm font-medium text-ink-700">
-        NIN <span className="text-red-500">*</span>
-      </label>
-      <input
-        inputMode="numeric"
-        value={nin}
-        onChange={(e) => setNin(e.target.value.replace(/\D/g, '').slice(0, 11))}
-        placeholder="12345678901"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-500">
-        <span aria-hidden>🛡</span> Your data is encrypted and used only for verification
-      </p>
-
-      <p className="mt-5 text-sm font-medium text-ink-700">
-        Selling Authority <span className="text-red-500">*</span>
-      </p>
-      <div className="mt-2 grid grid-cols-2 gap-3">
+      <div className="mt-8 grid grid-cols-2 gap-3">
         {options.map((o) => {
           const active = authority === o.value;
           return (
@@ -984,7 +463,7 @@ function SellerVerificationStep({
               key={o.value}
               type="button"
               onClick={() => setAuthority(o.value)}
-              className={`rounded-xl border px-4 py-3 text-left transition ${
+              className={`rounded-xl border px-4 py-4 text-left transition ${
                 active ? 'border-emerald-deep bg-emerald-deep/5' : 'border-ink-300/50 hover:border-ink-500'
               }`}
             >
@@ -995,29 +474,6 @@ function SellerVerificationStep({
         })}
       </div>
 
-      {isPoa && (
-        <>
-          <label className="mt-5 block text-sm font-medium text-ink-700">
-            Upload Power of Attorney <span className="text-red-500">*</span>
-          </label>
-          <label className="mt-1.5 flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed border-ink-300/70 px-4 py-8 text-center transition hover:border-emerald-accent">
-            <span aria-hidden className="text-2xl text-ink-500">
-              ⬆
-            </span>
-            <span className="text-sm font-medium text-ink-900">
-              {poaFile ? poaFile.name : 'Upload document'}
-            </span>
-            <span className="text-xs text-ink-500">PDF or JPEG (max 5MB)</span>
-            <input
-              type="file"
-              accept="application/pdf,image/jpeg"
-              className="hidden"
-              onChange={(e) => setPoaFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-        </>
-      )}
-
       {error && (
         <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
           {error}
@@ -1025,116 +481,46 @@ function SellerVerificationStep({
       )}
       <button
         type="button"
-        disabled={busy || !canSubmit}
-        onClick={() =>
-          authority && onSubmit({ nin: nin.trim(), authority, poaFile })
-        }
+        disabled={busy || authority === ''}
+        onClick={() => authority && onContinue(authority)}
         className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? 'Verifying…' : 'Complete Verification'}
+        {busy ? 'Creating account…' : 'Create account'}
       </button>
     </div>
   );
 }
 
-const EMPLOYMENT_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Select…' },
-  { value: 'employed', label: 'Employed' },
-  { value: 'self_employed', label: 'Self-employed' },
-  { value: 'business_owner', label: 'Business owner' },
-  { value: 'unemployed', label: 'Unemployed' },
-];
-
-function BuyerInfoStep({
-  busy,
-  error,
-  onSubmit,
-  onSkip,
-}: {
-  busy: boolean;
-  error: string | null;
-  onSubmit: (v: { bvn: string; employment: string; location: string; budget: string }) => void;
-  onSkip: () => void;
-}) {
-  const [bvn, setBvn] = useState('');
-  const [employment, setEmployment] = useState('');
-  const [location, setLocation] = useState('');
-  const [budget, setBudget] = useState('');
-
+function CheckEmailStep({ email }: { email: string }) {
   return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Personal Information</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">Help us understand your buying capacity</p>
-
-      {/* The design labels this NIN, but buyers verify their BVN in Maiplot
-          (NIN verification is reserved for property-owner sellers). */}
-      <label className="mt-8 block text-sm font-medium text-ink-700">
-        BVN (Bank Verification Number)
-      </label>
-      <input
-        inputMode="numeric"
-        value={bvn}
-        onChange={(e) => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))}
-        placeholder="12345678901"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-500">
-        <span aria-hidden>🛡</span> Your data is encrypted and used only for verification
+    <div className="text-center">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-bone">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-deep/10 text-3xl text-emerald-deep">
+          ✉
+        </span>
+      </div>
+      <h1 className="mt-6 font-display text-3xl text-ink-900">Check your email</h1>
+      <p className="mx-auto mt-3 max-w-sm text-sm text-ink-500">
+        We&rsquo;ve sent a verification link to{' '}
+        <span className="font-medium text-ink-900">{email || 'your email address'}</span>. Open it to
+        activate your account and sign in.
       </p>
 
-      <label className="mt-5 block text-sm font-medium text-ink-700">Employment Status</label>
-      <select
-        value={employment}
-        onChange={(e) => setEmployment(e.target.value)}
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      >
-        {EMPLOYMENT_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      <label className="mt-5 block text-sm font-medium text-ink-700">Preferred Location</label>
-      <input
-        value={location}
-        onChange={(e) => setLocation(e.target.value)}
-        placeholder="e.g., Lagos, Abuja"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-
-      <label className="mt-5 block text-sm font-medium text-ink-700">Budget (₦)</label>
-      <input
-        inputMode="numeric"
-        value={budget}
-        onChange={(e) => setBudget(e.target.value.replace(/[^\d,]/g, ''))}
-        placeholder="e.g., 40,000,000"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
+      <div className="mx-auto mt-8 max-w-sm rounded-2xl bg-bone px-5 py-4 text-left text-sm text-ink-500">
+        <p className="flex items-start gap-2">
+          <span aria-hidden>⏱</span> The link expires in 30 minutes and can only be used once.
         </p>
-      )}
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onSkip}
-          className="flex-1 rounded-lg border border-ink-300/60 px-4 py-3 text-sm font-medium text-ink-700 transition hover:border-ink-500 disabled:opacity-50"
-        >
-          Skip for now
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onSubmit({ bvn: bvn.trim(), employment, location, budget })}
-          className="flex-1 rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {busy ? 'Saving…' : 'Complete Profile'}
-        </button>
+        <p className="mt-2 flex items-start gap-2">
+          <span aria-hidden>📁</span> Not there? Check your spam or promotions folder.
+        </p>
       </div>
+
+      <p className="mt-8 text-sm text-ink-500">
+        Already verified?{' '}
+        <Link href="/login" className="font-medium text-emerald-deep hover:underline">
+          Sign in
+        </Link>
+      </p>
     </div>
   );
 }
