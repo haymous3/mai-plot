@@ -13,6 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.validators.email import InvalidEmailError, normalise_email
 from app.validators.phone import InvalidPhoneError, normalise_nigerian_phone
 
 # Roles a user may SELF-REGISTER as via POST /auth/register. Deliberately
@@ -26,6 +27,9 @@ Role = Literal["seller", "buyer", "realtor"]
 AccountRole = Literal["seller", "buyer", "realtor", "bank_partner", "admin", "legal_team"]
 SellerAuthorityType = Literal["owner", "power_of_attorney"]
 OtpPurpose = Literal["registration", "login"]
+# Purposes an email magic link may serve (mirrors the email_verification_tokens
+# purpose CHECK). Only 'registration' is issued today; login/reset are reserved.
+EmailVerifyPurpose = Literal["registration", "login", "reset"]
 
 
 class RegisterRequest(BaseModel):
@@ -33,11 +37,12 @@ class RegisterRequest(BaseModel):
 
     phone: str
     role: Role
-    # email is accepted as a free string for now; proper email validation
-    # comes with /auth/login when the schema actually stores it.
-    email: str | None = Field(default=None, max_length=254)
-    # password is accepted for forward compatibility with /auth/login but
-    # silently discarded — there is no password column on users yet.
+    # email is now REQUIRED and is the account verification channel (SCRUM-152 —
+    # replaced phone OTP). Normalised + format-checked below so the verification
+    # email has a clean target and the users.email unique constraint holds.
+    email: str = Field(max_length=254)
+    # password is optional at register; when supplied it is stored so the user
+    # can log in via email/password (SCRUM-45).
     password: str | None = Field(default=None, min_length=8, max_length=128)
     seller_authority_type: SellerAuthorityType | None = None
 
@@ -46,6 +51,11 @@ class RegisterRequest(BaseModel):
         try:
             object.__setattr__(self, "phone", normalise_nigerian_phone(self.phone))
         except InvalidPhoneError as exc:
+            raise ValueError(str(exc)) from exc
+
+        try:
+            object.__setattr__(self, "email", normalise_email(self.email))
+        except InvalidEmailError as exc:
             raise ValueError(str(exc)) from exc
 
         # A seller may register without declaring authority yet — it is collected
@@ -60,7 +70,9 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     user_id: UUID
     message: str
-    otp_expires_in_seconds: int
+    # Seconds until the emailed magic link expires (SCRUM-152). Renamed from
+    # otp_expires_in_seconds when verification moved from SMS OTP to email.
+    verification_expires_in_seconds: int
 
 
 class OtpVerifyRequest(BaseModel):
@@ -88,6 +100,23 @@ class UserPublic(BaseModel):
 
 
 class OtpVerifyResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    access_expires_in: int
+    user: UserPublic
+
+
+class EmailVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # The high-entropy token from the emailed link. POSTed (not a GET query) so
+    # it never lands in server access logs or browser history.
+    token: str = Field(min_length=1, max_length=512)
+    purpose: EmailVerifyPurpose = "registration"
+
+
+class EmailVerifyResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: Literal["Bearer"] = "Bearer"

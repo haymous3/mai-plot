@@ -8,43 +8,19 @@ import jwt
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.email_verification import InMemoryEmailClient
 from app.config import get_settings
-from tests.integration.conftest import assert_error_envelope
-
-
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
-
-
-async def _register_and_verify(
-    http_client: AsyncClient, termii_fake: InMemoryTermiiClient, phone: str = "08012345678"
-) -> dict[str, object]:
-    """Run register -> otp/verify and return the verify response body."""
-    reg = await http_client.post("/auth/register", json={"phone": phone, "role": "buyer"})
-    assert reg.status_code == 201, reg.text
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify",
-        json={"phone": phone, "otp": code, "purpose": "registration"},
-    )
-    assert verify.status_code == 200, verify.text
-    body: dict[str, object] = verify.json()
-    return body
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 
 @pytest.mark.asyncio
 async def test_refresh_rotates_and_issues_new_pair(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await _register_and_verify(http_client, termii_fake)
+    tokens = await register_and_verify(http_client, email_verification_fake)
     old_refresh = tokens["refresh_token"]
 
     response = await http_client.post("/auth/token/refresh", json={"refresh_token": old_refresh})
@@ -65,10 +41,10 @@ async def test_refresh_rotates_and_issues_new_pair(
 async def test_old_refresh_token_rejected_after_rotation(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await _register_and_verify(http_client, termii_fake)
+    tokens = await register_and_verify(http_client, email_verification_fake)
     old_refresh = tokens["refresh_token"]
 
     first = await http_client.post("/auth/token/refresh", json={"refresh_token": old_refresh})
@@ -89,7 +65,7 @@ async def test_old_refresh_token_rejected_after_rotation(
 async def test_refresh_unknown_token_returns_invalid(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     response = await http_client.post(
@@ -103,7 +79,7 @@ async def test_refresh_unknown_token_returns_invalid(
 async def test_refresh_expired_token_returns_expired(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     # Forge a correctly-signed but expired refresh token with the app's
@@ -129,10 +105,10 @@ async def test_refresh_expired_token_returns_expired(
 async def test_access_token_cannot_be_used_as_refresh(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await _register_and_verify(http_client, termii_fake)
+    tokens = await register_and_verify(http_client, email_verification_fake)
     # The access token is validly signed but has type=access; the refresh
     # path must reject it as invalid (type confusion guard).
     response = await http_client.post(

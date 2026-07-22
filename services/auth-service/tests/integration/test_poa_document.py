@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.document_storage import InMemoryDocumentStorage
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.email_verification import InMemoryEmailClient
 from tests.integration.conftest import assert_error_envelope
 from tests.integration.test_poa_review import (
     _PDF,
@@ -24,12 +24,12 @@ from tests.integration.test_poa_review import (
 async def test_legal_team_can_view_poa_document(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.get(f"/admin/poa/{user_id}/document", headers=_auth(token))
@@ -53,11 +53,13 @@ async def test_legal_team_can_view_poa_document(
 async def test_non_legal_team_cannot_view_document(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    user_id, seller_token = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, seller_token = await _seed_pending_poa_seller(
+        http_client, email_verification_fake, "08012345678"
+    )
     response = await http_client.get(f"/admin/poa/{user_id}/document", headers=_auth(seller_token))
     assert response.status_code == 403
     assert_error_envelope(response.json(), "LEGAL_TEAM_FORBIDDEN")

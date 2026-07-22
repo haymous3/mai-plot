@@ -8,42 +8,31 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.document_storage import InMemoryDocumentStorage
-from app.adapters.termii import InMemoryTermiiClient
-from tests.integration.conftest import assert_error_envelope
+from app.adapters.email_verification import InMemoryEmailClient
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 _PDF = b"%PDF-1.4\n1 0 obj fake power of attorney document\nendobj"
 _JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01 scanned poa"
 
 
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
-
-
 async def _register_verify_token(
     http_client: AsyncClient,
-    termii_fake: InMemoryTermiiClient,
+    email_fake: InMemoryEmailClient,
     phone: str,
     *,
     role: str = "seller",
     seller_authority_type: str | None = "power_of_attorney",
 ) -> tuple[str, str]:
-    """Register + OTP-verify a user; return (user_id, access_token)."""
-    payload: dict[str, object] = {"phone": phone, "role": role}
-    if seller_authority_type is not None:
-        payload["seller_authority_type"] = seller_authority_type
-    reg = await http_client.post("/auth/register", json=payload)
-    assert reg.status_code == 201, reg.text
-    user_id = reg.json()["user_id"]
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
+    """Register + email-verify a user; return (user_id, access_token)."""
+    body = await register_and_verify(
+        http_client,
+        email_fake,
+        phone=phone,
+        role=role,
+        email=f"user{phone[-4:]}@maiplot.ng",
+        seller_authority_type=seller_authority_type,
     )
-    assert verify.status_code == 200, verify.text
-    return user_id, verify.json()["access_token"]
+    return body["user"]["id"], body["access_token"]
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -54,12 +43,14 @@ def _auth(token: str) -> dict[str, str]:
 async def test_poa_upload_happy_path_for_power_of_attorney_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    user_id, token = await _register_verify_token(
+        http_client, email_verification_fake, "08012345678"
+    )
 
     response = await http_client.post(
         "/auth/poa/upload",
@@ -105,11 +96,11 @@ async def test_poa_upload_happy_path_for_power_of_attorney_seller(
 async def test_poa_upload_accepts_jpeg(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
     response = await http_client.post(
         "/auth/poa/upload",
         files={"file": ("poa.jpg", _JPEG, "image/jpeg")},
@@ -123,12 +114,12 @@ async def test_poa_upload_accepts_jpeg(
 async def test_poa_upload_rejects_owner_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
-        http_client, termii_fake, "08012345678", seller_authority_type="owner"
+        http_client, email_verification_fake, "08012345678", seller_authority_type="owner"
     )
     response = await http_client.post(
         "/auth/poa/upload",
@@ -144,12 +135,16 @@ async def test_poa_upload_rejects_owner_seller(
 async def test_poa_upload_rejects_buyer(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
-        http_client, termii_fake, "08012345678", role="buyer", seller_authority_type=None
+        http_client,
+        email_verification_fake,
+        "08012345678",
+        role="buyer",
+        seller_authority_type=None,
     )
     response = await http_client.post(
         "/auth/poa/upload",
@@ -164,11 +159,11 @@ async def test_poa_upload_rejects_buyer(
 async def test_poa_upload_rejects_non_pdf_jpeg(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
     bad = b"GIF89a not an allowed legal document format"
     response = await http_client.post(
         "/auth/poa/upload",
@@ -185,11 +180,11 @@ async def test_poa_upload_rejects_non_pdf_jpeg(
 async def test_poa_upload_twice_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
     first = await http_client.post(
         "/auth/poa/upload",
         files={"file": ("poa.pdf", _PDF, "application/pdf")},

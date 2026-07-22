@@ -9,6 +9,7 @@ migrations in services/auth-service/migrations/versions/.
 from app.models.audit_log import AuditLog
 from app.models.auth_credential import AuthCredential
 from app.models.buyer_profile import BuyerProfile
+from app.models.email_verification_token import EmailVerificationToken
 from app.models.otp_code import OtpCode
 from app.models.refresh_token import RefreshToken
 from app.models.user import Base, User
@@ -19,6 +20,7 @@ __all__ = [
     "User",
     "UserPii",
     "OtpCode",
+    "EmailVerificationToken",
     "RefreshToken",
     "AuthCredential",
     "AuditLog",

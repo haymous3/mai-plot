@@ -9,34 +9,22 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.adapters.termii import InMemoryTermiiClient
-from tests.integration.conftest import assert_error_envelope
-
-
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
+from app.adapters.email_verification import InMemoryEmailClient
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 
 async def _register_verify_token(
     http_client: AsyncClient,
-    termii_fake: InMemoryTermiiClient,
+    email_fake: InMemoryEmailClient,
     *,
     phone: str,
     role: str,
 ) -> tuple[str, str]:
-    reg = await http_client.post("/auth/register", json={"phone": phone, "role": role})
-    assert reg.status_code == 201, reg.text
-    user_id: str = reg.json()["user_id"]
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
+    """Register + email-verify a user; return (access_token, user_id)."""
+    body = await register_and_verify(
+        http_client, email_fake, phone=phone, role=role, email=f"user{phone[-4:]}@maiplot.ng"
     )
-    assert verify.status_code == 200, verify.text
-    return verify.json()["access_token"], user_id
+    return body["access_token"], body["user"]["id"]
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -47,11 +35,11 @@ def _auth(token: str) -> dict[str, str]:
 async def test_poa_seller_pending_blocks_publish(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     token, _ = await _register_verify_token(
-        http_client, termii_fake, phone="08012345678", role="seller"
+        http_client, email_verification_fake, phone="08012345678", role="seller"
     )
     await http_client.post(
         "/auth/seller/authority",
@@ -72,11 +60,11 @@ async def test_poa_seller_pending_blocks_publish(
 async def test_owner_can_publish(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     token, _ = await _register_verify_token(
-        http_client, termii_fake, phone="08012345678", role="seller"
+        http_client, email_verification_fake, phone="08012345678", role="seller"
     )
     await http_client.post(
         "/auth/seller/authority", json={"authority_type": "owner"}, headers=_auth(token)
@@ -94,12 +82,12 @@ async def test_owner_can_publish(
 async def test_rejected_surfaces_reason_from_audit_log(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
     token, user_id = await _register_verify_token(
-        http_client, termii_fake, phone="08012345678", role="seller"
+        http_client, email_verification_fake, phone="08012345678", role="seller"
     )
     await http_client.post(
         "/auth/seller/authority",
@@ -137,11 +125,11 @@ async def test_rejected_surfaces_reason_from_audit_log(
 async def test_non_seller_forbidden(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     token, _ = await _register_verify_token(
-        http_client, termii_fake, phone="08012345678", role="buyer"
+        http_client, email_verification_fake, phone="08012345678", role="buyer"
     )
     resp = await http_client.get("/auth/seller/poa-status", headers=_auth(token))
     assert resp.status_code == 403

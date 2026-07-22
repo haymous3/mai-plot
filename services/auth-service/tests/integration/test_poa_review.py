@@ -10,20 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.document_storage import InMemoryDocumentStorage
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.email_verification import InMemoryEmailClient
 from app.config import get_settings
 from app.services.jwt_service import JwtService
-from tests.integration.conftest import assert_error_envelope
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 _PDF = b"%PDF-1.4\n1 0 obj power of attorney\nendobj"
-
-
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code in SMS body: {message!r}")
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -53,22 +45,20 @@ def _legal_team_token(db_engine: Engine) -> str:
 
 
 async def _seed_pending_poa_seller(
-    http_client: AsyncClient, termii_fake: InMemoryTermiiClient, phone: str
+    http_client: AsyncClient, email_fake: InMemoryEmailClient, phone: str
 ) -> tuple[str, str]:
     """Register + verify a PoA seller and upload a PoA doc. Returns
     (user_id, seller_access_token); leaves poa_verified_status='pending'."""
-    reg = await http_client.post(
-        "/auth/register",
-        json={"phone": phone, "role": "seller", "seller_authority_type": "power_of_attorney"},
+    body = await register_and_verify(
+        http_client,
+        email_fake,
+        phone=phone,
+        role="seller",
+        email=f"user{phone[-4:]}@maiplot.ng",
+        seller_authority_type="power_of_attorney",
     )
-    assert reg.status_code == 201, reg.text
-    user_id = reg.json()["user_id"]
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
-    )
-    assert verify.status_code == 200, verify.text
-    token = verify.json()["access_token"]
+    user_id = body["user"]["id"]
+    token = body["access_token"]
     upload = await http_client.post(
         "/auth/poa/upload",
         files={"file": ("poa.pdf", _PDF, "application/pdf")},
@@ -82,12 +72,12 @@ async def _seed_pending_poa_seller(
 async def test_legal_team_sees_pending_submission_in_queue(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.get("/admin/poa/queue", headers=_auth(token))
@@ -101,11 +91,13 @@ async def test_legal_team_sees_pending_submission_in_queue(
 async def test_non_legal_team_is_forbidden(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, seller_token = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    _, seller_token = await _seed_pending_poa_seller(
+        http_client, email_verification_fake, "08012345678"
+    )
     response = await http_client.get("/admin/poa/queue", headers=_auth(seller_token))
     assert response.status_code == 403
     assert_error_envelope(response.json(), "LEGAL_TEAM_FORBIDDEN")
@@ -125,12 +117,12 @@ async def test_queue_requires_authentication(
 async def test_approve_verifies_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -163,12 +155,12 @@ async def test_approve_verifies_seller(
 async def test_reject_without_reason_is_422(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -188,12 +180,12 @@ async def test_reject_without_reason_is_422(
 async def test_reject_with_reason_sets_rejected(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -215,12 +207,12 @@ async def test_reject_with_reason_sets_rejected(
 async def test_review_already_decided_is_409(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, termii_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     first = await http_client.post(

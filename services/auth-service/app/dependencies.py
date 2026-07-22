@@ -16,6 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.bvn import BvnVerifier, build_bvn_verifier
 from app.adapters.document_storage import DocumentStorage, build_document_storage
+from app.adapters.email_verification import (
+    EmailVerificationSender,
+    build_email_verification_client,
+)
 from app.adapters.nin import NinVerifier, build_nin_verifier
 from app.adapters.termii import TermiiClient, build_termii_client
 from app.config import Settings, get_settings
@@ -23,12 +27,14 @@ from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.buyer_profile_repo import BuyerProfileRepository
+from app.repositories.email_verification_repo import EmailVerificationRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.buyer_profile import BuyerProfileService
 from app.services.bvn_verification import BvnVerificationService
+from app.services.email_verification import EmailVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
@@ -52,6 +58,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
 _termii: TermiiClient | None = None
+_email_sender: EmailVerificationSender | None = None
 _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
 _document_storage: DocumentStorage | None = None
@@ -87,6 +94,21 @@ async def get_termii(settings: SettingsDep) -> TermiiClient:
             timeout_seconds=settings.termii_timeout_seconds,
         )
     return _termii
+
+
+async def get_email_sender(settings: SettingsDep) -> EmailVerificationSender:
+    """Process-wide verification-email sender. The factory picks the in-memory
+    fake (local/CI) vs the configured provider (Resend for V1)."""
+    global _email_sender
+    if _email_sender is None:
+        _email_sender = build_email_verification_client(
+            provider=settings.email_provider,
+            use_fake=settings.email_verification_use_fake,
+            api_key=settings.resend_api_key,
+            from_address=settings.email_from_address,
+            timeout_seconds=settings.email_timeout_seconds,
+        )
+    return _email_sender
 
 
 async def get_bvn_verifier(settings: SettingsDep) -> BvnVerifier:
@@ -131,6 +153,7 @@ async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
 
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
+EmailSenderDep = Annotated[EmailVerificationSender, Depends(get_email_sender)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]
 DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
@@ -146,6 +169,10 @@ def _audit_repo(session: SessionDep) -> AuditLogRepository:
 
 def _otp_repo(session: SessionDep) -> OtpRepository:
     return OtpRepository(session)
+
+
+def _email_token_repo(session: SessionDep) -> EmailVerificationRepository:
+    return EmailVerificationRepository(session)
 
 
 def _refresh_token_repo(session: SessionDep) -> RefreshTokenRepository:
@@ -175,19 +202,34 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
 
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
-    otps: Annotated[OtpRepository, Depends(_otp_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
-    termii: TermiiDep,
+    email_sender: EmailSenderDep,
     settings: SettingsDep,
 ) -> RegistrationService:
     return RegistrationService(
         users=users,
-        otps=otps,
+        email_tokens=email_tokens,
         credentials=credentials,
         rate_limiter=rate_limiter,
-        termii=termii,
-        otp_expire_minutes=settings.otp_expire_minutes,
+        email_sender=email_sender,
+        verification_expire_minutes=settings.email_verification_expire_minutes,
+        verify_base_url=settings.email_verification_base_url,
+    )
+
+
+def get_email_verification_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> EmailVerificationService:
+    return EmailVerificationService(
+        users=users,
+        tokens=email_tokens,
+        refresh_tokens=refresh_tokens,
+        jwt=jwt_service,
     )
 
 

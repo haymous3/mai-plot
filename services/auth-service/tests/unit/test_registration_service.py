@@ -1,7 +1,8 @@
-"""RegistrationService with mocked repos + adapters.
+"""RegistrationService with mocked repos + adapters (email flow, SCRUM-152).
 
-Exercises the orchestration logic that the integration tests can't
-isolate cleanly (e.g. Termii failure rolls into OtpDispatchFailed).
+Exercises the orchestration logic the integration tests can't isolate
+cleanly (e.g. an email-delivery failure rolls into VerificationEmailFailed,
+and the duplicate/rate-limit short-circuits happen before any write).
 """
 
 from __future__ import annotations
@@ -12,33 +13,43 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.email_verification import InMemoryEmailClient
 from app.services.rate_limit import RateLimitResult
 from app.services.registration import (
-    OtpDispatchFailed,
-    OtpRateLimited,
+    EmailAlreadyRegistered,
     PhoneAlreadyRegistered,
     RegistrationService,
+    VerificationEmailFailed,
+    VerificationRateLimited,
 )
+
+_BASE_URL = "https://app.maiplot.ng/verify-email"
 
 
 class _StubUserRepo:
-    def __init__(self, existing_phone: str | None = None, new_id: UUID | None = None) -> None:
+    def __init__(
+        self,
+        existing_phone: str | None = None,
+        existing_email: str | None = None,
+        new_id: UUID | None = None,
+    ) -> None:
         self._existing_phone = existing_phone
+        self._existing_email = existing_email
         self._new_id = new_id or uuid4()
         self.created: list[dict[str, Any]] = []
 
     async def get_by_phone(self, phone: str) -> Any:
-        if self._existing_phone == phone:
-            return object()  # truthy
-        return None
+        return object() if self._existing_phone == phone else None
+
+    async def get_active_by_email(self, email: str) -> Any:
+        return object() if self._existing_email == email else None
 
     async def create_with_pii(self, **kwargs: Any) -> UUID:
         self.created.append(kwargs)
         return self._new_id
 
 
-class _StubOtpRepo:
+class _StubEmailTokenRepo:
     def __init__(self) -> None:
         self.created: list[dict[str, Any]] = []
 
@@ -58,54 +69,67 @@ class _StubCredsRepo:
 class _StubLimiter:
     def __init__(self, allowed: bool = True) -> None:
         self._allowed = allowed
+        self.keys: list[str] = []
 
-    async def check_and_record(self, phone: str) -> RateLimitResult:
+    async def check_and_record(self, key: str) -> RateLimitResult:
+        self.keys.append(key)
         return RateLimitResult(allowed=self._allowed, remaining=4 if self._allowed else 0)
 
 
 def _build_service(
     *,
     user_repo: _StubUserRepo,
-    otp_repo: _StubOtpRepo | None = None,
+    token_repo: _StubEmailTokenRepo | None = None,
     creds_repo: _StubCredsRepo | None = None,
     limiter: _StubLimiter | None = None,
-    termii: InMemoryTermiiClient | None = None,
+    email_sender: InMemoryEmailClient | None = None,
 ) -> RegistrationService:
     return RegistrationService(
         users=user_repo,  # type: ignore[arg-type]
-        otps=otp_repo or _StubOtpRepo(),  # type: ignore[arg-type]
+        email_tokens=token_repo or _StubEmailTokenRepo(),  # type: ignore[arg-type]
         credentials=creds_repo or _StubCredsRepo(),  # type: ignore[arg-type]
         rate_limiter=limiter or _StubLimiter(),  # type: ignore[arg-type]
-        termii=termii or InMemoryTermiiClient(),
-        otp_expire_minutes=5,
+        email_sender=email_sender or InMemoryEmailClient(),
+        verification_expire_minutes=30,
+        verify_base_url=_BASE_URL,
     )
 
 
 @pytest.mark.asyncio
-async def test_happy_path_creates_user_and_sends_sms() -> None:
+async def test_happy_path_creates_user_and_sends_email() -> None:
     user_repo = _StubUserRepo()
-    otp_repo = _StubOtpRepo()
-    termii = InMemoryTermiiClient()
-    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, termii=termii)
+    token_repo = _StubEmailTokenRepo()
+    email = InMemoryEmailClient()
+    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
 
     result = await service.register(
         phone="+2348012345678",
         role="buyer",
-        email=None,
+        email="buyer@example.com",
         password=None,
         seller_authority_type=None,
     )
 
     assert isinstance(result.user_id, UUID)
-    assert result.otp_expires_in_seconds == 300
+    assert result.verification_expires_in_seconds == 30 * 60
     assert user_repo.created[0]["phone"] == "+2348012345678"
-    assert otp_repo.created[0]["purpose"] == "registration"
-    assert otp_repo.created[0]["phone"] == "+2348012345678"
-    assert isinstance(otp_repo.created[0]["expires_at"], datetime)
-    assert len(termii.sent) == 1
-    # The OTP must NOT appear in the user-created row (only in the OTP record).
-    code = otp_repo.created[0]["code_hash"]
-    assert code  # bcrypt hash string
+    assert user_repo.created[0]["email"] == "buyer@example.com"
+
+    assert token_repo.created[0]["purpose"] == "registration"
+    assert token_repo.created[0]["email"] == "buyer@example.com"
+    assert isinstance(token_repo.created[0]["expires_at"], datetime)
+    # The persisted value is the SHA-256 hash (64 hex chars), never the token.
+    token_hash = token_repo.created[0]["token_hash"]
+    assert len(token_hash) == 64
+
+    assert len(email.sent) == 1
+    sent = email.sent[0]
+    assert sent.to == "buyer@example.com"
+    # The magic link points at the configured landing page and carries a token.
+    assert sent.verify_url.startswith(f"{_BASE_URL}?token=")
+    # The raw token is in the link but must NOT equal the stored hash.
+    raw_token = sent.verify_url.split("token=", 1)[1]
+    assert raw_token and raw_token != token_hash
 
 
 @pytest.mark.asyncio
@@ -117,7 +141,7 @@ async def test_password_is_hashed_and_stored_when_provided() -> None:
     await service.register(
         phone="+2348012345678",
         role="buyer",
-        email="user@example.com",
+        email="buyer@example.com",
         password="SecurePass123!",
         seller_authority_type=None,
     )
@@ -138,7 +162,7 @@ async def test_password_skipped_when_absent() -> None:
     await service.register(
         phone="+2348012345678",
         role="buyer",
-        email=None,
+        email="buyer@example.com",
         password=None,
         seller_authority_type=None,
     )
@@ -147,69 +171,90 @@ async def test_password_skipped_when_absent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_duplicate_phone_rejected_before_anything_else() -> None:
+async def test_duplicate_email_rejected_before_anything_else() -> None:
+    user_repo = _StubUserRepo(existing_email="buyer@example.com")
+    token_repo = _StubEmailTokenRepo()
+    email = InMemoryEmailClient()
+    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
+
+    with pytest.raises(EmailAlreadyRegistered):
+        await service.register(
+            phone="+2348012345678",
+            role="buyer",
+            email="buyer@example.com",
+            password=None,
+            seller_authority_type=None,
+        )
+
+    assert user_repo.created == []
+    assert token_repo.created == []
+    assert email.sent == []
+
+
+@pytest.mark.asyncio
+async def test_duplicate_phone_rejected() -> None:
     user_repo = _StubUserRepo(existing_phone="+2348012345678")
-    otp_repo = _StubOtpRepo()
-    termii = InMemoryTermiiClient()
-    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, termii=termii)
+    token_repo = _StubEmailTokenRepo()
+    email = InMemoryEmailClient()
+    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
 
     with pytest.raises(PhoneAlreadyRegistered):
         await service.register(
             phone="+2348012345678",
             role="buyer",
-            email=None,
+            email="buyer@example.com",
             password=None,
             seller_authority_type=None,
         )
 
     assert user_repo.created == []
-    assert otp_repo.created == []
-    assert termii.sent == []
+    assert token_repo.created == []
+    assert email.sent == []
 
 
 @pytest.mark.asyncio
-async def test_rate_limited_short_circuits() -> None:
+async def test_rate_limited_short_circuits_and_keys_on_email() -> None:
     user_repo = _StubUserRepo()
-    otp_repo = _StubOtpRepo()
-    termii = InMemoryTermiiClient()
+    token_repo = _StubEmailTokenRepo()
+    email = InMemoryEmailClient()
+    limiter = _StubLimiter(allowed=False)
     service = _build_service(
-        user_repo=user_repo,
-        otp_repo=otp_repo,
-        limiter=_StubLimiter(allowed=False),
-        termii=termii,
+        user_repo=user_repo, token_repo=token_repo, limiter=limiter, email_sender=email
     )
 
-    with pytest.raises(OtpRateLimited):
+    with pytest.raises(VerificationRateLimited):
         await service.register(
             phone="+2348012345678",
             role="buyer",
-            email=None,
+            email="buyer@example.com",
             password=None,
             seller_authority_type=None,
         )
 
+    # The limiter is keyed on the email address, not the phone.
+    assert limiter.keys == ["buyer@example.com"]
     assert user_repo.created == []
-    assert otp_repo.created == []
-    assert termii.sent == []
+    assert token_repo.created == []
+    assert email.sent == []
 
 
 @pytest.mark.asyncio
-async def test_termii_failure_surfaces_as_dispatch_error() -> None:
+async def test_email_delivery_failure_surfaces_as_verification_error() -> None:
     user_repo = _StubUserRepo()
-    otp_repo = _StubOtpRepo()
-    termii = InMemoryTermiiClient(fail_next=True)
-    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, termii=termii)
+    token_repo = _StubEmailTokenRepo()
+    email = InMemoryEmailClient(fail_next=True)
+    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
 
-    with pytest.raises(OtpDispatchFailed):
+    with pytest.raises(VerificationEmailFailed):
         await service.register(
             phone="+2348012345678",
             role="buyer",
-            email=None,
+            email="buyer@example.com",
             password=None,
             seller_authority_type=None,
         )
-    # User + OTP were persisted before the dispatch attempt; the DB
-    # transaction is rolled back by the route handler's get_session
-    # dependency, so this is consistent with the contract.
+    # User + token were persisted before the send attempt; the DB transaction
+    # is rolled back by the route handler's get_session dependency, so this is
+    # consistent with the contract.
     assert len(user_repo.created) == 1
-    assert len(otp_repo.created) == 1
+    assert len(token_repo.created) == 1

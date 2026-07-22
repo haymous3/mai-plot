@@ -5,40 +5,30 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.termii import InMemoryTermiiClient
-from tests.integration.conftest import assert_error_envelope
+from app.adapters.email_verification import InMemoryEmailClient
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 # Throwaway password, referenced by variable so secret scanners don't flag a
 # literal in a "password"-keyed position (mirrors test_set_password.py).
 _STRONG = "SecurePass123!"
 
 
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
-
-
 async def _register_verify_token(
     http_client: AsyncClient,
-    termii_fake: InMemoryTermiiClient,
+    email_fake: InMemoryEmailClient,
     *,
     phone: str,
     email: str | None = None,
 ) -> str:
-    payload: dict[str, str] = {"phone": phone, "role": "buyer"}
-    if email is not None:
-        payload["email"] = email
-    reg = await http_client.post("/auth/register", json=payload)
-    assert reg.status_code == 201, reg.text
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
+    """Register + email-verify a buyer; return the access token. `email` is the
+    REGISTRATION email (now required); when omitted a unique placeholder is
+    derived from the phone so callers can register several accounts per test.
+    The profile screen can then set/replace the email."""
+    reg_email = email or f"user{phone[-4:]}@maiplot.ng"
+    body = await register_and_verify(
+        http_client, email_fake, phone=phone, role="buyer", email=reg_email
     )
-    assert verify.status_code == 200, verify.text
-    token: str = verify.json()["access_token"]
+    token: str = body["access_token"]
     return token
 
 
@@ -50,10 +40,10 @@ def _auth(token: str) -> dict[str, str]:
 async def test_profile_persists_name_and_email(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    token = await _register_verify_token(http_client, termii_fake, phone="08012345678")
+    token = await _register_verify_token(http_client, email_verification_fake, phone="08012345678")
 
     resp = await http_client.post(
         "/auth/profile",
@@ -77,10 +67,10 @@ async def test_profile_persists_name_and_email(
 async def test_profile_email_optional(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    token = await _register_verify_token(http_client, termii_fake, phone="08012345678")
+    token = await _register_verify_token(http_client, email_verification_fake, phone="08012345678")
     resp = await http_client.post(
         "/auth/profile", json={"full_name": "Ada Obi"}, headers=_auth(token)
     )
@@ -91,10 +81,10 @@ async def test_profile_email_optional(
 async def test_profile_blank_name_rejected(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    token = await _register_verify_token(http_client, termii_fake, phone="08012345678")
+    token = await _register_verify_token(http_client, email_verification_fake, phone="08012345678")
     resp = await http_client.post("/auth/profile", json={"full_name": "   "}, headers=_auth(token))
     assert resp.status_code == 422
     assert_error_envelope(resp.json(), "FULL_NAME_REQUIRED")
@@ -104,15 +94,17 @@ async def test_profile_blank_name_rejected(
 async def test_profile_email_collision_rejected(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     # First account already owns the email (set at registration).
     await _register_verify_token(
-        http_client, termii_fake, phone="08010000001", email="dup@maiplot.ng"
+        http_client, email_verification_fake, phone="08010000001", email="dup@maiplot.ng"
     )
     # Second account tries to claim the same email via the profile screen.
-    token_b = await _register_verify_token(http_client, termii_fake, phone="08010000002")
+    token_b = await _register_verify_token(
+        http_client, email_verification_fake, phone="08010000002"
+    )
     resp = await http_client.post(
         "/auth/profile",
         json={"full_name": "Bola", "email": "dup@maiplot.ng"},

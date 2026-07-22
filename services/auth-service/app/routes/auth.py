@@ -16,6 +16,7 @@ from app.dependencies import (
     get_buyer_profile_service,
     get_bvn_verification_service,
     get_current_user,
+    get_email_verification_service,
     get_login_service,
     get_logout_service,
     get_nin_verification_service,
@@ -33,6 +34,8 @@ from app.schemas.auth import (
     BuyerProfileResponse,
     BvnVerifyRequest,
     BvnVerifyResponse,
+    EmailVerifyRequest,
+    EmailVerifyResponse,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -63,6 +66,11 @@ from app.services.bvn_verification import (
     BvnVerificationService,
     BvnVerificationUnavailable,
 )
+from app.services.email_verification import (
+    EmailTokenExpired,
+    EmailTokenInvalid,
+    EmailVerificationService,
+)
 from app.services.login import InvalidCredentials, LoginService
 from app.services.logout import LogoutService
 from app.services.nin import InvalidNinError
@@ -86,10 +94,11 @@ from app.services.poa_upload import (
 )
 from app.services.profile import EmailAlreadyInUse, InvalidFullName, ProfileService
 from app.services.registration import (
-    OtpDispatchFailed,
-    OtpRateLimited,
+    EmailAlreadyRegistered,
     PhoneAlreadyRegistered,
     RegistrationService,
+    VerificationEmailFailed,
+    VerificationRateLimited,
 )
 from app.services.seller_authority import NotSeller, SellerAuthorityService
 from app.services.seller_poa_status import NotSeller as PoaNotSeller
@@ -125,29 +134,69 @@ async def register(
             password=body.password,
             seller_authority_type=body.seller_authority_type,
         )
+    except EmailAlreadyRegistered:
+        return _error(
+            status.HTTP_400_BAD_REQUEST,
+            "EMAIL_ALREADY_REGISTERED",
+            "A user with this email address already exists.",
+        )
     except PhoneAlreadyRegistered:
         return _error(
             status.HTTP_400_BAD_REQUEST,
             "PHONE_ALREADY_REGISTERED",
             "A user with this phone number already exists.",
         )
-    except OtpRateLimited:
+    except VerificationRateLimited:
         return _error(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            "OTP_RATE_LIMITED",
-            "Too many OTP requests for this phone. Try again later.",
+            "VERIFICATION_RATE_LIMITED",
+            "Too many verification emails for this address. Try again later.",
         )
-    except OtpDispatchFailed:
+    except VerificationEmailFailed:
         return _error(
             status.HTTP_502_BAD_GATEWAY,
-            "OTP_DISPATCH_FAILED",
-            "Could not send the verification SMS. Please retry.",
+            "VERIFICATION_EMAIL_FAILED",
+            "Could not send the verification email. Please retry.",
         )
 
     return RegisterResponse(
         user_id=result.user_id,
-        message=f"OTP sent to {body.phone}",
-        otp_expires_in_seconds=result.otp_expires_in_seconds,
+        message=f"Verification email sent to {body.email}",
+        verification_expires_in_seconds=result.verification_expires_in_seconds,
+    )
+
+
+@router.post("/verify/email", response_model=EmailVerifyResponse)
+async def verify_email(
+    body: EmailVerifyRequest,
+    service: Annotated[EmailVerificationService, Depends(get_email_verification_service)],
+) -> EmailVerifyResponse | JSONResponse:
+    """Confirm an account from the emailed magic link (SCRUM-152). The frontend
+    landing page reads the token from the link's query string and POSTs it here;
+    on success the account is marked email_verified and a JWT pair is issued
+    (same shape as /auth/otp/verify)."""
+    try:
+        result = await service.verify(token=body.token, purpose=body.purpose)
+    except EmailTokenExpired:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "EMAIL_TOKEN_EXPIRED",
+            "The verification link has expired. Request a new one.",
+        )
+    except EmailTokenInvalid:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "EMAIL_TOKEN_INVALID",
+            "The verification link is invalid or has already been used.",
+        )
+
+    return EmailVerifyResponse(
+        access_token=result.tokens.access_token,
+        refresh_token=result.tokens.refresh_token,
+        access_expires_in=result.tokens.access_expires_in,
+        user=UserPublic.model_validate(
+            {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
+        ),
     )
 
 

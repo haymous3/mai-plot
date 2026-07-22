@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.email_verification import InMemoryEmailClient
 from tests.integration.conftest import assert_error_envelope
 
 _EMAIL = "buyer@example.com"
@@ -29,7 +29,7 @@ async def _register_with_password(
 async def test_login_succeeds_with_correct_password(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     await _register_with_password(http_client)
@@ -55,7 +55,7 @@ async def test_login_succeeds_with_correct_password(
 async def test_login_wrong_password_returns_401(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     await _register_with_password(http_client)
@@ -70,7 +70,7 @@ async def test_login_wrong_password_returns_401(
 async def test_login_unknown_email_returns_401(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     response = await http_client.post(
@@ -84,7 +84,7 @@ async def test_login_unknown_email_returns_401(
 async def test_login_phone_only_user_has_no_password(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     # Registered with an email but no password -> no credential row, so

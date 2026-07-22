@@ -7,42 +7,32 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.nin import InMemoryNinVerifier
-from app.adapters.termii import InMemoryTermiiClient
-from tests.integration.conftest import assert_error_envelope
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 _NIN = "12345678901"
 
 
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
-
-
 async def _register_verify_token(
     http_client: AsyncClient,
-    termii_fake: InMemoryTermiiClient,
+    email_fake: InMemoryEmailClient,
     phone: str,
     *,
     role: str = "seller",
     seller_authority_type: str | None = "owner",
+    email: str = "seller@example.com",
 ) -> tuple[str, str]:
-    """Register + OTP-verify a user; return (user_id, access_token)."""
-    payload: dict[str, object] = {"phone": phone, "role": role}
-    if seller_authority_type is not None:
-        payload["seller_authority_type"] = seller_authority_type
-    reg = await http_client.post("/auth/register", json=payload)
-    assert reg.status_code == 201, reg.text
-    user_id = reg.json()["user_id"]
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
+    """Register + email-verify a user; return (user_id, access_token)."""
+    body = await register_and_verify(
+        http_client,
+        email_fake,
+        phone=phone,
+        role=role,
+        email=email,
+        seller_authority_type=seller_authority_type,
     )
-    assert verify.status_code == 200, verify.text
-    return user_id, verify.json()["access_token"]
+    return body["user"]["id"], body["access_token"]
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -53,12 +43,14 @@ def _auth(token: str) -> dict[str, str]:
 async def test_nin_verify_happy_path_for_owner_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    user_id, token = await _register_verify_token(
+        http_client, email_verification_fake, "08012345678"
+    )
 
     response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
 
@@ -87,12 +79,16 @@ async def test_nin_verify_happy_path_for_owner_seller(
 async def test_nin_verify_rejects_buyer(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
-        http_client, termii_fake, "08012345678", role="buyer", seller_authority_type=None
+        http_client,
+        email_verification_fake,
+        "08012345678",
+        role="buyer",
+        seller_authority_type=None,
     )
     response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
     assert response.status_code == 403
@@ -104,13 +100,13 @@ async def test_nin_verify_rejects_buyer(
 async def test_nin_verify_rejects_poa_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
         http_client,
-        termii_fake,
+        email_verification_fake,
         "08012345678",
         role="seller",
         seller_authority_type="power_of_attorney",
@@ -124,11 +120,11 @@ async def test_nin_verify_rejects_poa_seller(
 async def test_nin_verify_same_user_twice_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
     first = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
     assert first.status_code == 202
 
@@ -141,12 +137,14 @@ async def test_nin_verify_same_user_twice_conflicts(
 async def test_nin_already_owned_by_another_account_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token_a = await _register_verify_token(http_client, termii_fake, "08012345678")
-    _, token_b = await _register_verify_token(http_client, termii_fake, "08087654321")
+    _, token_a = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token_b = await _register_verify_token(
+        http_client, email_verification_fake, "08087654321", email="second@example.com"
+    )
 
     first = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token_a))
     assert first.status_code == 202
@@ -160,11 +158,11 @@ async def test_nin_already_owned_by_another_account_conflicts(
 async def test_nin_invalid_format_returns_422_without_echoing_value(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, termii_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
     bad = "999abc"
     response = await http_client.post("/auth/verify/nin", json={"nin": bad}, headers=_auth(token))
     assert response.status_code == 422
