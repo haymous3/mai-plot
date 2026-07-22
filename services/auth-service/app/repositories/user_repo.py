@@ -206,6 +206,16 @@ class UserRepository:
         if user.verified_status == "unverified":
             user.verified_status = "phone_verified"
 
+    async def mark_email_verified(self, user_id: UUID) -> None:
+        """Advance an unverified user to 'email_verified' after a magic-link
+        confirm (SCRUM-152). Only lifts 'unverified' — a user who is already
+        further along (phone/id/fully) keeps their higher status."""
+        user = await self._session.get(User, user_id)
+        if user is None:
+            return
+        if user.verified_status == "unverified":
+            user.verified_status = "email_verified"
+
     async def has_bvn(self, user_id: UUID) -> bool:
         """True if this user already has a BVN on file."""
         stmt = select(UserPii.bvn_hash).where(UserPii.user_id == user_id)

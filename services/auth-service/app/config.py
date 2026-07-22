@@ -38,6 +38,25 @@ class Settings(BaseSettings):
     termii_base_url: str = "https://api.ng.termii.com"
     termii_timeout_seconds: float = 3.0
 
+    # Email verification (SCRUM-152). Account verification is an email magic
+    # link, not phone OTP. The in-memory fake sender is the default so local +
+    # CI never hit the network; production sets email_verification_use_fake=false
+    # and the real provider key. Provider-agnostic: `email_provider` selects the
+    # adapter (Resend for V1; an SES adapter slots into the factory later).
+    #
+    # NOTE (CLAUDE.md §9 residency): Resend is a US provider, so verification
+    # emails leave af-south-1. The product owner accepted this trade-off for V1;
+    # swapping email_provider to an af-south-1-resident sender (SES) closes it.
+    email_verification_use_fake: bool = True
+    email_provider: str = "resend"
+    resend_api_key: str = ""
+    email_from_address: str = "Maiplot <noreply@maiplot.ng>"
+    email_timeout_seconds: float = 5.0
+    email_verification_expire_minutes: int = 30
+    # Base URL of the frontend landing page the magic link points at; the token
+    # is appended as ?token=... and the page POSTs it to /auth/verify/email.
+    email_verification_base_url: str = "https://app.maiplot.ng/verify-email"
+
     # BVN verification (SCRUM-46). The fake verifier is default for local +
     # CI. bvn_pepper is the HMAC key for the deterministic bvn_lookup column
     # used for cross-account dedup — it is a server secret, NOT per-user,

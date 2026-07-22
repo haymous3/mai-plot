@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.termii import InMemoryTermiiClient
-from tests.integration.conftest import assert_error_envelope
+from app.adapters.email_verification import InMemoryEmailClient
+from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 # Throwaway test values, referenced by variable so secret scanners don't flag a
 # literal in a "password"-keyed position. _STRONG satisfies the policy; _WEAK is
@@ -15,27 +15,13 @@ _STRONG = "SecurePass123!"
 _WEAK = "alllowercase"
 
 
-def _extract_code(message: str) -> str:
-    for part in message.split():
-        cleaned = part.rstrip(".")
-        if cleaned.isdigit() and len(cleaned) == 6:
-            return cleaned
-    raise AssertionError(f"no 6-digit code found in SMS body: {message!r}")
-
-
 async def _register_verify_token(
-    http_client: AsyncClient, termii_fake: InMemoryTermiiClient, *, phone: str, email: str
+    http_client: AsyncClient, email_fake: InMemoryEmailClient, *, phone: str, email: str
 ) -> str:
-    reg = await http_client.post(
-        "/auth/register", json={"phone": phone, "role": "buyer", "email": email}
+    body = await register_and_verify(
+        http_client, email_fake, phone=phone, role="buyer", email=email
     )
-    assert reg.status_code == 201, reg.text
-    code = _extract_code(termii_fake.sent[-1].message)
-    verify = await http_client.post(
-        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
-    )
-    assert verify.status_code == 200, verify.text
-    token: str = verify.json()["access_token"]
+    token: str = body["access_token"]
     return token
 
 
@@ -47,11 +33,13 @@ def _auth(token: str) -> dict[str, str]:
 async def test_set_password_then_login(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     email = "buyer@maiplot.ng"
-    token = await _register_verify_token(http_client, termii_fake, phone="08012345678", email=email)
+    token = await _register_verify_token(
+        http_client, email_verification_fake, phone="08012345678", email=email
+    )
 
     resp = await http_client.post(
         "/auth/set-password", json={"password": _STRONG}, headers=_auth(token)
@@ -68,11 +56,11 @@ async def test_set_password_then_login(
 async def test_set_password_rejects_weak_password(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    termii_fake: InMemoryTermiiClient,
+    email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
     token = await _register_verify_token(
-        http_client, termii_fake, phone="08012345678", email="b@maiplot.ng"
+        http_client, email_verification_fake, phone="08012345678", email="b@maiplot.ng"
     )
     # ≥8 chars but no uppercase/digit → the service's policy (envelope), not
     # Pydantic's length floor.

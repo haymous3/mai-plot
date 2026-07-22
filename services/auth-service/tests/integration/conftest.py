@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Generator
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import pytest_asyncio
@@ -24,6 +25,7 @@ from sqlalchemy.engine import Engine
 
 from app.adapters.bvn import InMemoryBvnVerifier
 from app.adapters.document_storage import InMemoryDocumentStorage
+from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.nin import InMemoryNinVerifier
 from app.adapters.termii import InMemoryTermiiClient
 from app.config import get_settings
@@ -35,6 +37,7 @@ _TABLES = (
     "refresh_tokens",
     "auth_credentials",
     "buyer_profiles",
+    "email_verification_tokens",
     "otp_codes",
     "user_pii",
     "users",
@@ -84,6 +87,57 @@ async def termii_fake() -> AsyncIterator[InMemoryTermiiClient]:
     app.dependency_overrides[get_termii] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_termii, None)
+
+
+@pytest_asyncio.fixture
+async def email_verification_fake() -> AsyncIterator[InMemoryEmailClient]:
+    """Bind a fresh InMemoryEmailClient so verification emails are captured
+    in-process (SCRUM-152) instead of hitting Resend."""
+    from app.dependencies import get_email_sender
+    from app.main import app
+
+    fake = InMemoryEmailClient()
+    app.dependency_overrides[get_email_sender] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_email_sender, None)
+
+
+def extract_email_token(verify_url: str) -> str:
+    """Pull the magic-link token out of a captured verification URL."""
+    tokens = parse_qs(urlparse(verify_url).query).get("token")
+    assert tokens, f"no token in verify url: {verify_url!r}"
+    return tokens[0]
+
+
+async def register_and_verify(
+    http_client: AsyncClient,
+    email_fake: InMemoryEmailClient,
+    *,
+    phone: str = "08012345678",
+    role: str = "buyer",
+    email: str = "user@example.com",
+    password: str | None = None,
+    seller_authority_type: str | None = None,
+) -> dict[str, Any]:
+    """Register a user then confirm the emailed magic link; return the
+    /auth/verify/email response body (access_token, refresh_token, user{...}).
+    Replaces the old register+OTP-verify helper now that registration verifies
+    via email (SCRUM-152)."""
+    payload: dict[str, Any] = {"phone": phone, "role": role, "email": email}
+    if password is not None:
+        payload["password"] = password
+    if seller_authority_type is not None:
+        payload["seller_authority_type"] = seller_authority_type
+    reg = await http_client.post("/auth/register", json=payload)
+    assert reg.status_code == 201, reg.text
+
+    token = extract_email_token(email_fake.sent[-1].verify_url)
+    verify = await http_client.post(
+        "/auth/verify/email", json={"token": token, "purpose": "registration"}
+    )
+    assert verify.status_code == 200, verify.text
+    body: dict[str, Any] = verify.json()
+    return body
 
 
 @pytest_asyncio.fixture
