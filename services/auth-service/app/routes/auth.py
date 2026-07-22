@@ -198,7 +198,7 @@ async def otp_verify(
         )
 
     # role comes from the DB as a free str; UserPublic narrows it to the
-    # Role Literal. Construct via model_validate so Pydantic does the
+    # AccountRole Literal. Construct via model_validate so Pydantic does the
     # check at runtime — an unexpected role surfaces as a 500 rather than
     # silently widening the contract.
     return OtpVerifyResponse(
