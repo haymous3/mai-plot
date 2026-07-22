@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { RealtorHeader } from './realtor-header';
 import type {
@@ -31,10 +32,13 @@ export default async function RealtorOverviewPage() {
     sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`),
   ]);
 
+  // /realtors/me 404s until the realtor submits their credentials (SCRUM-156):
+  // send them to onboarding. Only a definite 404 redirects — a transient 502
+  // must not bounce an already-onboarded realtor into onboarding.
+  if (!profileRes.ok && profileRes.status === 404) redirect('/realtor/onboarding');
+
   const inspections = inspRes.ok ? inspRes.data.data : [];
   const commission = commissionRes.ok ? commissionRes.data : null;
-  // /realtors/me 404s until the realtor completes onboarding — treat as "no
-  // profile yet" rather than an error.
   const profile = profileRes.ok ? profileRes.data : null;
 
   const counts = countInspections(inspections);
