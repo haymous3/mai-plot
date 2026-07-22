@@ -95,6 +95,7 @@ class RegistrationService:
         email: str,
         password: str | None,
         seller_authority_type: str | None,
+        full_name: str | None = None,
     ) -> RegistrationResult:
         # Email is the verification channel now, so uniqueness is checked first.
         if await self._users.get_active_by_email(email) is not None:
@@ -117,6 +118,7 @@ class RegistrationService:
             role=role,
             email=email,
             seller_authority_type=seller_authority_type,
+            full_name=full_name or "",
         )
         # Store the password hash if one was supplied, so the user can later
         # log in via email/password (SCRUM-45).
