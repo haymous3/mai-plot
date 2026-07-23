@@ -48,6 +48,7 @@ from app.services.poa_upload import PoaUploadService
 from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.registration import RegistrationService
+from app.services.resend_verification import ResendVerificationService
 from app.services.seller_authority import SellerAuthorityService
 from app.services.seller_poa_status import SellerPoaStatusService
 from app.services.set_password import SetPasswordService
@@ -230,6 +231,23 @@ def get_email_verification_service(
         tokens=email_tokens,
         refresh_tokens=refresh_tokens,
         jwt=jwt_service,
+    )
+
+
+def get_resend_verification_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
+    rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
+    email_sender: EmailSenderDep,
+    settings: SettingsDep,
+) -> ResendVerificationService:
+    return ResendVerificationService(
+        users=users,
+        tokens=email_tokens,
+        email_sender=email_sender,
+        rate_limiter=rate_limiter,
+        verification_expire_minutes=settings.email_verification_expire_minutes,
+        verify_base_url=settings.email_verification_base_url,
     )
 
 
