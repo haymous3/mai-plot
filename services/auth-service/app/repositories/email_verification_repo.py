@@ -71,3 +71,18 @@ class EmailVerificationRepository:
             .values(used_at=datetime.now(UTC))
         )
         await self._session.execute(stmt)
+
+    async def invalidate_active(self, *, user_id: UUID, purpose: str) -> None:
+        """Burn every still-unused token for this (user, purpose) — used on
+        resend so a freshly-minted link supersedes any earlier ones (a user
+        should never have two simultaneously-valid verification links)."""
+        stmt = (
+            update(EmailVerificationToken)
+            .where(
+                EmailVerificationToken.user_id == user_id,
+                EmailVerificationToken.purpose == purpose,
+                EmailVerificationToken.used_at.is_(None),
+            )
+            .values(used_at=datetime.now(UTC))
+        )
+        await self._session.execute(stmt)

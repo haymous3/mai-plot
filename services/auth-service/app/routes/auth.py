@@ -24,6 +24,7 @@ from app.dependencies import (
     get_poa_upload_service,
     get_profile_service,
     get_registration_service,
+    get_resend_verification_service,
     get_seller_authority_service,
     get_seller_poa_status_service,
     get_set_password_service,
@@ -34,6 +35,8 @@ from app.schemas.auth import (
     BuyerProfileResponse,
     BvnVerifyRequest,
     BvnVerifyResponse,
+    EmailResendRequest,
+    EmailResendResponse,
     EmailVerifyRequest,
     EmailVerifyResponse,
     LoginRequest,
@@ -100,6 +103,7 @@ from app.services.registration import (
     VerificationEmailFailed,
     VerificationRateLimited,
 )
+from app.services.resend_verification import ResendVerificationService
 from app.services.seller_authority import NotSeller, SellerAuthorityService
 from app.services.seller_poa_status import NotSeller as PoaNotSeller
 from app.services.seller_poa_status import SellerNotFound, SellerPoaStatusService
@@ -199,6 +203,30 @@ async def verify_email(
             {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
         ),
     )
+
+
+@router.post(
+    "/verify/email/resend",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=EmailResendResponse,
+)
+async def resend_verification_email(
+    body: EmailResendRequest,
+    service: Annotated[ResendVerificationService, Depends(get_resend_verification_service)],
+) -> EmailResendResponse | JSONResponse:
+    """Re-send the account-verification magic link (SCRUM-154). Public — the
+    caller isn't verified yet. Always answers with the same generic 202 whether
+    or not the address has an unverified account (no enumeration); only a rate
+    limit surfaces a different status."""
+    try:
+        await service.resend(email=body.email)
+    except VerificationRateLimited:
+        return _error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "VERIFICATION_RATE_LIMITED",
+            "Too many verification emails for this address. Try again later.",
+        )
+    return EmailResendResponse()
 
 
 @router.post("/login", response_model=LoginResponse)

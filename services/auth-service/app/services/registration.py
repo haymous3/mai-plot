@@ -28,7 +28,7 @@ from app.adapters.email_verification import (
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.email_verification_repo import EmailVerificationRepository
 from app.repositories.user_repo import UserRepository
-from app.services.email_token import generate_token, hash_token
+from app.services.email_token import build_verify_url, generate_token, hash_token
 from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
 
@@ -132,7 +132,7 @@ class RegistrationService:
             expires_at=expires_at,
         )
 
-        verify_url = self._build_verify_url(token)
+        verify_url = build_verify_url(self._verify_base_url, token)
         try:
             await self._email_sender.send_verification(
                 VerificationEmail(to=email, verify_url=verify_url)
@@ -160,7 +160,7 @@ class RegistrationService:
             verification_expires_in_seconds=self._verification_expire_minutes * 60,
         )
 
-        # --- Retained OTP dispatch (SCRUM-152 rollback reference) -------------
+        # --- Retained OTP dispatch (SCRUM-152 rollback reference) --------------
         # The phone-OTP flow this replaced. The OTP verify path is still live
         # (POST /auth/otp/verify); only this send was swapped for the email
         # link. To revert the channel, restore the otps/termii collaborators on
@@ -186,10 +186,3 @@ class RegistrationService:
         # except TermiiError as exc:
         #     raise OtpDispatchFailed() from exc
         # ----------------------------------------------------------------------
-
-    def _build_verify_url(self, token: str) -> str:
-        """Compose the magic link the email carries. The frontend landing page
-        reads the token from the query string and POSTs it to
-        /auth/verify/email (the token stays out of server logs that way)."""
-        separator = "&" if "?" in self._verify_base_url else "?"
-        return f"{self._verify_base_url}{separator}token={token}"

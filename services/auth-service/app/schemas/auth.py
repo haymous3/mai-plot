@@ -133,6 +133,29 @@ class EmailVerifyResponse(BaseModel):
     user: UserPublic
 
 
+class EmailResendRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Public endpoint (the caller isn't verified/logged in yet). Only the email
+    # is needed to re-send the verification link; it's normalised the same way
+    # registration normalises it.
+    email: str = Field(max_length=254)
+
+    @model_validator(mode="after")
+    def _normalise(self) -> EmailResendRequest:
+        try:
+            object.__setattr__(self, "email", normalise_email(self.email))
+        except InvalidEmailError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+
+class EmailResendResponse(BaseModel):
+    # Deliberately generic — the response is identical whether or not the address
+    # has an unverified account, so it can't be used to enumerate accounts.
+    message: str = "If that email needs verification, we've sent a new link."
+
+
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
