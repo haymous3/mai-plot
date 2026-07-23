@@ -162,21 +162,10 @@ function Expired() {
       </Icon>
       <h1 className="mt-6 font-display text-2xl text-ink-900">This link has expired</h1>
       <p className="mt-2 text-sm text-ink-500">
-        Verification links are valid for a short time. Request a fresh one to finish setting up your
-        account.
+        Verification links are valid for a short time. Enter your email and we&rsquo;ll send a fresh
+        one.
       </p>
-      {/* Resend is not built yet (needs POST /auth/verify/email/resend, tracked
-          in its own backend ticket). Shown but disabled so the action isn't a
-          dead click; sign-in remains the working path. */}
-      <button
-        type="button"
-        disabled
-        title="Resend will be available soon"
-        className="mt-6 inline-flex w-full cursor-not-allowed items-center justify-center rounded-md bg-emerald-deep/40 px-4 py-2.5 text-sm font-medium text-bone"
-      >
-        Resend email
-      </button>
-      <p className="mt-1.5 text-xs text-ink-300">Resend is coming soon.</p>
+      <ResendBox />
       <NavLinks />
     </>
   );
@@ -197,10 +186,88 @@ function Invalid() {
       <h1 className="mt-6 font-display text-2xl text-ink-900">This link isn&rsquo;t valid</h1>
       <p className="mt-2 text-sm text-ink-500">
         It may have already been used or the link is incomplete. If you&rsquo;ve already verified,
-        just sign in.
+        just sign in — otherwise enter your email for a fresh link.
       </p>
+      <ResendBox />
       <NavLinks />
     </>
+  );
+}
+
+function ResendBox() {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'done'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed) return;
+    setError(null);
+    setStatus('sending');
+    try {
+      const resp = await fetch('/api/auth/verify-email/resend', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      if (resp.ok) {
+        setStatus('done');
+        return;
+      }
+      const body = (await resp.json().catch(() => ({}))) as { error?: string };
+      setStatus('idle');
+      setError(
+        body.error === 'VERIFICATION_RATE_LIMITED'
+          ? 'Too many requests. Please wait a little and try again.'
+          : body.error === 'VALIDATION_ERROR'
+            ? 'Please enter a valid email address.'
+            : 'Could not send the link just now. Please try again.',
+      );
+    } catch {
+      setStatus('idle');
+      setError('Could not reach the server. Please try again.');
+    }
+  }
+
+  // The success copy is deliberately generic — it never confirms whether the
+  // address had an account (mirrors the backend's no-enumeration response).
+  if (status === 'done') {
+    return (
+      <p className="mt-6 rounded-md bg-emerald-accent/10 px-3.5 py-3 text-sm text-emerald-deep">
+        If that email needs verification, we&rsquo;ve sent a new link. Check your inbox — and your
+        spam or promotions folder.
+      </p>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-6 space-y-2 text-left" noValidate>
+      <label htmlFor="resend-email" className="block text-sm font-medium text-ink-700">
+        Email address
+      </label>
+      <input
+        id="resend-email"
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@example.com"
+        className="w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+      {error && (
+        <p role="alert" className="rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={status === 'sending' || email.trim().length === 0}
+        className="inline-flex w-full items-center justify-center rounded-md bg-emerald-deep px-4 py-2.5 text-sm font-medium text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {status === 'sending' ? 'Sending…' : 'Resend verification email'}
+      </button>
+    </form>
   );
 }
 
