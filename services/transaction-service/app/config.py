@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # escrow debit of a payout whose Paystack transfer failed. Idempotent.
     payout_reconciliation_beat_interval_seconds: float = 3600.0  # hourly
 
+    # Lapsed 72h listing-lock sweep (SCRUM-149). Proactively cancels deals still
+    # parked at 'offer_accepted' past their lock window and reopens the listing
+    # (the off-request counterpart to OfferService's lazy release). Idempotent.
+    lock_sweep_beat_interval_seconds: float = 900.0  # every 15 minutes
+
     # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
     # local/CI never reach S3; production sets receipts_storage_use_fake=false.
     receipts_storage_use_fake: bool = True

@@ -46,6 +46,16 @@ class ListingLock:
 
 
 @dataclass(frozen=True)
+class LapsedLock:
+    """A transaction still parked at 'offer_accepted' whose 72h listing lock has
+    elapsed — the proactive lock-sweep (SCRUM-149) cancels it and reopens the
+    listing, off-request (mirrors OfferService._release_lapsed_lock)."""
+
+    transaction_id: UUID
+    listing_id: UUID
+
+
+@dataclass(frozen=True)
 class SettleableDeal:
     """A completed deal whose seller-disbursement hold has elapsed (SCRUM-85)."""
 
@@ -295,6 +305,27 @@ class TransactionRepository:
             )
         ).first()
         return row.email if row is not None else None
+
+    async def list_lapsed_locks(self, *, limit: int = 500) -> list[LapsedLock]:
+        """Transactions still at 'offer_accepted' whose lock_expires_at has passed
+        — the abandoned deals the proactive sweep cancels (SCRUM-149). A deal that
+        progressed past offer_accepted is live and excluded; oldest-lapsed first."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT id, listing_id FROM transactions
+                    WHERE stage = 'offer_accepted'
+                      AND lock_expires_at IS NOT NULL
+                      AND lock_expires_at <= NOW()
+                    ORDER BY lock_expires_at
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [LapsedLock(transaction_id=r.id, listing_id=r.listing_id) for r in rows]
 
     async def get_lock_for_listing(self, listing_id: UUID) -> ListingLock | None:
         """The most recent transaction for a listing (its stage + lock window),

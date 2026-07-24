@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.loan_disbursement",
         "app.tasks.loan_stage",
         "app.tasks.payout_reconciliation",
+        "app.tasks.lock_sweep",
     ],
 )
 
@@ -46,6 +47,11 @@ celery_app.conf.update(
         "reconcile-failed-payouts": {
             "task": "app.tasks.payout_reconciliation.run_payout_reconciliation",
             "schedule": _settings.payout_reconciliation_beat_interval_seconds,
+        },
+        # Cancel abandoned offer_accepted deals past their 72h lock + reopen the listing.
+        "sweep-lapsed-locks": {
+            "task": "app.tasks.lock_sweep.run_lock_sweep",
+            "schedule": _settings.lock_sweep_beat_interval_seconds,
         },
     },
 )
