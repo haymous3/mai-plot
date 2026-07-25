@@ -67,7 +67,8 @@ class NotificationRepository:
                     SELECT id, user_id, channel, type, title, body, reference_type,
                            reference_id, is_read, sent_at, read_at, created_at
                     FROM notifications
-                    WHERE user_id = :uid AND channel = 'in_app' {keyset}
+                    WHERE user_id = :uid AND channel = 'in_app'
+                          AND archived_at IS NULL {keyset}
                     ORDER BY created_at DESC, id DESC
                     LIMIT :lim
                     """
@@ -98,7 +99,8 @@ class NotificationRepository:
             await self._session.execute(
                 text(
                     "SELECT COUNT(*) FROM notifications "
-                    "WHERE user_id = :uid AND channel = 'in_app' AND is_read = FALSE"
+                    "WHERE user_id = :uid AND channel = 'in_app' "
+                    "AND is_read = FALSE AND archived_at IS NULL"
                 ),
                 {"uid": user_id},
             )
@@ -131,6 +133,31 @@ class NotificationRepository:
                     "WHERE user_id = :uid AND is_read = FALSE RETURNING id"
                 ),
                 {"uid": user_id},
+            )
+        ).all()
+        return len(rows)
+
+    async def archive_older_than(self, *, days: int, limit: int = 5000) -> int:
+        """Stamp archived_at on live notifications older than `days`, up to
+        `limit` per call (SCRUM-120). Returns how many were archived. Idempotent:
+        already-archived rows are excluded, so re-running never re-touches them."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    WITH old AS (
+                        SELECT id FROM notifications
+                        WHERE archived_at IS NULL
+                          AND created_at < NOW() - make_interval(days => :days)
+                        ORDER BY created_at
+                        LIMIT :limit
+                    )
+                    UPDATE notifications SET archived_at = NOW()
+                    WHERE id IN (SELECT id FROM old)
+                    RETURNING id
+                    """
+                ),
+                {"days": days, "limit": limit},
             )
         ).all()
         return len(rows)
