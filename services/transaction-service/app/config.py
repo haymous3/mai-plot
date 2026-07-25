@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # (the off-request counterpart to OfferService's lazy release). Idempotent.
     lock_sweep_beat_interval_seconds: float = 900.0  # every 15 minutes
 
+    # Lapsed-offer sweep (SCRUM-118). Proactively stamps status='expired' on
+    # pending/countered offers past their 72h window (the off-request counterpart
+    # to OfferService's lazy expiry), so offer lists reflect reality. Idempotent.
+    offer_expiry_sweep_beat_interval_seconds: float = 900.0  # every 15 minutes
+
     # Payment receipts → PRIVATE S3 (never public). In-memory fake by default so
     # local/CI never reach S3; production sets receipts_storage_use_fake=false.
     receipts_storage_use_fake: bool = True

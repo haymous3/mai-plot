@@ -29,6 +29,7 @@ celery_app = Celery(
         "app.tasks.loan_stage",
         "app.tasks.payout_reconciliation",
         "app.tasks.lock_sweep",
+        "app.tasks.offer_expiry_sweep",
     ],
 )
 
@@ -52,6 +53,11 @@ celery_app.conf.update(
         "sweep-lapsed-locks": {
             "task": "app.tasks.lock_sweep.run_lock_sweep",
             "schedule": _settings.lock_sweep_beat_interval_seconds,
+        },
+        # Stamp status='expired' on pending/countered offers past their 72h window.
+        "sweep-lapsed-offers": {
+            "task": "app.tasks.offer_expiry_sweep.run_offer_expiry_sweep",
+            "schedule": _settings.offer_expiry_sweep_beat_interval_seconds,
         },
     },
 )
