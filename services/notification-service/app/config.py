@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     sms_task_max_retries: int = 5
     sms_task_retry_backoff_max_seconds: int = 600
 
+    # Notification archive sweep (SCRUM-120). A Celery beat stamps archived_at on
+    # notifications older than the retention window so the in-app centre stays
+    # lean; rows are retained (not deleted). Runs daily by default.
+    notification_retention_days: int = 90
+    notification_archive_beat_interval_seconds: float = 86400.0  # daily
+
     # Web Push (SCRUM-79). In-browser push via the Web Push Protocol + VAPID
     # (replaces FCM in Phase 1). The in-memory fake is the default so local/CI
     # never need real VAPID keys or a push service; production sets
