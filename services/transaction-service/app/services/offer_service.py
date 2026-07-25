@@ -269,8 +269,9 @@ class OfferService:
 
     async def _ensure_actionable(self, offer: OfferRow, *, allowed: set[str]) -> None:
         """Lazy 72h expiry + state guard. An offer past its window is refused
-        (logically expired). The status is NOT mutated — the offers table's CHECK
-        has no 'expired' value; a Celery sweep + schema change is the follow-up."""
+        (logically expired) on the request path without mutating the row; the
+        OfferExpirySweepService beat (SCRUM-118) is what actually stamps
+        status='expired' off-request."""
         if offer.status in ("pending", "countered") and offer.expires_at <= datetime.now(UTC):
             raise OfferExpired()
         if offer.status not in allowed:

@@ -198,6 +198,31 @@ class OfferRepository:
             for r in rows
         ]
 
+    async def expire_lapsed(self, *, limit: int = 500) -> int:
+        """Stamp status='expired' on pending/countered offers whose 72h window has
+        passed (SCRUM-118) — the proactive counterpart to OfferService's lazy
+        expiry. Bulk, batched, idempotent: only still-live offers match, so a
+        re-run never re-touches one. Returns how many were expired."""
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    WITH lapsed AS (
+                        SELECT id FROM offers
+                        WHERE status IN ('pending','countered') AND expires_at <= NOW()
+                        ORDER BY expires_at
+                        LIMIT :limit
+                    )
+                    UPDATE offers SET status = 'expired', updated_at = NOW()
+                    WHERE id IN (SELECT id FROM lapsed)
+                    RETURNING id
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return len(rows)
+
     async def set_status(self, offer_id: UUID, *, status: str) -> None:
         await self._session.execute(
             text("UPDATE offers SET status = :s, updated_at = NOW() WHERE id = :id"),
