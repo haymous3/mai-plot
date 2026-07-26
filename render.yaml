@@ -282,6 +282,37 @@ projects:
               # Copy from: Dashboard → Env Groups → maiplot-shared → JWT_SECRET.
               - key: KONG_JWT_SECRET
                 sync: false
+
+              # Upstream addresses, injected from the services themselves.
+              #
+              # kong.yml ships compose hostnames (http://auth-service:8000), but
+              # Render addresses a private service by its SLUG, and that slug
+              # carries a random suffix assigned at creation — `auth-service` is
+              # really `auth-service-i0rz`. The compose names do not resolve, so
+              # every proxied route 502s.
+              #
+              # These are deliberately NOT hardcoded: fromService resolves each
+              # address at deploy time, so the values follow the services even if
+              # one is recreated with a different suffix. render-entrypoint.sh
+              # substitutes them into kong.yml before Kong loads it, and aborts
+              # if any is missing.
+              - key: AUTH_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: auth-service, property: hostport }
+              - key: LISTING_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: listing-service, property: hostport }
+              - key: DOCUMENT_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: document-service, property: hostport }
+              - key: TRANSACTION_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: transaction-service, property: hostport }
+              - key: LOAN_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: loan-service, property: hostport }
+              - key: NOTIFICATION_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: notification-service, property: hostport }
+              - key: REALTOR_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: realtor-service, property: hostport }
+              - key: ANALYTICS_SERVICE_HOSTPORT
+                fromService: { type: pserv, name: analytics-service, property: hostport }
+
               - key: KONG_DATABASE
                 value: "off"
               - key: KONG_DECLARATIVE_CONFIG
