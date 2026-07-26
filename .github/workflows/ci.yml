@@ -12,10 +12,81 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Lint — ruff check + ruff format check across every service.
+  # Detect which services / frontend a PR actually touches, so we only build
+  # and check what changed — the 8-way Docker build matrix is the bulk of the
+  # Actions minutes. Any shared/root change (pyproject, uv.lock, compose,
+  # scripts, workflows, init.sql), or any push to main, treats everything as
+  # changed.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services + frontend
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          ALL="auth-service listing-service document-service transaction-service loan-service notification-service realtor-service analytics-service"
+
+          json_array() {
+            local out="[" first=1 x
+            for x in "$@"; do
+              [ "$first" -eq 1 ] && first=0 || out="$out,"
+              out="$out\"$x\""
+            done
+            printf '%s]\n' "$out"
+          }
+
+          # Push to main (or any non-PR trigger): build everything + the frontend.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "services=$(json_array $ALL)" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "Changed files:"; echo "$CHANGED"
+
+          # A shared/root file affects every build → treat all as changed.
+          if echo "$CHANGED" | grep -qE '^(pyproject\.toml|uv\.lock|docker-compose\.ya?ml|init\.sql|scripts/|\.github/)'; then
+            echo "Shared/root file changed → full build."
+            echo "services=$(json_array $ALL)" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MATCHED=""
+          for svc in $ALL; do
+            if echo "$CHANGED" | grep -qE "^services/$svc/"; then
+              MATCHED="$MATCHED $svc"
+            fi
+          done
+          echo "services=$(json_array $MATCHED)" >> "$GITHUB_OUTPUT"
+
+          if echo "$CHANGED" | grep -qE '^frontend/web/'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Lint — ruff check + ruff format check across every service. Skipped on
+  # frontend-only PRs (no backend changes to lint).
   # ---------------------------------------------------------------------------
   lint:
     name: Lint (ruff)
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +113,8 @@ jobs:
   # ---------------------------------------------------------------------------
   typecheck:
     name: Typecheck (mypy)
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -177,6 +250,11 @@ jobs:
   # ---------------------------------------------------------------------------
   build:
     name: Build Docker image (${{ matrix.service }})
+    needs: changes
+    # Only run when at least one service changed; the matrix is exactly those
+    # services (all of them on push to main). Skipped entirely on frontend-only
+    # PRs — this is the change that cuts the bulk of the Actions minutes.
+    if: ${{ needs.changes.outputs.services != '[]' }}
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -184,15 +262,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - auth-service
-          - listing-service
-          - document-service
-          - transaction-service
-          - loan-service
-          - notification-service
-          - realtor-service
-          - analytics-service
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -237,6 +307,9 @@ jobs:
   # ---------------------------------------------------------------------------
   frontend:
     name: Frontend (Next.js)
+    needs: changes
+    # Skipped on backend-only PRs (nothing under frontend/web changed).
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
