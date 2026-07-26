@@ -88,3 +88,24 @@ def validate_photo_size(data: bytes, *, max_bytes: int) -> None:
         raise InvalidCredential("PHOTO_INVALID", "An inspection photo is empty.")
     if len(data) > max_bytes:
         raise InvalidCredential("PHOTO_TOO_LARGE", f"A photo exceeds the {max_bytes} byte limit.")
+
+
+_WEBM_MAGIC = b"\x1a\x45\xdf\xa3"
+
+
+def detect_video_type(data: bytes) -> tuple[str, str]:
+    """(content_type, extension) for an optional inspection video — MP4/MOV
+    (ISO-BMFF 'ftyp' box) or WebM only (SCRUM-142). Type is sniffed from the
+    bytes, not the client filename. Raises InvalidCredential(VIDEO_INVALID)."""
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return "video/mp4", "mp4"
+    if data.startswith(_WEBM_MAGIC):
+        return "video/webm", "webm"
+    raise InvalidCredential("VIDEO_INVALID", "Inspection video must be an MP4 or WebM file.")
+
+
+def validate_video_size(data: bytes, *, max_bytes: int) -> None:
+    if len(data) == 0:
+        raise InvalidCredential("VIDEO_INVALID", "The inspection video is empty.")
+    if len(data) > max_bytes:
+        raise InvalidCredential("VIDEO_TOO_LARGE", f"The video exceeds the {max_bytes} byte limit.")

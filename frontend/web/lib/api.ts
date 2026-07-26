@@ -381,6 +381,8 @@ export interface InspectionReport {
   discrepancies: string | null;
   remarks: string | null;
   photo_urls: string[];
+  // Short-TTL pre-signed URL of the optional inspection video (SCRUM-142), or null.
+  video_url: string | null;
 }
 
 /** The calling realtor's commission balance in kobo (GET /realtors/me/commission,

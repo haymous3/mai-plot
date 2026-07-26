@@ -29,6 +29,8 @@ _REALTOR = CurrentUser(user_id=uuid4(), role="realtor")
 _BUYER = CurrentUser(user_id=uuid4(), role="buyer")
 _SELLER_ID = uuid4()
 _JPEG = b"\xff\xd8\xff\xe0 photo"
+# ISO-BMFF: a 'ftyp' box at offset 4 → detected as MP4.
+_MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 16
 
 
 def _inspection(
@@ -123,6 +125,7 @@ def _service(
         gps_radius_meters=1000,
         min_photos=3,
         photo_max_bytes=1024,
+        video_max_bytes=10 * 1024 * 1024,
         presign_ttl_seconds=900,
     )
     return svc, insp, s
@@ -205,7 +208,26 @@ async def test_submit_happy_stores_and_records() -> None:
 
     assert insp.submitted is not None
     assert len(insp.submitted["photo_keys"]) == 3
+    assert insp.submitted["video_key"] is None  # no video by default
     assert len(storage.objects) == 3
+
+
+async def test_submit_with_video_stores_it() -> None:
+    row = _inspection()
+    svc, insp, storage = _service(row=row, txn=_txn(row))
+
+    await _submit(svc, inspection_id=row.id, video=_MP4)
+
+    assert insp.submitted is not None
+    assert insp.submitted["video_key"] is not None
+    assert len(storage.objects) == 4  # 3 photos + 1 video
+
+
+async def test_submit_invalid_video_type_rejected() -> None:
+    row = _inspection()
+    svc, _, _ = _service(row=row, txn=_txn(row))
+    with pytest.raises(InvalidCredential):
+        await _submit(svc, inspection_id=row.id, video=b"not a video file")
 
 
 # -- view ------------------------------------------------------------------

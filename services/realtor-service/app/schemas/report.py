@@ -40,6 +40,9 @@ class ReportResponse(BaseModel):
     discrepancies: str | None
     remarks: str | None
     photo_urls: list[str]
+    # Short-TTL pre-signed URL of the optional inspection video (SCRUM-142), or
+    # None when no video was uploaded.
+    video_url: str | None = None
 
     @classmethod
     def from_view(cls, view: ReportView) -> ReportResponse:
@@ -54,4 +57,5 @@ class ReportResponse(BaseModel):
             discrepancies=view.discrepancies,
             remarks=view.remarks,
             photo_urls=view.photo_urls,
+            video_url=view.video_url,
         )

@@ -21,8 +21,10 @@ from app.security import CurrentUser
 from app.services.credentials import (
     InvalidCredential,
     detect_photo_type,
+    detect_video_type,
     validate_coordinates,
     validate_photo_size,
+    validate_video_size,
 )
 from app.services.inspection_service import InspectionNotFound, NotAssignedRealtor
 
@@ -67,6 +69,7 @@ class ReportView:
     discrepancies: str | None
     remarks: str | None
     photo_urls: list[str]
+    video_url: str | None
 
 
 class ReportService:
@@ -80,6 +83,7 @@ class ReportService:
         gps_radius_meters: float,
         min_photos: int,
         photo_max_bytes: int,
+        video_max_bytes: int,
         presign_ttl_seconds: int,
     ) -> None:
         self._inspections = inspections
@@ -89,6 +93,7 @@ class ReportService:
         self._gps_radius = gps_radius_meters
         self._min_photos = min_photos
         self._photo_max_bytes = photo_max_bytes
+        self._video_max_bytes = video_max_bytes
         self._presign_ttl = presign_ttl_seconds
 
     async def submit(
@@ -103,6 +108,7 @@ class ReportService:
         discrepancies: str | None,
         remarks: str | None,
         photos: list[bytes],
+        video: bytes | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> InspectionRow:
@@ -151,12 +157,27 @@ class ReportService:
                 raise ReportError("photo storage failed") from exc
             photo_keys.append(key)
 
+        # Optional video (SCRUM-142) — same private-bucket path as photos.
+        video_key: str | None = None
+        if video is not None:
+            validate_video_size(video, max_bytes=self._video_max_bytes)
+            video_content_type, video_ext = detect_video_type(video)
+            video_key = f"inspection-report/{inspection_id}/{uuid4()}.{video_ext}"
+            try:
+                await self._storage.put(key=video_key, data=video, content_type=video_content_type)
+            except DocumentStorageError as exc:
+                logger.error(
+                    "inspection.report.storage_failed", extra={"inspection_id": str(inspection_id)}
+                )
+                raise ReportError("video storage failed") from exc
+
         report_data = {
             "property_condition": property_condition,
             "amenities": amenities,
             "discrepancies": discrepancies,
             "remarks": remarks,
             "photo_keys": photo_keys,
+            "video_key": video_key,
         }
         await self._inspections.submit_report(
             inspection_id, gps_lat=gps_lat, gps_lng=gps_lng, report_data=report_data
@@ -196,6 +217,12 @@ class ReportService:
             self._storage.presigned_get_url(key, expires_seconds=self._presign_ttl)
             for key in data.get("photo_keys", [])
         ]
+        video_key = data.get("video_key")
+        video_url = (
+            self._storage.presigned_get_url(video_key, expires_seconds=self._presign_ttl)
+            if video_key
+            else None
+        )
         return ReportView(
             inspection_id=inspection.id,
             status=inspection.status,
@@ -207,4 +234,5 @@ class ReportService:
             discrepancies=data.get("discrepancies"),
             remarks=data.get("remarks"),
             photo_urls=photo_urls,
+            video_url=video_url,
         )
