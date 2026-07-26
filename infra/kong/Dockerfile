@@ -1,21 +1,29 @@
-# Kong gateway image for the Render staging Blueprint (render.yaml).
+# Kong gateway image for the Render Blueprint (render.yaml).
 #
 # Local development mounts kong.yml as a read-only volume (docker-compose.yml).
 # Render has no volume mounts, so the declarative config has to be baked into
 # the image instead. Everything else — routing, rate limits, JWT, the /admin
 # IP restriction — comes from kong.yml unchanged.
 #
-# Build context is infra/kong/ (set via `rootDir` in render.yaml).
+# The JWT consumer secret is NOT baked in: kong.yml still carries the dev
+# placeholder here, and render-entrypoint.sh substitutes the real value from
+# $KONG_JWT_SECRET at container start. So this image contains no secret and is
+# safe to rebuild from any branch.
 #
-# NOT used in production: production templates kong.yml against the real
-# secret store at deploy time rather than shipping it inside an image.
+# Build context is infra/kong/ (set via `rootDir` in render.yaml).
 
 FROM kong:3.7
 
 USER root
 
 COPY kong.yml /etc/kong/kong.yml
-RUN chown kong:kong /etc/kong/kong.yml
+COPY render-entrypoint.sh /usr/local/bin/render-entrypoint.sh
+
+# kong.yml must be writable at runtime — the entrypoint rewrites it in place to
+# substitute the JWT secret before Kong loads it.
+RUN chown kong:kong /etc/kong/kong.yml \
+ && chmod 0644 /etc/kong/kong.yml \
+ && chmod 0755 /usr/local/bin/render-entrypoint.sh
 
 USER kong
 
@@ -29,3 +37,6 @@ ENV KONG_DATABASE=off \
     KONG_PROXY_ERROR_LOG=/dev/stderr
 
 EXPOSE 8000
+
+ENTRYPOINT ["/usr/local/bin/render-entrypoint.sh"]
+CMD ["kong", "docker-start"]

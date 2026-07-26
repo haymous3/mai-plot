@@ -82,7 +82,7 @@ envVarGroups:
       # Private services resolve by name on Render's internal network,
       # exactly like compose hostnames.
       - key: ELASTICSEARCH_URL
-        value: http://maiplot-elasticsearch:9200
+        value: http://elasticsearch:9200
 
       # Generated ONCE and shared by every member of the group. Must also be
       # the Kong JWT consumer secret — see the maiplot-kong note below.
@@ -206,7 +206,7 @@ services:
   #
   # If this proves flaky (see deployment.md §13.6), swap it for a hosted
   # Elastic/Bonsai free tier and repoint ELASTICSEARCH_URL — nothing else changes.
-  - name: maiplot-elasticsearch
+  - name: elasticsearch
     type: pserv
     runtime: image
     plan: standard           # 2 GB — ES will not boot on starter (512 MB)
@@ -235,13 +235,10 @@ services:
   # Built from infra/kong/Dockerfile, which bakes kong.yml into the image
   # (Render has no volume mounts, so the compose bind-mount can't carry over).
   #
-  # ⚠️ TWO MANUAL STEPS after first deploy:
-  #   1. kong.yml's upstream URLs are compose hostnames (http://auth-service:8000).
-  #      On Render they are http://maiplot-auth-service:8000. Either rename the
-  #      services here to match kong.yml, or update kong.yml. Blocked until done.
-  #   2. kong.yml pins the dev JWT consumer secret. It MUST equal the generated
-  #      JWT_SECRET from maiplot-shared, or every authenticated call 401s.
-  #      Copy it from the env group into the Kong config/template.
+  # The services above are named EXACTLY as in docker-compose.yml, so
+  # kong.yml's upstream URLs (http://auth-service:8000 etc.) resolve on
+  # Render's private network with no per-environment edits. Keep it that way:
+  # renaming a pserv silently breaks gateway routing.
   - name: maiplot-kong
     type: web
     runtime: docker
@@ -251,11 +248,22 @@ services:
     dockerfilePath: ./Dockerfile
     branch: main
     autoDeploy: true
-    healthCheckPath: /listings      # proxied to listing-service; proves the
-                                    # gateway AND an upstream are both alive
+    # No healthCheckPath on purpose. Every Kong route proxies to an upstream,
+    # so a path-based check would fail while the services are still booting and
+    # Render would mark the gateway unhealthy — a bootstrap deadlock. Render's
+    # default port check (does 8000 accept connections?) is the right signal
+    # for a proxy; upstream health is each pserv's own /health check.
     envVars:
       - key: PORT
         value: "8000"               # tells Render which port to route to
+      # ⚠️ MANUAL — must equal the JWT_SECRET generated in maiplot-shared, or
+      # Kong rejects every token the services sign ("Invalid signature") and
+      # every authenticated route 401s. docker-entrypoint.sh substitutes this
+      # into kong.yml at container start, so the real secret is never committed
+      # and never baked into the image.
+      # Copy from: Dashboard → Env Groups → maiplot-shared → JWT_SECRET.
+      - key: KONG_JWT_SECRET
+        sync: false
       - key: KONG_DATABASE
         value: "off"
       - key: KONG_DECLARATIVE_CONFIG
@@ -274,7 +282,7 @@ services:
   # Application services — private (pserv), reachable only via Kong
   # =========================================================================
 
-  - name: maiplot-auth-service
+  - name: auth-service
     type: pserv
     runtime: docker
     plan: starter
@@ -299,7 +307,7 @@ services:
       - key: EMAIL_VERIFICATION_BASE_URL
         sync: false
 
-  - name: maiplot-listing-service
+  - name: listing-service
     type: pserv
     runtime: docker
     plan: starter
@@ -313,7 +321,7 @@ services:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
 
-  - name: maiplot-document-service
+  - name: document-service
     type: pserv
     runtime: docker
     plan: starter
@@ -329,7 +337,7 @@ services:
       - key: OCR_VIA_CELERY
         value: "true"
 
-  - name: maiplot-transaction-service
+  - name: transaction-service
     type: pserv
     runtime: docker
     plan: starter
@@ -343,7 +351,7 @@ services:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
 
-  - name: maiplot-loan-service
+  - name: loan-service
     type: pserv
     runtime: docker
     plan: starter
@@ -359,7 +367,7 @@ services:
       - key: TX_TASKS_ENABLED
         value: "true"
 
-  - name: maiplot-notification-service
+  - name: notification-service
     type: pserv
     runtime: docker
     plan: starter
@@ -376,7 +384,7 @@ services:
       # share this value, so it lives in a group of its own below.
       - fromGroup: maiplot-notification-shared
 
-  - name: maiplot-realtor-service
+  - name: realtor-service
     type: pserv
     runtime: docker
     plan: starter
@@ -390,7 +398,7 @@ services:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
 
-  - name: maiplot-analytics-service
+  - name: analytics-service
     type: pserv
     runtime: docker
     plan: starter
@@ -420,7 +428,7 @@ services:
   # duplicate money-moving tasks.
   # =========================================================================
 
-  - name: maiplot-listing-celery-worker
+  - name: listing-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -435,7 +443,7 @@ services:
       - fromGroup: maiplot-staging-fakes
 
   # Hourly listing-expiry sweep + the 48h seller warning (SCRUM-53 / 112).
-  - name: maiplot-listing-celery-beat
+  - name: listing-celery-beat
     type: worker
     runtime: docker
     plan: starter
@@ -450,7 +458,7 @@ services:
       - fromGroup: maiplot-staging-fakes
 
   # OCR pipeline (SCRUM-55). No beat — task is enqueued on upload.
-  - name: maiplot-document-celery-worker
+  - name: document-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -467,7 +475,7 @@ services:
         value: "true"
 
   # Commission disbursement + loan-aware deposit tasks (SCRUM-86 / 128).
-  - name: maiplot-transaction-celery-worker
+  - name: transaction-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -485,7 +493,7 @@ services:
 
   # 72h lock release, offer-expiry sweep, seller-disbursement sweep
   # (SCRUM-68 / 118 / 85).
-  - name: maiplot-transaction-celery-beat
+  - name: transaction-celery-beat
     type: worker
     runtime: docker
     plan: starter
@@ -501,7 +509,7 @@ services:
       - key: DISBURSEMENT_ACTOR_ID
         value: 00000000-0000-0000-0000-000000000001
 
-  - name: maiplot-loan-celery-worker
+  - name: loan-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -520,7 +528,7 @@ services:
         value: "true"
 
   # Loan-status poll fallback for a dropped decision webhook (SCRUM-130).
-  - name: maiplot-loan-celery-beat
+  - name: loan-celery-beat
     type: worker
     runtime: docker
     plan: starter
@@ -539,7 +547,7 @@ services:
         value: "true"
 
   # All 4 channels: SMS, Web Push, email, in-app. No beat.
-  - name: maiplot-notification-celery-worker
+  - name: notification-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -564,7 +572,7 @@ services:
       - key: VAPID_SUBJECT
         value: mailto:ops@maiplot.ng
 
-  - name: maiplot-realtor-celery-worker
+  - name: realtor-celery-worker
     type: worker
     runtime: docker
     plan: starter
@@ -581,7 +589,7 @@ services:
         value: "true"
 
   # Hourly commission accrual/release (SCRUM-74).
-  - name: maiplot-realtor-celery-beat
+  - name: realtor-celery-beat
     type: worker
     runtime: docker
     plan: starter
