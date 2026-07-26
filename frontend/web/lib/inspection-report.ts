@@ -66,6 +66,8 @@ export interface ReportForm {
   docChecks: Record<string, DocCheckStatus>;
   docNotes: string;
   photos: File[];
+  // Optional inspection video (SCRUM-142).
+  video: File | null;
   finalRemarks: string;
   gps: { lat: number; lng: number } | null;
 }
@@ -83,6 +85,7 @@ export function emptyReportForm(): ReportForm {
     docChecks,
     docNotes: '',
     photos: [],
+    video: null,
     finalRemarks: '',
     gps: null,
   };

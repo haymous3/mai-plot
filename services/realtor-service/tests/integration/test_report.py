@@ -207,3 +207,63 @@ async def test_view_by_stranger_is_403(
         f"/inspections/{inspection_id}/report", headers=auth_header(mint_token(stranger, "buyer"))
     )
     assert resp.status_code == 403
+
+
+async def test_submit_with_video_and_view_returns_video_url(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer, seller, realtor = (
+        seed_user(role="buyer"),
+        seed_user(role="seller"),
+        seed_user(role="realtor"),
+    )
+    inspection_id = _seed_world(db_engine, buyer=buyer, seller=seller, realtor=realtor)
+
+    mp4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 16
+    files = _photos(3) + [("video", ("clip.mp4", mp4, "video/mp4"))]
+    submit = await http_client.post(
+        f"/inspections/{inspection_id}/report",
+        data=_form(),
+        files=files,
+        headers=auth_header(mint_token(realtor, "realtor")),
+    )
+    assert submit.status_code == 201, submit.text
+
+    view = await http_client.get(
+        f"/inspections/{inspection_id}/report", headers=auth_header(mint_token(buyer, "buyer"))
+    )
+    assert view.status_code == 200, view.text
+    body = view.json()
+    assert len(body["photo_urls"]) == 3
+    assert body["video_url"] is not None
+
+
+async def test_submit_invalid_video_type_is_422(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer, seller, realtor = (
+        seed_user(role="buyer"),
+        seed_user(role="seller"),
+        seed_user(role="realtor"),
+    )
+    inspection_id = _seed_world(db_engine, buyer=buyer, seller=seller, realtor=realtor)
+
+    files = _photos(3) + [("video", ("bad.mp4", b"not a video", "video/mp4"))]
+    submit = await http_client.post(
+        f"/inspections/{inspection_id}/report",
+        data=_form(),
+        files=files,
+        headers=auth_header(mint_token(realtor, "realtor")),
+    )
+    assert submit.status_code == 422
+    assert submit.json()["error_code"] == "VIDEO_INVALID"

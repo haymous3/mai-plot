@@ -177,6 +177,7 @@ def get_report_service(
         gps_radius_meters=settings.inspection_gps_radius_meters,
         min_photos=settings.inspection_min_photos,
         photo_max_bytes=settings.inspection_photo_max_bytes,
+        video_max_bytes=settings.inspection_video_max_bytes,
         presign_ttl_seconds=settings.gov_id_presign_ttl_seconds,
     )
 

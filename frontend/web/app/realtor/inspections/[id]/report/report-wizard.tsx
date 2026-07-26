@@ -101,6 +101,7 @@ export function ReportWizard({ inspectionId }: { inspectionId: string }) {
     const remarks = composeRemarks(form);
     if (remarks) fd.append('remarks', remarks);
     for (const p of form.photos) fd.append('photos', p);
+    if (form.video) fd.append('video', form.video);
 
     try {
       const resp = await fetch(`/api/realtor/inspections/${inspectionId}/report`, {
@@ -133,7 +134,13 @@ export function ReportWizard({ inspectionId }: { inspectionId: string }) {
         {step === 2 && <StepCondition form={form} patch={patch} />}
         {step === 3 && <StepDocuments form={form} patch={patch} />}
         {step === 4 && (
-          <StepMedia form={form} previews={previews} addPhotos={addPhotos} removePhoto={removePhoto} />
+          <StepMedia
+            form={form}
+            previews={previews}
+            addPhotos={addPhotos}
+            removePhoto={removePhoto}
+            patch={patch}
+          />
         )}
         {step === 5 && (
           <StepRemarks
@@ -404,11 +411,13 @@ function StepMedia({
   previews,
   addPhotos,
   removePhoto,
+  patch,
 }: {
   form: ReportForm;
   previews: string[];
   addPhotos: (files: FileList | null) => void;
   removePhoto: (idx: number) => void;
+  patch: PatchFn;
 }) {
   return (
     <div className="space-y-5">
@@ -455,9 +464,31 @@ function StepMedia({
         </div>
       )}
 
-      <p className="text-xs text-ink-500">
-        Video upload is coming soon — photos are required for now.
-      </p>
+      <div className="rounded-xl border border-ink-300/40 bg-white px-4 py-3">
+        <p className="text-sm font-medium text-ink-800">Video walkthrough (optional)</p>
+        {form.video ? (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate text-xs text-ink-600">🎬 {form.video.name}</span>
+            <button
+              type="button"
+              onClick={() => patch({ video: null })}
+              className="flex-none text-xs font-medium text-red-600 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-emerald-deep hover:underline">
+            <span aria-hidden>⬆</span> Add a short MP4 or WebM video
+            <input
+              type="file"
+              accept="video/mp4,video/webm"
+              className="hidden"
+              onChange={(e) => patch({ video: e.target.files?.[0] ?? null })}
+            />
+          </label>
+        )}
+      </div>
     </div>
   );
 }

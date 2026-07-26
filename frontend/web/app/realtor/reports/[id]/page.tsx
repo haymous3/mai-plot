@@ -123,6 +123,17 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
           </div>
         )}
       </section>
+
+      {report.video_url && (
+        <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+          <h2 className="font-display text-lg text-ink-900">Video walkthrough</h2>
+          <video
+            src={report.video_url}
+            controls
+            className="mt-4 w-full rounded-lg bg-ink-900"
+          />
+        </section>
+      )}
     </main>
   );
 }

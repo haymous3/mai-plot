@@ -215,9 +215,14 @@ async def submit_report(
     amenities: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI Form default
     discrepancies: Annotated[str | None, Form()] = None,
     remarks: Annotated[str | None, Form()] = None,
+    video: UploadFile | None = None,
 ) -> ReportSubmitResponse | JSONResponse:
-    """The assigned realtor submits a GPS-stamped report with >=3 photos."""
+    """The assigned realtor submits a GPS-stamped report with >=3 photos and an
+    optional video."""
     photo_bytes = [await p.read() for p in photos]
+    # An empty file part (no video selected) arrives as a zero-byte upload — treat
+    # that as "no video" rather than a malformed file.
+    video_bytes = await video.read() if video is not None else b""
     try:
         inspection = await service.submit(
             caller=caller,
@@ -229,6 +234,7 @@ async def submit_report(
             discrepancies=discrepancies,
             remarks=remarks,
             photos=photo_bytes,
+            video=video_bytes or None,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )

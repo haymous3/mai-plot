@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     inspection_gps_radius_meters: float = 1_000.0  # 1 km (AC)
     inspection_min_photos: int = 3
     inspection_photo_max_bytes: int = 5 * 1024 * 1024
+    # Optional inspection video (SCRUM-142) — MP4/WebM, larger cap than photos.
+    inspection_video_max_bytes: int = 50 * 1024 * 1024
 
 
 @lru_cache(maxsize=1)
