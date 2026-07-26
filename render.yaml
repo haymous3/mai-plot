@@ -298,6 +298,13 @@ projects:
 
           # =========================================================================
           # Application services — private (pserv), reachable only via Kong
+          #
+          # NOTE: no healthCheckPath on any of these. Render rejects the field on
+          # pserv ("pserv service type cannot have a health check path") — it is
+          # web-only, and the JSON schema does not encode that rule, so a file
+          # that validates locally is still refused at apply time. Private
+          # services get a port check instead. Each image keeps its Dockerfile
+          # HEALTHCHECK for local compose; Render ignores it.
           # =========================================================================
 
           - name: auth-service
@@ -309,7 +316,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -334,7 +340,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -348,7 +353,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -364,7 +368,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -378,7 +381,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -394,7 +396,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -411,7 +412,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
@@ -425,7 +425,6 @@ projects:
             dockerfilePath: ./Dockerfile
             branch: main
             autoDeployTrigger: commit
-            healthCheckPath: /health
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
