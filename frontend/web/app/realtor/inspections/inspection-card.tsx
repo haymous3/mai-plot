@@ -17,6 +17,7 @@ const ACCEPT_ERRORS: Record<string, string> = {
   INSPECTION_NOT_PENDING: 'This assignment is no longer awaiting your response.',
   NOT_ASSIGNED_REALTOR: 'This assignment is not yours.',
   INSPECTION_NOT_FOUND: 'This assignment no longer exists.',
+  INVALID_PROPOSED_TIME: 'Choose a date and time in the future.',
 };
 
 /** One assigned-inspection card (SCRUM-140). Pending assignments show a live
@@ -29,6 +30,8 @@ export function InspectionCard({ insp }: { insp: RealtorInspection }) {
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [proposing, setProposing] = useState(false);
+  const [proposedAt, setProposedAt] = useState('');
 
   useEffect(() => {
     if (!isPending) return;
@@ -51,6 +54,34 @@ export function InspectionCard({ insp }: { insp: RealtorInspection }) {
       }
       const body = (await resp.json().catch(() => ({}))) as { error_code?: string };
       setError(ACCEPT_ERRORS[body.error_code ?? ''] ?? 'Could not accept the assignment. Please retry.');
+      setBusy(false);
+    } catch {
+      setError('Network error. Please retry.');
+      setBusy(false);
+    }
+  }
+
+  async function propose() {
+    if (!proposedAt) {
+      setError('Pick a date and time first.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // datetime-local has no timezone; convert to an absolute ISO instant.
+      const iso = new Date(proposedAt).toISOString();
+      const resp = await fetch(`/api/realtor/inspections/${insp.inspection_id}/propose-time`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ proposed_date: iso }),
+      });
+      if (resp.ok) {
+        router.refresh();
+        return;
+      }
+      const body = (await resp.json().catch(() => ({}))) as { error_code?: string };
+      setError(ACCEPT_ERRORS[body.error_code ?? ''] ?? 'Could not propose a time. Please retry.');
       setBusy(false);
     } catch {
       setError('Network error. Please retry.');
@@ -113,14 +144,60 @@ export function InspectionCard({ insp }: { insp: RealtorInspection }) {
               range.
             </p>
           ) : (
-            <button
-              type="button"
-              onClick={accept}
-              disabled={busy}
-              className="mt-3 w-full rounded-lg bg-emerald-deep px-4 py-2.5 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:opacity-60"
-            >
-              {busy ? 'Accepting…' : 'Accept assignment'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={accept}
+                disabled={busy}
+                className="mt-3 w-full rounded-lg bg-emerald-deep px-4 py-2.5 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:opacity-60"
+              >
+                {busy && !proposing ? 'Accepting…' : 'Accept assignment'}
+              </button>
+
+              {!proposing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProposing(true);
+                    setError(null);
+                  }}
+                  className="mt-2 w-full text-center text-xs font-medium text-emerald-deep hover:underline"
+                >
+                  Propose an alternate time
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <label className="block text-xs text-ink-600">Propose a new date &amp; time</label>
+                  <input
+                    type="datetime-local"
+                    value={proposedAt}
+                    onChange={(e) => setProposedAt(e.target.value)}
+                    className="w-full rounded-lg border border-ink-300/60 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProposing(false);
+                        setError(null);
+                      }}
+                      disabled={busy}
+                      className="flex-1 rounded-lg border border-ink-300/60 px-3 py-2 text-xs font-medium text-ink-700 transition hover:border-ink-500 disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={propose}
+                      disabled={busy || !proposedAt}
+                      className="flex-1 rounded-lg bg-emerald-deep px-3 py-2 text-xs font-semibold text-bone transition hover:bg-emerald-accent disabled:opacity-60"
+                    >
+                      {busy ? 'Sending…' : 'Send proposal'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {error && <p className="mt-2 text-xs text-red-600">{error}</p>}

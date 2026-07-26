@@ -111,7 +111,9 @@ class ReportService:
             raise InspectionNotFound()
         if inspection.realtor_id != caller.user_id:
             raise NotAssignedRealtor()
-        if inspection.status != "accepted":
+        # A rescheduled inspection is confirmed at its new time (SCRUM-141), so it
+        # is reportable just like an accepted one.
+        if inspection.status not in ("accepted", "rescheduled"):
             raise ReportNotSubmittable()
         if inspection.confirmed_date is None or datetime.now(UTC) < inspection.confirmed_date:
             raise ReportTooEarly()

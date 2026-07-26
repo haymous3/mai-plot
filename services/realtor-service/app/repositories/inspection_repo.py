@@ -245,6 +245,23 @@ class InspectionRepository:
         ).first()
         return row is not None
 
+    async def mark_rescheduled(self, inspection_id: UUID, *, new_date: datetime) -> bool:
+        """Propose an alternate time (SCRUM-141): status -> rescheduled with the new
+        proposed_date, and confirmed_date set to it (a reschedule commits the
+        realtor to the new time — the accept-with-new-time model). Guarded on
+        status='pending' so it mirrors the accept window; a second call is a no-op."""
+        row = (
+            await self._session.execute(
+                text(
+                    "UPDATE inspections SET status = 'rescheduled', "
+                    "proposed_date = :new, confirmed_date = :new, updated_at = NOW() "
+                    "WHERE id = :id AND status = 'pending' RETURNING id"
+                ),
+                {"id": inspection_id, "new": new_date},
+            )
+        ).first()
+        return row is not None
+
     async def submit_report(
         self,
         inspection_id: UUID,
@@ -254,15 +271,16 @@ class InspectionRepository:
         report_data: dict[str, Any],
     ) -> bool:
         """Store the report: status -> completed, report_submitted_at = now, GPS +
-        report_data persisted. Guarded on status='accepted' so it can only be
-        submitted once, on a confirmed inspection."""
+        report_data persisted. Guarded on status in ('accepted','rescheduled') so
+        it can only be submitted once, on a confirmed inspection (a rescheduled one
+        is confirmed at the new time — SCRUM-141)."""
         row = (
             await self._session.execute(
                 text(
                     "UPDATE inspections SET status = 'completed', "
                     "report_submitted_at = NOW(), gps_lat = :lat, gps_lng = :lng, "
                     "report_data = CAST(:data AS jsonb), updated_at = NOW() "
-                    "WHERE id = :id AND status = 'accepted' RETURNING id"
+                    "WHERE id = :id AND status IN ('accepted', 'rescheduled') RETURNING id"
                 ),
                 {
                     "id": inspection_id,

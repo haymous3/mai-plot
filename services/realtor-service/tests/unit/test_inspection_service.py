@@ -95,6 +95,7 @@ class _StubInspectionRepo:
         self._realtor_rows = realtor_rows or []
         self.created_realtor: UUID | None = None
         self.accepted: list[UUID] = []
+        self.rescheduled: list[tuple[UUID, datetime]] = []
         self.listed_realtor: UUID | None = None
 
     async def get_active_for_transaction(self, transaction_id: UUID) -> InspectionRow | None:
@@ -118,6 +119,10 @@ class _StubInspectionRepo:
         self.accepted.append(inspection_id)
         return True
 
+    async def mark_rescheduled(self, inspection_id: UUID, *, new_date: datetime) -> bool:
+        self.rescheduled.append((inspection_id, new_date))
+        return True
+
     async def latest_assignment_for_transaction(
         self, transaction_id: UUID
     ) -> AssignedRealtorRow | None:
@@ -133,9 +138,13 @@ class _StubInspectionRepo:
 class _RecordingNotifier:
     def __init__(self) -> None:
         self.assigned_to: list[UUID] = []
+        self.time_proposed_to: list[UUID] = []
 
     async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
         self.assigned_to.append(realtor_id)
+
+    async def time_proposed(self, *, user_id: UUID, inspection_id: UUID) -> None:
+        self.time_proposed_to.append(user_id)
 
 
 def _service(
@@ -239,6 +248,61 @@ async def test_accept_happy() -> None:
 
     await svc.accept(caller=_REALTOR, inspection_id=row.id)
     assert insp.accepted == [row.id]
+
+
+# -- propose_time (SCRUM-141) ----------------------------------------------
+
+
+async def test_propose_time_not_assigned_realtor() -> None:
+    row = _inspection(realtor_id=uuid4())  # someone else
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(get_row=row))
+    with pytest.raises(NotAssignedRealtor):
+        await svc.propose_time(
+            caller=_REALTOR, inspection_id=row.id, new_date=datetime.now(UTC) + timedelta(days=2)
+        )
+
+
+async def test_propose_time_not_pending() -> None:
+    row = _inspection(realtor_id=_REALTOR.user_id, status="accepted")
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(get_row=row))
+    with pytest.raises(InspectionNotPending):
+        await svc.propose_time(
+            caller=_REALTOR, inspection_id=row.id, new_date=datetime.now(UTC) + timedelta(days=2)
+        )
+
+
+async def test_propose_time_expired_window() -> None:
+    row = _inspection(realtor_id=_REALTOR.user_id, expires_in_h=-1)
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(get_row=row))
+    with pytest.raises(AssignmentExpired):
+        await svc.propose_time(
+            caller=_REALTOR, inspection_id=row.id, new_date=datetime.now(UTC) + timedelta(days=2)
+        )
+
+
+async def test_propose_time_rejects_past_date() -> None:
+    from app.services.inspection_service import InvalidProposedTime
+
+    row = _inspection(realtor_id=_REALTOR.user_id)
+    svc, _, _ = _service(txn=_txn(), nearest=uuid4(), inspections=_StubInspectionRepo(get_row=row))
+    with pytest.raises(InvalidProposedTime):
+        await svc.propose_time(
+            caller=_REALTOR, inspection_id=row.id, new_date=datetime.now(UTC) - timedelta(hours=1)
+        )
+
+
+async def test_propose_time_reschedules_and_notifies_both_parties() -> None:
+    row = _inspection(realtor_id=_REALTOR.user_id)
+    repo = _StubInspectionRepo(get_row=row)
+    txn = _txn()
+    svc, insp, notifier = _service(txn=txn, nearest=uuid4(), inspections=repo)
+    new_date = datetime.now(UTC) + timedelta(days=2)
+
+    await svc.propose_time(caller=_REALTOR, inspection_id=row.id, new_date=new_date)
+
+    assert insp.rescheduled == [(row.id, new_date)]
+    # Both transaction parties are notified of the new time.
+    assert set(notifier.time_proposed_to) == {txn.buyer_id, txn.seller_id}
 
 
 # -- assigned_realtor_for_transaction (SCRUM-139) --------------------------

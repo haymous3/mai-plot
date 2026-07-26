@@ -379,3 +379,70 @@ async def test_mine_excludes_other_realtors_assignments(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"data": []}
+
+
+async def test_propose_time_reschedules_inspection(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    req = await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    assert req.status_code == 201, req.text
+    inspection_id = req.json()["id"]
+
+    new_date = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+    resp = await http_client.post(
+        f"/inspections/{inspection_id}/propose-time",
+        json={"proposed_date": new_date},
+        headers=auth_header(mint_token(realtor, "realtor")),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "rescheduled"
+    assert body["proposed_date"].startswith(new_date[:19])
+
+
+async def test_propose_time_by_wrong_realtor_is_403(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+        other_realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    req = await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+    inspection_id = req.json()["id"]
+
+    resp = await http_client.post(
+        f"/inspections/{inspection_id}/propose-time",
+        json={"proposed_date": (datetime.now(UTC) + timedelta(days=2)).isoformat()},
+        headers=auth_header(mint_token(other_realtor, "realtor")),
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error_code"] == "NOT_ASSIGNED_REALTOR"

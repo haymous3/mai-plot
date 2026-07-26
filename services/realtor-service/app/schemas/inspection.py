@@ -19,6 +19,12 @@ class InspectionRequest(BaseModel):
     proposed_date: datetime
 
 
+class ProposeTimeRequest(BaseModel):
+    """The realtor's proposed alternate inspection time (SCRUM-141)."""
+
+    proposed_date: datetime
+
+
 class InspectionResponse(BaseModel):
     id: UUID
     transaction_id: UUID

@@ -21,6 +21,10 @@ _BODY = (
     "You've been assigned a property inspection on Maiplot. Accept it within 2 "
     "hours, or it will be offered to another realtor."
 )
+_RESCHEDULE_BODY = (
+    "The realtor proposed a new time for your property inspection. Open Maiplot "
+    "to see the updated schedule."
+)
 
 
 class InspectionNotifier(Protocol):
@@ -29,9 +33,17 @@ class InspectionNotifier(Protocol):
     ) -> None:  # pragma: no cover - protocol
         ...
 
+    async def time_proposed(
+        self, *, user_id: UUID, inspection_id: UUID
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
 
 class NullInspectionNotifier:
     async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
+        return None
+
+    async def time_proposed(self, *, user_id: UUID, inspection_id: UUID) -> None:
         return None
 
 
@@ -57,6 +69,26 @@ class CeleryInspectionNotifier:
                 },
             )
         except Exception as exc:  # broker down etc. — never fail the assignment
+            logger.warning(
+                "inspection.notify_failed",
+                extra={"inspection_id": str(inspection_id), "error": str(exc)},
+            )
+
+    async def time_proposed(self, *, user_id: UUID, inspection_id: UUID) -> None:
+        try:
+            self._app.send_task(
+                "notifications.dispatch",
+                kwargs={
+                    "user_id": str(user_id),
+                    "type": "inspection_rescheduled",
+                    "title": "Inspection time changed",
+                    "body": _RESCHEDULE_BODY,
+                    "channels": ["in_app", "push"],
+                    "reference_type": "inspection",
+                    "reference_id": str(inspection_id),
+                },
+            )
+        except Exception as exc:  # broker down etc. — never fail the reschedule
             logger.warning(
                 "inspection.notify_failed",
                 extra={"inspection_id": str(inspection_id), "error": str(exc)},

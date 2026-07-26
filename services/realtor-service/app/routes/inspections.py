@@ -22,6 +22,7 @@ from app.schemas.inspection import (
     AssignedRealtorResponse,
     InspectionRequest,
     InspectionResponse,
+    ProposeTimeRequest,
     RealtorInspectionsResponse,
 )
 from app.schemas.report import ReportResponse, ReportSubmitResponse
@@ -33,6 +34,7 @@ from app.services.inspection_service import (
     InspectionNotFound,
     InspectionNotPending,
     InspectionService,
+    InvalidProposedTime,
     NoRealtorAvailable,
     NotAssignedRealtor,
     NotTransactionParty,
@@ -153,6 +155,49 @@ async def accept_inspection(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "ASSIGNMENT_EXPIRED",
             "The 2-hour acceptance window has elapsed.",
+        )
+    return InspectionResponse.from_row(inspection)
+
+
+@router.post("/{inspection_id}/propose-time", response_model=None)
+async def propose_inspection_time(
+    inspection_id: UUID,
+    payload: ProposeTimeRequest,
+    caller: CurrentUserDep,
+    service: InspectionServiceDep,
+) -> InspectionResponse | JSONResponse:
+    """The assigned realtor proposes an alternate time (instead of accepting the
+    proposed one) within the 2-hour window — moves the inspection to 'rescheduled'
+    and notifies the transaction parties."""
+    try:
+        inspection = await service.propose_time(
+            caller=caller, inspection_id=inspection_id, new_date=payload.proposed_date
+        )
+    except InspectionNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "INSPECTION_NOT_FOUND", "No such inspection.")
+    except NotAssignedRealtor:
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "NOT_ASSIGNED_REALTOR",
+            "This inspection is not assigned to you.",
+        )
+    except InspectionNotPending:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "INSPECTION_NOT_PENDING",
+            "This inspection is not awaiting acceptance.",
+        )
+    except AssignmentExpired:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "ASSIGNMENT_EXPIRED",
+            "The 2-hour acceptance window has elapsed.",
+        )
+    except InvalidProposedTime:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "INVALID_PROPOSED_TIME",
+            "The proposed time must be in the future.",
         )
     return InspectionResponse.from_row(inspection)
 
