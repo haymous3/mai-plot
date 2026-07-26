@@ -66,6 +66,10 @@ class AssignmentExpired(InspectionError):
     """The 2-hour acceptance window has elapsed."""
 
 
+class InvalidProposedTime(InspectionError):
+    """The proposed alternate inspection time is not in the future."""
+
+
 class InspectionService:
     def __init__(
         self,
@@ -156,6 +160,53 @@ class InspectionService:
         accepted = await self._inspections.get(inspection_id)
         assert accepted is not None
         return accepted
+
+    async def propose_time(
+        self, *, caller: CurrentUser, inspection_id: UUID, new_date: datetime
+    ) -> InspectionRow:
+        """The assigned realtor proposes an alternate time (SCRUM-141). Same
+        gates as accept (assigned + still pending + within the 2h window); the
+        inspection moves to 'rescheduled' at the new time and both transaction
+        parties are notified."""
+        inspection = await self._inspections.get(inspection_id)
+        if inspection is None:
+            raise InspectionNotFound()
+        if inspection.realtor_id != caller.user_id:
+            raise NotAssignedRealtor()
+        if inspection.status != "pending":
+            raise InspectionNotPending()
+        if inspection.assignment_expires_at <= datetime.now(UTC):
+            raise AssignmentExpired()
+        if new_date <= datetime.now(UTC):
+            raise InvalidProposedTime()
+
+        await self._inspections.mark_rescheduled(inspection_id, new_date=new_date)
+        await self._notify_time_proposed(
+            transaction_id=inspection.transaction_id, inspection_id=inspection_id
+        )
+        rescheduled = await self._inspections.get(inspection_id)
+        assert rescheduled is not None
+        logger.info(
+            "inspection.time_proposed",
+            extra={"inspection_id": str(inspection_id)},
+        )
+        return rescheduled
+
+    async def _notify_time_proposed(self, *, transaction_id: UUID, inspection_id: UUID) -> None:
+        """Alert both transaction parties of the new time. Best-effort + defensive
+        — a notification failure never fails the reschedule (the inspection row is
+        the source of truth)."""
+        txn = await self._transactions.get(transaction_id)
+        if txn is None:
+            return
+        for user_id in {txn.buyer_id, txn.seller_id}:
+            try:
+                await self._notifier.time_proposed(user_id=user_id, inspection_id=inspection_id)
+            except Exception as exc:  # noqa: BLE001 — never fail the reschedule
+                logger.warning(
+                    "inspection.notify_failed",
+                    extra={"inspection_id": str(inspection_id), "error": str(exc)},
+                )
 
     async def _notify_assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
         """Best-effort + defensive — a notification failure never fails the
