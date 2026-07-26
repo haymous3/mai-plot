@@ -34,571 +34,589 @@
 # Docs:    deployment.md §13
 
 # ---------------------------------------------------------------------------
-# Shared environment
+# Project / environment grouping
 #
-# All 8 services + 10 workers pull from this one group, so JWT_SECRET and the
-# connection strings are defined once and are guaranteed identical everywhere.
-# A JWT_SECRET mismatch between any two services = every request 401s.
+# All resources live inside ONE project + environment rather than at the repo
+# root, so they land in the existing "Maihomme" project instead of scattering
+# across the workspace. Render matches an existing project by NAME — a typo
+# here silently creates a second project rather than filling the intended one.
 #
-# `sync: false` = Render does NOT set this from the blueprint; you enter it
-# once in the dashboard. Used where Render's generated value needs reshaping
-# (see the DATABASE_URL / CELERY_BROKER_URL notes below).
+# The environment is called `staging` deliberately: EU region, fake adapters,
+# seeded data. If a real af-south-1 production environment is added later it
+# becomes a SIBLING environment here, and `fromDatabase` / `fromService`
+# references never cross environments — each gets its own database and secrets.
 # ---------------------------------------------------------------------------
-envVarGroups:
-  - name: maiplot-shared
-    envVars:
-      - key: ENV
-        value: staging
-      - key: LOG_LEVEL
-        value: INFO
-      - key: AWS_REGION
-        value: af-south-1
+projects:
+  - name: Maihomme
+    environments:
+      - name: staging
 
-      # ⚠️ MANUAL — Render's Postgres connectionString is `postgresql://...`
-      # but every service uses SQLAlchemy async and needs the asyncpg driver.
-      # Copy the Internal Database URL from the maiplot-db dashboard page and
-      # rewrite the scheme:
-      #   postgresql://user:pass@host/db  →  postgresql+asyncpg://user:pass@host/db
-      # (There is no blueprint syntax to transform a property reference, so
-      # this cannot be automated here.)
-      - key: DATABASE_URL
-        sync: false
+        # ---------------------------------------------------------------------------
+        # Shared environment
+        #
+        # All 8 services + 10 workers pull from this one group, so JWT_SECRET and the
+        # connection strings are defined once and are guaranteed identical everywhere.
+        # A JWT_SECRET mismatch between any two services = every request 401s.
+        #
+        # `sync: false` = Render does NOT set this from the blueprint; you enter it
+        # once in the dashboard. Used where Render's generated value needs reshaping
+        # (see the DATABASE_URL / CELERY_BROKER_URL notes below).
+        # ---------------------------------------------------------------------------
+        envVarGroups:
+          - name: maiplot-shared
+            envVars:
+              - key: ENV
+                value: staging
+              - key: LOG_LEVEL
+                value: INFO
+              - key: AWS_REGION
+                value: af-south-1
 
-      # ⚠️ MANUAL — compose splits Redis by database index: /0 for the cache,
-      # /1 for the Celery broker + results. Render's connectionString has no
-      # index, so set these by hand from the Key Value internal URL:
-      #   REDIS_URL             = redis://<internal-host>:6379/0
-      #   CELERY_BROKER_URL     = redis://<internal-host>:6379/1
-      #   CELERY_RESULT_BACKEND = redis://<internal-host>:6379/1
-      # Keeping the split matters: flushing the cache must not drop queued
-      # Celery tasks.
-      - key: REDIS_URL
-        sync: false
-      - key: CELERY_BROKER_URL
-        sync: false
-      - key: CELERY_RESULT_BACKEND
-        sync: false
+              # ⚠️ MANUAL — Render's Postgres connectionString is `postgresql://...`
+              # but every service uses SQLAlchemy async and needs the asyncpg driver.
+              # Copy the Internal Database URL from the maiplot-db dashboard page and
+              # rewrite the scheme:
+              #   postgresql://user:pass@host/db  →  postgresql+asyncpg://user:pass@host/db
+              # (There is no blueprint syntax to transform a property reference, so
+              # this cannot be automated here.)
+              - key: DATABASE_URL
+                sync: false
 
-      # Private services resolve by name on Render's internal network,
-      # exactly like compose hostnames.
-      - key: ELASTICSEARCH_URL
-        value: http://elasticsearch:9200
+              # ⚠️ MANUAL — compose splits Redis by database index: /0 for the cache,
+              # /1 for the Celery broker + results. Render's connectionString has no
+              # index, so set these by hand from the Key Value internal URL:
+              #   REDIS_URL             = redis://<internal-host>:6379/0
+              #   CELERY_BROKER_URL     = redis://<internal-host>:6379/1
+              #   CELERY_RESULT_BACKEND = redis://<internal-host>:6379/1
+              # Keeping the split matters: flushing the cache must not drop queued
+              # Celery tasks.
+              - key: REDIS_URL
+                sync: false
+              - key: CELERY_BROKER_URL
+                sync: false
+              - key: CELERY_RESULT_BACKEND
+                sync: false
 
-      # Generated ONCE and shared by every member of the group. Must also be
-      # the Kong JWT consumer secret — see the maiplot-kong note below.
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_ISSUER
-        value: maiplot-platform
-      - key: JWT_ACCESS_EXPIRE_MINUTES
-        value: "15"
-      - key: JWT_REFRESH_EXPIRE_DAYS
-        value: "7"
+              # Private services resolve by name on Render's internal network,
+              # exactly like compose hostnames.
+              - key: ELASTICSEARCH_URL
+                value: http://elasticsearch:9200
 
-      - key: NOTIFICATIONS_ENABLED
-        value: "true"
+              # Generated ONCE and shared by every member of the group. Must also be
+              # the Kong JWT consumer secret — see the maiplot-kong note below.
+              - key: JWT_SECRET
+                generateValue: true
+              - key: JWT_ISSUER
+                value: maiplot-platform
+              - key: JWT_ACCESS_EXPIRE_MINUTES
+                value: "15"
+              - key: JWT_REFRESH_EXPIRE_DAYS
+                value: "7"
 
-  # -------------------------------------------------------------------------
-  # Staging fakes — the §9 firewall.
-  #
-  # Every one of these MUST stay true/false as set. Flipping any to the real
-  # adapter sends real PII to a third party from an EU-hosted environment.
-  # -------------------------------------------------------------------------
-  - name: maiplot-staging-fakes
-    envVars:
-      # Identity bureaux — no real BVN/NIN ever hits staging.
-      - key: BVN_USE_FAKE
-        value: "true"
-      - key: NIN_USE_FAKE
-        value: "true"
-      # Peppers are still required (HMAC key for the dedup lookup hash) even
-      # with the fake verifier. Staging-only values; unrelated to production.
-      - key: BVN_PEPPER
-        generateValue: true
-      - key: NIN_PEPPER
-        generateValue: true
+              - key: NOTIFICATIONS_ENABLED
+                value: "true"
 
-      # Payments — fake charge + transfer clients, no Paystack network calls.
-      - key: PAYSTACK_ENABLED
-        value: "false"
-      - key: PAYSTACK_WEBHOOK_SECRET
-        generateValue: true
+          # -------------------------------------------------------------------------
+          # Staging fakes — the §9 firewall.
+          #
+          # Every one of these MUST stay true/false as set. Flipping any to the real
+          # adapter sends real PII to a third party from an EU-hosted environment.
+          # -------------------------------------------------------------------------
+          - name: maiplot-staging-fakes
+            envVars:
+              # Identity bureaux — no real BVN/NIN ever hits staging.
+              - key: BVN_USE_FAKE
+                value: "true"
+              - key: NIN_USE_FAKE
+                value: "true"
+              # Peppers are still required (HMAC key for the dedup lookup hash) even
+              # with the fake verifier. Staging-only values; unrelated to production.
+              - key: BVN_PEPPER
+                generateValue: true
+              - key: NIN_PEPPER
+                generateValue: true
 
-      # Bank partner adapter — FakeBank, no partner credentials in staging.
-      - key: BANK_ADAPTER_ENABLED
-        value: "false"
-      - key: BANK_WEBHOOK_SECRET
-        generateValue: true
+              # Payments — fake charge + transfer clients, no Paystack network calls.
+              - key: PAYSTACK_ENABLED
+                value: "false"
+              - key: PAYSTACK_WEBHOOK_SECRET
+                generateValue: true
 
-      # Outbound messaging — nothing leaves the environment.
-      - key: TERMII_USE_FAKE
-        value: "true"
-      - key: SES_USE_FAKE
-        value: "true"
-      - key: WEB_PUSH_USE_FAKE
-        value: "true"
-      - key: EMAIL_VERIFICATION_USE_FAKE
-        value: "true"
+              # Bank partner adapter — FakeBank, no partner credentials in staging.
+              - key: BANK_ADAPTER_ENABLED
+                value: "false"
+              - key: BANK_WEBHOOK_SECRET
+                generateValue: true
 
-      # Object storage — in-memory fakes, so no S3 bucket is needed.
-      - key: POA_STORAGE_USE_FAKE
-        value: "true"
-      - key: GOV_ID_STORAGE_USE_FAKE
-        value: "true"
-      - key: RECEIPTS_STORAGE_USE_FAKE
-        value: "true"
-      - key: OCR_USE_FAKE
-        value: "true"
+              # Outbound messaging — nothing leaves the environment.
+              - key: TERMII_USE_FAKE
+                value: "true"
+              - key: SES_USE_FAKE
+                value: "true"
+              - key: WEB_PUSH_USE_FAKE
+                value: "true"
+              - key: EMAIL_VERIFICATION_USE_FAKE
+                value: "true"
 
-  # -------------------------------------------------------------------------
-  # notification-service API + worker only.
-  #
-  # The worker SIGNS the email unsubscribe link and the API VERIFIES it
-  # (SCRUM-122), so both must hold the identical secret. A group guarantees
-  # that; two separate generateValue entries would silently produce two
-  # different secrets and every unsubscribe link would fail verification.
-  # -------------------------------------------------------------------------
-  - name: maiplot-notification-shared
-    envVars:
-      - key: UNSUBSCRIBE_SECRET
-        generateValue: true
-      # ⚠️ MANUAL — set to the staging frontend origin, e.g.
-      # https://maiplot-git-main-<team>.vercel.app/notifications/unsubscribe
-      - key: UNSUBSCRIBE_BASE_URL
-        sync: false
+              # Object storage — in-memory fakes, so no S3 bucket is needed.
+              - key: POA_STORAGE_USE_FAKE
+                value: "true"
+              - key: GOV_ID_STORAGE_USE_FAKE
+                value: "true"
+              - key: RECEIPTS_STORAGE_USE_FAKE
+                value: "true"
+              - key: OCR_USE_FAKE
+                value: "true"
 
-# ---------------------------------------------------------------------------
-# Managed Postgres (PostGIS)
-#
-# PostGIS is supported but NOT enabled by default on PG 13+. After the first
-# deploy, connect via psql and run:
-#     CREATE EXTENSION IF NOT EXISTS postgis;
-# Then run Alembic for every service (deployment.md §13.4). Listing geo
-# queries fail without it.
-# ---------------------------------------------------------------------------
-databases:
-  - name: maiplot-db
-    databaseName: maiplot
-    user: maiplot
-    plan: basic-1gb
-    region: frankfurt
-    postgresMajorVersion: "15"
-    ipAllowList: []          # empty = private network only, no public access
+          # -------------------------------------------------------------------------
+          # notification-service API + worker only.
+          #
+          # The worker SIGNS the email unsubscribe link and the API VERIFIES it
+          # (SCRUM-122), so both must hold the identical secret. A group guarantees
+          # that; two separate generateValue entries would silently produce two
+          # different secrets and every unsubscribe link would fail verification.
+          # -------------------------------------------------------------------------
+          - name: maiplot-notification-shared
+            envVars:
+              - key: UNSUBSCRIBE_SECRET
+                generateValue: true
+              # ⚠️ MANUAL — set to the staging frontend origin, e.g.
+              # https://maiplot-git-main-<team>.vercel.app/notifications/unsubscribe
+              - key: UNSUBSCRIBE_BASE_URL
+                sync: false
 
-services:
+        # ---------------------------------------------------------------------------
+        # Managed Postgres (PostGIS)
+        #
+        # PostGIS is supported but NOT enabled by default on PG 13+. After the first
+        # deploy, connect via psql and run:
+        #     CREATE EXTENSION IF NOT EXISTS postgis;
+        # Then run Alembic for every service (deployment.md §13.4). Listing geo
+        # queries fail without it.
+        # ---------------------------------------------------------------------------
+        databases:
+          - name: maiplot-db
+            databaseName: maiplot
+            user: maiplot
+            plan: basic-1gb
+            region: frankfurt
+            postgresMajorVersion: "15"
+            ipAllowList: []          # empty = private network only, no public access
 
-  # =========================================================================
-  # Data tier
-  # =========================================================================
+        services:
 
-  # Redis 7 equivalent — cache (db 0) + Celery broker/results (db 1).
-  - name: maiplot-keyvalue
-    type: keyvalue
-    plan: starter
-    region: frankfurt
-    ipAllowList: []          # empty = private network only
-    maxmemoryPolicy: noeviction   # REQUIRED: allkeys-lru would silently drop
-                                  # queued Celery tasks under memory pressure
+          # =========================================================================
+          # Data tier
+          # =========================================================================
 
-  # Elasticsearch 8 — the only component Render does not manage for you.
-  # Runs as a disk-backed private service. Single instance, no HA, and a disk
-  # means no zero-downtime deploys. Acceptable for staging.
-  #
-  # If this proves flaky (see deployment.md §13.6), swap it for a hosted
-  # Elastic/Bonsai free tier and repoint ELASTICSEARCH_URL — nothing else changes.
-  - name: elasticsearch
-    type: pserv
-    runtime: image
-    plan: standard           # 2 GB — ES will not boot on starter (512 MB)
-    region: frankfurt
-    image:
-      url: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    disk:
-      name: es-data
-      mountPath: /usr/share/elasticsearch/data
-      sizeGB: 10
-    envVars:
-      - key: discovery.type
-        value: single-node   # also skips the bootstrap checks that would fail
-                             # in a container without host-level sysctl access
-      - key: xpack.security.enabled
-        value: "false"       # staging only — internal network is the boundary
-      - key: ES_JAVA_OPTS
-        value: -Xms1g -Xmx1g
-      - key: PORT
-        value: "9200"
+          # Redis 7 equivalent — cache (db 0) + Celery broker/results (db 1).
+          - name: maiplot-keyvalue
+            type: keyvalue
+            plan: starter
+            region: frankfurt
+            ipAllowList: []          # empty = private network only
+            maxmemoryPolicy: noeviction   # REQUIRED: allkeys-lru would silently drop
+                                          # queued Celery tasks under memory pressure
 
-  # =========================================================================
-  # Gateway — the ONLY public service
-  # =========================================================================
-  #
-  # Built from infra/kong/Dockerfile, which bakes kong.yml into the image
-  # (Render has no volume mounts, so the compose bind-mount can't carry over).
-  #
-  # The services above are named EXACTLY as in docker-compose.yml, so
-  # kong.yml's upstream URLs (http://auth-service:8000 etc.) resolve on
-  # Render's private network with no per-environment edits. Keep it that way:
-  # renaming a pserv silently breaks gateway routing.
-  - name: maiplot-kong
-    type: web
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: infra/kong
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    # No healthCheckPath on purpose. Every Kong route proxies to an upstream,
-    # so a path-based check would fail while the services are still booting and
-    # Render would mark the gateway unhealthy — a bootstrap deadlock. Render's
-    # default port check (does 8000 accept connections?) is the right signal
-    # for a proxy; upstream health is each pserv's own /health check.
-    envVars:
-      - key: PORT
-        value: "8000"               # tells Render which port to route to
-      # ⚠️ MANUAL — must equal the JWT_SECRET generated in maiplot-shared, or
-      # Kong rejects every token the services sign ("Invalid signature") and
-      # every authenticated route 401s. docker-entrypoint.sh substitutes this
-      # into kong.yml at container start, so the real secret is never committed
-      # and never baked into the image.
-      # Copy from: Dashboard → Env Groups → maiplot-shared → JWT_SECRET.
-      - key: KONG_JWT_SECRET
-        sync: false
-      - key: KONG_DATABASE
-        value: "off"
-      - key: KONG_DECLARATIVE_CONFIG
-        value: /etc/kong/kong.yml
-      - key: KONG_PROXY_LISTEN
-        value: 0.0.0.0:8000
-      # Admin API bound to loopback — must never be publicly reachable.
-      - key: KONG_ADMIN_LISTEN
-        value: 127.0.0.1:8001
-      - key: KONG_PROXY_ACCESS_LOG
-        value: /dev/stdout
-      - key: KONG_PROXY_ERROR_LOG
-        value: /dev/stderr
+          # Elasticsearch 8 — the only component Render does not manage for you.
+          # Runs as a disk-backed private service. Single instance, no HA, and a disk
+          # means no zero-downtime deploys. Acceptable for staging.
+          #
+          # If this proves flaky (see deployment.md §13.6), swap it for a hosted
+          # Elastic/Bonsai free tier and repoint ELASTICSEARCH_URL — nothing else changes.
+          - name: elasticsearch
+            type: pserv
+            runtime: image
+            plan: standard           # 2 GB — ES will not boot on starter (512 MB)
+            region: frankfurt
+            image:
+              url: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+            disk:
+              name: es-data
+              mountPath: /usr/share/elasticsearch/data
+              sizeGB: 10
+            envVars:
+              - key: discovery.type
+                value: single-node   # also skips the bootstrap checks that would fail
+                                     # in a container without host-level sysctl access
+              - key: xpack.security.enabled
+                value: "false"       # staging only — internal network is the boundary
+              - key: ES_JAVA_OPTS
+                value: -Xms1g -Xmx1g
+              - key: PORT
+                value: "9200"
 
-  # =========================================================================
-  # Application services — private (pserv), reachable only via Kong
-  # =========================================================================
+          # =========================================================================
+          # Gateway — the ONLY public service
+          # =========================================================================
+          #
+          # Built from infra/kong/Dockerfile, which bakes kong.yml into the image
+          # (Render has no volume mounts, so the compose bind-mount can't carry over).
+          #
+          # The services above are named EXACTLY as in docker-compose.yml, so
+          # kong.yml's upstream URLs (http://auth-service:8000 etc.) resolve on
+          # Render's private network with no per-environment edits. Keep it that way:
+          # renaming a pserv silently breaks gateway routing.
+          - name: maiplot-kong
+            type: web
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: infra/kong
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            # No healthCheckPath on purpose. Every Kong route proxies to an upstream,
+            # so a path-based check would fail while the services are still booting and
+            # Render would mark the gateway unhealthy — a bootstrap deadlock. Render's
+            # default port check (does 8000 accept connections?) is the right signal
+            # for a proxy; upstream health is each pserv's own /health check.
+            envVars:
+              - key: PORT
+                value: "8000"               # tells Render which port to route to
+              # ⚠️ MANUAL — must equal the JWT_SECRET generated in maiplot-shared, or
+              # Kong rejects every token the services sign ("Invalid signature") and
+              # every authenticated route 401s. docker-entrypoint.sh substitutes this
+              # into kong.yml at container start, so the real secret is never committed
+              # and never baked into the image.
+              # Copy from: Dashboard → Env Groups → maiplot-shared → JWT_SECRET.
+              - key: KONG_JWT_SECRET
+                sync: false
+              - key: KONG_DATABASE
+                value: "off"
+              - key: KONG_DECLARATIVE_CONFIG
+                value: /etc/kong/kong.yml
+              - key: KONG_PROXY_LISTEN
+                value: 0.0.0.0:8000
+              # Admin API bound to loopback — must never be publicly reachable.
+              - key: KONG_ADMIN_LISTEN
+                value: 127.0.0.1:8001
+              - key: KONG_PROXY_ACCESS_LOG
+                value: /dev/stdout
+              - key: KONG_PROXY_ERROR_LOG
+                value: /dev/stderr
 
-  - name: auth-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/auth-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: OTP_EXPIRE_MINUTES
-        value: "5"
-      - key: OTP_RATE_LIMIT_PER_HOUR
-        value: "5"
-      - key: EMAIL_VERIFICATION_EXPIRE_MINUTES
-        value: "30"
-      # ⚠️ MANUAL — set to the Vercel PREVIEW/staging URL once it exists, e.g.
-      # https://maiplot-git-main-<team>.vercel.app/verify-email
-      # Wrong value = every verification link 404s.
-      - key: EMAIL_VERIFICATION_BASE_URL
-        sync: false
+          # =========================================================================
+          # Application services — private (pserv), reachable only via Kong
+          # =========================================================================
 
-  - name: listing-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/listing-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: auth-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/auth-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: OTP_EXPIRE_MINUTES
+                value: "5"
+              - key: OTP_RATE_LIMIT_PER_HOUR
+                value: "5"
+              - key: EMAIL_VERIFICATION_EXPIRE_MINUTES
+                value: "30"
+              # ⚠️ MANUAL — set to the Vercel PREVIEW/staging URL once it exists, e.g.
+              # https://maiplot-git-main-<team>.vercel.app/verify-email
+              # Wrong value = every verification link 404s.
+              - key: EMAIL_VERIFICATION_BASE_URL
+                sync: false
 
-  - name: document-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/document-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: OCR_VIA_CELERY
-        value: "true"
+          - name: listing-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/listing-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  - name: transaction-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/transaction-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: document-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/document-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: OCR_VIA_CELERY
+                value: "true"
 
-  - name: loan-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/loan-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: TX_TASKS_ENABLED
-        value: "true"
+          - name: transaction-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/transaction-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  - name: notification-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/notification-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      # Signs the email unsubscribe link; the worker verifies it. Both must
-      # share this value, so it lives in a group of its own below.
-      - fromGroup: maiplot-notification-shared
+          - name: loan-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/loan-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: TX_TASKS_ENABLED
+                value: "true"
 
-  - name: realtor-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/realtor-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: notification-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/notification-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              # Signs the email unsubscribe link; the worker verifies it. Both must
+              # share this value, so it lives in a group of its own below.
+              - fromGroup: maiplot-notification-shared
 
-  - name: analytics-service
-    type: pserv
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/analytics-service
-    dockerfilePath: ./Dockerfile
-    branch: main
-    autoDeployTrigger: commit
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: realtor-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/realtor-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  # =========================================================================
-  # Celery workers (6) and beat schedulers (4)
-  #
-  # Same images as the services above, different entrypoint. Workers consume
-  # tasks; beats only schedule them — a beat with no worker queues work that
-  # never runs.
-  #
-  # 💰 COST LEVER: these 10 services are ~$70/mo of the staging bill. Suspend
-  # the ones you are not currently exercising (Render Dashboard → Suspend);
-  # a suspended service costs nothing and resumes in one click. Keep the pair
-  # for whatever flow you are testing.
-  #
-  # ⚠️ Never run two beats for the same service — duplicate schedules mean
-  # duplicate money-moving tasks.
-  # =========================================================================
+          - name: analytics-service
+            type: pserv
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/analytics-service
+            dockerfilePath: ./Dockerfile
+            branch: main
+            autoDeployTrigger: commit
+            healthCheckPath: /health
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  - name: listing-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/listing-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          # =========================================================================
+          # Celery workers (6) and beat schedulers (4)
+          #
+          # Same images as the services above, different entrypoint. Workers consume
+          # tasks; beats only schedule them — a beat with no worker queues work that
+          # never runs.
+          #
+          # 💰 COST LEVER: these 10 services are ~$70/mo of the staging bill. Suspend
+          # the ones you are not currently exercising (Render Dashboard → Suspend);
+          # a suspended service costs nothing and resumes in one click. Keep the pair
+          # for whatever flow you are testing.
+          #
+          # ⚠️ Never run two beats for the same service — duplicate schedules mean
+          # duplicate money-moving tasks.
+          # =========================================================================
 
-  # Hourly listing-expiry sweep + the 48h seller warning (SCRUM-53 / 112).
-  - name: listing-celery-beat
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/listing-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app beat --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: listing-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/listing-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  # OCR pipeline (SCRUM-55). No beat — task is enqueued on upload.
-  - name: document-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/document-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: OCR_VIA_CELERY
-        value: "true"
+          # Hourly listing-expiry sweep + the 48h seller warning (SCRUM-53 / 112).
+          - name: listing-celery-beat
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/listing-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app beat --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
 
-  # Commission disbursement + loan-aware deposit tasks (SCRUM-86 / 128).
-  - name: transaction-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/transaction-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: DISBURSEMENT_ACTOR_ID
-        value: 00000000-0000-0000-0000-000000000001
+          # OCR pipeline (SCRUM-55). No beat — task is enqueued on upload.
+          - name: document-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/document-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: OCR_VIA_CELERY
+                value: "true"
 
-  # 72h lock release, offer-expiry sweep, seller-disbursement sweep
-  # (SCRUM-68 / 118 / 85).
-  - name: transaction-celery-beat
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/transaction-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app beat --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: DISBURSEMENT_ACTOR_ID
-        value: 00000000-0000-0000-0000-000000000001
+          # Commission disbursement + loan-aware deposit tasks (SCRUM-86 / 128).
+          - name: transaction-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/transaction-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: DISBURSEMENT_ACTOR_ID
+                value: 00000000-0000-0000-0000-000000000001
 
-  - name: loan-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/loan-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: TX_TASKS_ENABLED
-        value: "true"
-      - key: LOAN_POLL_ENABLED
-        value: "true"
+          # 72h lock release, offer-expiry sweep, seller-disbursement sweep
+          # (SCRUM-68 / 118 / 85).
+          - name: transaction-celery-beat
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/transaction-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app beat --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: DISBURSEMENT_ACTOR_ID
+                value: 00000000-0000-0000-0000-000000000001
 
-  # Loan-status poll fallback for a dropped decision webhook (SCRUM-130).
-  - name: loan-celery-beat
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/loan-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app beat --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: TX_TASKS_ENABLED
-        value: "true"
-      - key: LOAN_POLL_ENABLED
-        value: "true"
+          - name: loan-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/loan-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: TX_TASKS_ENABLED
+                value: "true"
+              - key: LOAN_POLL_ENABLED
+                value: "true"
 
-  # All 4 channels: SMS, Web Push, email, in-app. No beat.
-  - name: notification-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/notification-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - fromGroup: maiplot-notification-shared
-      - key: SMS_VIA_CELERY
-        value: "true"
-      - key: PUSH_VIA_CELERY
-        value: "true"
-      - key: EMAIL_VIA_CELERY
-        value: "true"
-      - key: SES_FROM_EMAIL
-        value: noreply@maiplot.ng
-      - key: VAPID_SUBJECT
-        value: mailto:ops@maiplot.ng
+          # Loan-status poll fallback for a dropped decision webhook (SCRUM-130).
+          - name: loan-celery-beat
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/loan-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app beat --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: TX_TASKS_ENABLED
+                value: "true"
+              - key: LOAN_POLL_ENABLED
+                value: "true"
 
-  - name: realtor-celery-worker
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/realtor-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app worker --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
-      - key: DISBURSEMENT_ENABLED
-        value: "true"
+          # All 4 channels: SMS, Web Push, email, in-app. No beat.
+          - name: notification-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/notification-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - fromGroup: maiplot-notification-shared
+              - key: SMS_VIA_CELERY
+                value: "true"
+              - key: PUSH_VIA_CELERY
+                value: "true"
+              - key: EMAIL_VIA_CELERY
+                value: "true"
+              - key: SES_FROM_EMAIL
+                value: noreply@maiplot.ng
+              - key: VAPID_SUBJECT
+                value: mailto:ops@maiplot.ng
 
-  # Hourly commission accrual/release (SCRUM-74).
-  - name: realtor-celery-beat
-    type: worker
-    runtime: docker
-    plan: starter
-    region: frankfurt
-    rootDir: services/realtor-service
-    dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A app.celery_app beat --loglevel=INFO
-    branch: main
-    autoDeployTrigger: commit
-    envVars:
-      - fromGroup: maiplot-shared
-      - fromGroup: maiplot-staging-fakes
+          - name: realtor-celery-worker
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/realtor-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app worker --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
+              - key: DISBURSEMENT_ENABLED
+                value: "true"
+
+          # Hourly commission accrual/release (SCRUM-74).
+          - name: realtor-celery-beat
+            type: worker
+            runtime: docker
+            plan: starter
+            region: frankfurt
+            rootDir: services/realtor-service
+            dockerfilePath: ./Dockerfile
+            dockerCommand: celery -A app.celery_app beat --loglevel=INFO
+            branch: main
+            autoDeployTrigger: commit
+            envVars:
+              - fromGroup: maiplot-shared
+              - fromGroup: maiplot-staging-fakes
