@@ -247,7 +247,7 @@ services:
     rootDir: infra/kong
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     # No healthCheckPath on purpose. Every Kong route proxies to an upstream,
     # so a path-based check would fail while the services are still booting and
     # Render would mark the gateway unhealthy — a bootstrap deadlock. Render's
@@ -290,7 +290,7 @@ services:
     rootDir: services/auth-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -315,7 +315,7 @@ services:
     rootDir: services/listing-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -329,7 +329,7 @@ services:
     rootDir: services/document-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -345,7 +345,7 @@ services:
     rootDir: services/transaction-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -359,7 +359,7 @@ services:
     rootDir: services/loan-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -375,7 +375,7 @@ services:
     rootDir: services/notification-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -392,7 +392,7 @@ services:
     rootDir: services/realtor-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -406,7 +406,7 @@ services:
     rootDir: services/analytics-service
     dockerfilePath: ./Dockerfile
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - fromGroup: maiplot-shared
@@ -437,7 +437,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -452,7 +452,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app beat --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -467,7 +467,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -484,7 +484,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -502,7 +502,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app beat --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -518,7 +518,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -537,7 +537,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app beat --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -556,7 +556,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -581,7 +581,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app worker --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
@@ -598,7 +598,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: celery -A app.celery_app beat --loglevel=INFO
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - fromGroup: maiplot-shared
       - fromGroup: maiplot-staging-fakes
