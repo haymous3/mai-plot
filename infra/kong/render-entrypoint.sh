@@ -113,4 +113,18 @@ done
   "They still carry docker-compose hostnames, which do not resolve on Render." \
   "Add a rewrite_upstream line here and a fromService entry in render.yaml."
 
+# --- 3. Port binding ---------------------------------------------------------
+#
+# Render assigns the port a web service must listen on via $PORT (10000 by
+# default) and routes external traffic there. Kong's image defaults to 8000, so
+# a hardcoded KONG_PROXY_LISTEN makes Render's edge probe a port nothing is
+# bound to: the deploy is marked failed for "no open port" even though Kong is
+# up, and every request returns Render's own 502 without reaching the gateway.
+#
+# Binding to $PORT keeps this correct whatever Render assigns. The 8000
+# fallback preserves docker-compose behaviour, where $PORT is unset.
+KONG_PROXY_LISTEN="0.0.0.0:${PORT:-8000}"
+export KONG_PROXY_LISTEN
+echo "kong: proxy listening on ${KONG_PROXY_LISTEN}"
+
 exec /docker-entrypoint.sh "$@"
