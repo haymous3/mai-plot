@@ -315,6 +315,19 @@ projects:
               - key: ANALYTICS_SERVICE_HOSTPORT
                 fromService: { type: pserv, name: analytics-service, property: hostport }
 
+              # Kong was OOM-killed on every deploy (exit 137), so no port ever
+              # opened and Render's scan timed out — which surfaced as
+              # "no open ports detected" rather than as a memory failure.
+              #
+              # nginx defaults to one worker per CPU and Kong loads a full Lua
+              # VM into each; the instance was starting 16 of them in 512 MB.
+              # One worker is ample for a staging gateway.
+              - key: KONG_NGINX_WORKER_PROCESSES
+                value: "1"
+              # Trim the shared Lua dictionaries too — these are preallocated
+              # per process, and the defaults assume a far larger instance.
+              - key: KONG_MEM_CACHE_SIZE
+                value: 32m
               - key: KONG_DATABASE
                 value: "off"
               - key: KONG_DECLARATIVE_CONFIG
