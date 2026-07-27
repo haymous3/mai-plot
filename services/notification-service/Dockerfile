@@ -13,6 +13,13 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY app/ ./app/
 RUN pip install .
+# Alembic config and migration scripts live BESIDE app/, so they are not
+# picked up by the COPY above and were absent from the image — `alembic
+# upgrade head` had no revisions to apply. Copied after the pip layer so
+# editing a migration does not invalidate the dependency install.
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
+
 
 EXPOSE 8000
 
