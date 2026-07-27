@@ -272,8 +272,10 @@ projects:
             # default port check (does 8000 accept connections?) is the right signal
             # for a proxy; upstream health is each pserv's own /health check.
             envVars:
-              - key: PORT
-                value: "8000"               # tells Render which port to route to
+              # No PORT / KONG_PROXY_LISTEN pinned here on purpose: Render assigns
+              # $PORT for a web service and routes to it, and render-entrypoint.sh
+              # binds Kong to whatever it assigns. Hardcoding 8000 made Render
+              # probe a port nothing was bound to -> deploy "failed", edge 502.
               # ⚠️ MANUAL — must equal the JWT_SECRET generated in maiplot-shared, or
               # Kong rejects every token the services sign ("Invalid signature") and
               # every authenticated route 401s. docker-entrypoint.sh substitutes this
@@ -317,8 +319,6 @@ projects:
                 value: "off"
               - key: KONG_DECLARATIVE_CONFIG
                 value: /etc/kong/kong.yml
-              - key: KONG_PROXY_LISTEN
-                value: 0.0.0.0:8000
               # Admin API bound to loopback — must never be publicly reachable.
               - key: KONG_ADMIN_LISTEN
                 value: 127.0.0.1:8001
