@@ -125,7 +125,9 @@ INSERT INTO bank_partners (id, name, short_code, api_base_url, loan_min_kobo, lo
 
 -- ---------------------------------------------------------------------------
 -- 3. Property listings
---    id d1..  ·  seller ids: s1=…21 s2=…22(PoA) s3=…23  ·  real seller reused
+--    id d1..  ·  seller ids: s1=…21 s2=…22(PoA) s3=…23  — demo users only.
+--    Never reference a real account's UUID here: those ids exist only in one
+--    developer's local database, so the FK fails on every other environment.
 --    Lagos (3.42,6.44) · Port Harcourt (7.01,4.82) · Abuja (7.49,9.06)
 -- ---------------------------------------------------------------------------
 INSERT INTO property_listings
@@ -136,7 +138,7 @@ INSERT INTO property_listings
  ('d1000000-0000-0000-0000-000000000004','d0000000-0000-0000-0000-000000000023','residential','4-Bed Duplex, Gwarinpa','Fully detached duplex with BQ, fitted kitchen.','7th Avenue, Gwarinpa', ST_SetSRID(ST_MakePoint(7.4090,9.1100),4326)::geography,'Abuja Municipal','FCT',420, 15000000000,'normal',NULL,'active','verified', 288, 6, now()+interval '90 days', now()-interval '14 days'),
  ('d1000000-0000-0000-0000-000000000005','d0000000-0000-0000-0000-000000000023','residential','2-Bed Apartment, Yaba','Renovated 2-bed, close to tech hub.','Herbert Macaulay Way, Yaba', ST_SetSRID(ST_MakePoint(3.3760,6.5090),4326)::geography,'Lagos Mainland','Lagos',95, 4500000000,'distress','30_days','under_offer','verified', 456, 11, now()+interval '30 days', now()-interval '20 days'),
  ('d1000000-0000-0000-0000-000000000006','d0000000-0000-0000-0000-000000000022','land','1000sqm Land, Ibeju-Lekki','Two plots, survey plan available, awaiting verification.','Eleko, Ibeju-Lekki', ST_SetSRID(ST_MakePoint(3.7010,6.4300),4326)::geography,'Ibeju-Lekki','Lagos',1000, 6000000000,'normal',NULL,'pending_review','pending', 0, 0, NULL, now()-interval '1 day'),
- ('d1000000-0000-0000-0000-000000000007','03831c21-9a0d-4e20-a574-7cf72d13dfa8','commercial','Office Space, Central Area','Grade-A office, 600sqm, central district.','Central Business District', ST_SetSRID(ST_MakePoint(7.4930,9.0360),4326)::geography,'Abuja Municipal','FCT',600, 9500000000,'normal',NULL,'active','verified', 175, 4, now()+interval '90 days', now()-interval '8 days'),
+ ('d1000000-0000-0000-0000-000000000007','d0000000-0000-0000-0000-000000000023','commercial','Office Space, Central Area','Grade-A office, 600sqm, central district.','Central Business District', ST_SetSRID(ST_MakePoint(7.4930,9.0360),4326)::geography,'Abuja Municipal','FCT',600, 9500000000,'normal',NULL,'active','verified', 175, 4, now()+interval '90 days', now()-interval '8 days'),
  ('d1000000-0000-0000-0000-000000000008','d0000000-0000-0000-0000-000000000021','residential','Bungalow, GRA Phase 2','3-bed bungalow, quiet neighbourhood.','GRA Phase 2, Port Harcourt', ST_SetSRID(ST_MakePoint(7.0060,4.8280),4326)::geography,'Port Harcourt','Rivers',260, 5500000000,'distress','7_days','active','verified', 198, 7, now()+interval '7 days',  now()-interval '2 days'),
  ('d1000000-0000-0000-0000-000000000009','d0000000-0000-0000-0000-000000000023','residential','Terrace, Ikoyi','Luxury 4-bed terrace, sold via Maiplot.','Bourdillon Road, Ikoyi', ST_SetSRID(ST_MakePoint(3.4380,6.4520),4326)::geography,'Eti-Osa','Lagos',380, 21000000000,'normal',NULL,'sold','verified', 812, 22, NULL, now()-interval '75 days'),
  ('d1000000-0000-0000-0000-00000000000a','d0000000-0000-0000-0000-000000000021','land','800sqm Land, Epe','Land near the expressway, listing paused by seller.','Epe Town', ST_SetSRID(ST_MakePoint(3.9830,6.5840),4326)::geography,'Epe','Lagos',800, 2800000000,'normal',NULL,'paused','verified', 44, 1, NULL, now()-interval '30 days'),
@@ -182,7 +184,7 @@ INSERT INTO saved_listings (id, buyer_id, listing_id) VALUES
  ('de000000-0000-0000-0000-000000000005','d0000000-0000-0000-0000-000000000012','d1000000-0000-0000-0000-000000000008'),
  ('de000000-0000-0000-0000-000000000006','d0000000-0000-0000-0000-000000000013','d1000000-0000-0000-0000-000000000001'),
  ('de000000-0000-0000-0000-000000000007','d0000000-0000-0000-0000-000000000013','d1000000-0000-0000-0000-000000000007'),
- ('de000000-0000-0000-0000-000000000008','4da5400f-d798-4663-99d7-7944f2b9dc11','d1000000-0000-0000-0000-000000000004');
+ ('de000000-0000-0000-0000-000000000008','d0000000-0000-0000-0000-000000000012','d1000000-0000-0000-0000-000000000004');
 
 INSERT INTO listing_interests (id, buyer_id, listing_id, message) VALUES
  ('df000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000012','d1000000-0000-0000-0000-000000000001','Is the price negotiable? Ready to move fast.'),
