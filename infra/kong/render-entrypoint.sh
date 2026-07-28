@@ -113,7 +113,56 @@ done
   "They still carry docker-compose hostnames, which do not resolve on Render." \
   "Add a rewrite_upstream line here and a fromService entry in render.yaml."
 
-# --- 3. Port binding ---------------------------------------------------------
+# --- 3. Admin IP allowlist (optional) ---------------------------------------
+#
+# CLAUDE.md §4 requires /admin/* to be JWT-gated AND IP-restricted. kong.yml
+# ships the local allowlist: loopback plus the RFC1918 ranges docker-compose
+# assigns on maiplot-net.
+#
+# That cannot work when the frontend is hosted on Vercel. lib/api.ts proxies
+# server-side, so admin requests arrive from a Vercel serverless function's
+# egress IP — public, and not stable enough to enumerate.
+#
+# ADMIN_IP_ALLOWLIST_EXTRA appends CIDRs to every admin route's allow list.
+# Unset (local, CI, production) changes nothing, so the committed restriction
+# stays the default and this cannot silently widen a real deployment. Staging
+# sets it to 0.0.0.0/0 — acceptable only because that environment holds no real
+# PII: maiplot-staging-fakes pins BVN/NIN/Paystack/bank/SMS/email to fakes.
+#
+# Production must keep this UNSET and use the committed allowlist (VPN/bastion
+# CIDRs), not this escape hatch.
+if [ -n "${ADMIN_IP_ALLOWLIST_EXTRA:-}" ]; then
+  grep -q 'name: ip-restriction' "$CONFIG" || die \
+    "ADMIN_IP_ALLOWLIST_EXTRA is set but $CONFIG has no ip-restriction plugin." \
+    "The admin routes would be served with no IP restriction at all."
+
+  # Each admin route has:   - name: ip-restriction
+  #                           config:
+  #                             allow:
+  #                               - 127.0.0.1
+  # Insert the extra CIDRs immediately after every `allow:` line, matching the
+  # indentation of the entry that follows it.
+  _extra_awk=$(printf '%s' "$ADMIN_IP_ALLOWLIST_EXTRA" | tr ',' ' ')
+  _tmp="$(mktemp)"
+  awk -v extra="$_extra_awk" '
+    { print }
+    /^[[:space:]]*allow:[[:space:]]*$/ {
+      match($0, /^[[:space:]]*/)
+      indent = substr($0, 1, RLENGTH)
+      n = split(extra, cidrs, " ")
+      for (i = 1; i <= n; i++)
+        if (cidrs[i] != "") print indent "  - " cidrs[i]
+    }
+  ' "$CONFIG" > "$_tmp"
+  cat "$_tmp" > "$CONFIG"
+  rm -f "$_tmp"
+
+  echo "kong.yml: admin IP allowlist extended with ${ADMIN_IP_ALLOWLIST_EXTRA}"
+else
+  echo "kong.yml: admin IP allowlist left at the committed (restricted) value"
+fi
+
+# --- 4. Port binding ---------------------------------------------------------
 #
 # Render assigns the port a web service must listen on via $PORT (10000 by
 # default) and routes external traffic there. Kong's image defaults to 8000, so

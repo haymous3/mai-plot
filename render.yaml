@@ -285,6 +285,24 @@ projects:
               - key: KONG_JWT_SECRET
                 sync: false
 
+              # Admin IP allowlist escape hatch — STAGING ONLY.
+              #
+              # CLAUDE.md §4 requires /admin/* to be JWT-gated AND IP-restricted,
+              # and kong.yml ships loopback + the RFC1918 ranges compose uses.
+              # The frontend runs on Vercel and proxies server-side, so admin
+              # requests arrive from a serverless egress IP: public, and not
+              # stable enough to enumerate. Without this the admin surface is
+              # untestable on staging.
+              #
+              # Safe here only because this environment holds no real PII —
+              # maiplot-staging-fakes pins BVN/NIN/Paystack/bank/SMS/email to
+              # fakes. Production MUST leave this unset and use the committed
+              # allowlist (VPN/bastion CIDRs). The entrypoint appends to the
+              # committed list rather than replacing it, so the restriction is
+              # never silently removed from the config.
+              - key: ADMIN_IP_ALLOWLIST_EXTRA
+                value: 0.0.0.0/0
+
               # Upstream addresses, injected from the services themselves.
               #
               # kong.yml ships compose hostnames (http://auth-service:8000), but

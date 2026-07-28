@@ -51,11 +51,40 @@ consumers:
 services:
 
   # =========================================================================
-  # Auth service — /auth/*
+  # Auth service — /auth/*  +  /admin/poa/* (PoA review queue)
   # =========================================================================
   - name: auth-service
     url: http://auth-service:8000
     routes:
+      # PoA review queue. Implemented in auth-service (SCRUM-56) — routes live
+      # in auth-service/app/routes/admin.py as /poa/queue,
+      # /poa/{user_id}/review and /poa/{user_id}/document — even though the
+      # documents themselves are a document-service concern. This route used
+      # to point at document-service, which has no /admin/poa handler at all;
+      # locally the admin UI reached auth-service directly on its own port so
+      # the misroute never showed up until the frontend was pointed at Kong.
+      - name: admin-poa
+        paths:
+          - /admin/poa
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: auth-public
         paths:
           - /auth/register
@@ -75,6 +104,15 @@ services:
           - /auth/token
           - /auth/verify
           - /auth/seller
+          # Onboarding funnel (SCRUM-132/152). All four are JWT-gated
+          # (Depends(get_current_user)) and were reachable in compose only
+          # because the frontend hit auth-service directly on port 8011 —
+          # through Kong they 404'd. /auth/seller was fixed at the time; these
+          # were missed.
+          - /auth/profile
+          - /auth/buyer/profile
+          - /auth/poa/upload
+          - /auth/set-password
         strip_path: false
         plugins:
           - name: rate-limiting
@@ -374,9 +412,11 @@ services:
               claims_to_verify:
                 - exp
               key_claim_name: iss
-      - name: admin-poa
+      # Admin document review queue — document-service mounts this at
+      # prefix="/admin/documents" (queue + per-document review).
+      - name: admin-documents
         paths:
-          - /admin/poa
+          - /admin/documents
         strip_path: false
         plugins:
           - name: rate-limiting
@@ -434,11 +474,35 @@ services:
               key_claim_name: iss
 
   # =========================================================================
-  # Realtor service — /realtors/*  +  /inspections/*
+  # Realtor service — /realtors/*  +  /inspections/*  +  /admin/realtors/*
   # =========================================================================
   - name: realtor-service
     url: http://realtor-service:8000
     routes:
+      # Admin realtor approval queue (SCRUM-62) — realtor-service mounts this
+      # at prefix="/admin/realtors": queue, review, government-id.
+      - name: admin-realtors
+        paths:
+          - /admin/realtors
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: realtors
         paths:
           - /realtors
