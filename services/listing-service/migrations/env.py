@@ -2,8 +2,8 @@
 
 DATABASE_URL is read from the environment so the same migration runs against
 dev (docker compose), test, staging, and prod without code changes. The
-version table name is derived from the service directory so each service has
-its own migration history while sharing one PostgreSQL database.
+version table name comes from `service_name` in alembic.ini so each service
+has its own migration history while sharing one PostgreSQL database.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import os
 from logging.config import fileConfig
-from pathlib import Path
 from typing import Any
 
 from alembic import context
@@ -29,11 +28,18 @@ if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set; alembic needs it to connect to PostgreSQL.")
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-# Derive service identity from the directory name (services/<svc>/migrations/env.py).
-# Each service gets its own version table so eight independent migration histories
-# coexist in one database (e.g. alembic_version_auth, alembic_version_listing).
-SERVICE_DIR_NAME = Path(__file__).resolve().parent.parent.name
-SERVICE_NAME = SERVICE_DIR_NAME.removesuffix("-service")
+# Service identity is declared in alembic.ini, NOT derived from the directory
+# name. The Dockerfile copies migrations/ to /app/migrations/, so a path-based
+# derivation resolves to "app" inside every container and silently collapses all
+# eight migration histories into one shared version table — one service then
+# reads another's revision id as its own. alembic.ini ships per service in the
+# image, so it is the one identity that survives the copy.
+SERVICE_NAME = (config.get_main_option("service_name") or "").strip()
+if not SERVICE_NAME:
+    raise RuntimeError(
+        "service_name is not set in alembic.ini; without it every service would "
+        "share the alembic_version table and corrupt each other's history."
+    )
 VERSION_TABLE = f"alembic_version_{SERVICE_NAME.replace('-', '_')}"
 
 # Raw SQL migrations via op.execute() and op.create_table() — no SQLAlchemy
