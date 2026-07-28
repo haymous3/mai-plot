@@ -32,6 +32,12 @@ _QUARTERS = [
 
 
 def upgrade() -> None:
+    # PostGIS supplies the GEOGRAPHY type used by property_listings.location.
+    # Locally it arrives via infra/docker/postgres/init.sql, but managed
+    # providers (Render, RDS) have no init-script hook — so the migration
+    # bootstraps it. IF NOT EXISTS keeps this a no-op where init.sql ran.
+    op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+
     # property_listings — partitioned by created_at so query planner only
     # scans the relevant slice. Composite primary key is required for range
     # partitioning. PostGIS GEOGRAPHY column supports the GIST geo index.
