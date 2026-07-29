@@ -90,6 +90,13 @@ services:
           - /auth/register
           - /auth/login
           - /auth/otp
+          # Email magic-link verification (SCRUM-152/154) MUST be public — a
+          # user cannot hold a JWT before they have verified. This more
+          # specific prefix beats /auth/verify in auth-protected (Kong
+          # resolves longest-prefix first) and covers /auth/verify/email and
+          # /auth/verify/email/resend, while /auth/verify/bvn and
+          # /auth/verify/nin stay JWT-gated there.
+          - /auth/verify/email
         strip_path: false
         plugins:
           - name: rate-limiting
@@ -102,6 +109,9 @@ services:
         paths:
           - /auth/logout
           - /auth/token
+          # Covers /auth/verify/bvn and /auth/verify/nin, which are correctly
+          # JWT-gated. NOT /auth/verify/email — that is carved out as public in
+          # auth-public above (SCRUM-161); do not remove it from there.
           - /auth/verify
           - /auth/seller
           # Onboarding funnel (SCRUM-132/152). All four are JWT-gated
