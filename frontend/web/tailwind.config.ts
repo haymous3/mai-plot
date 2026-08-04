@@ -90,6 +90,16 @@ const config: Config = {
         },
       },
 
+      /**
+       * The design sits on a 4px grid, which Tailwind's default scale already
+       * follows — 44px padding is `p-11`, 36px gap is `gap-9`, 48px controls
+       * are `h-12`. Only these two steps are missing from the default scale.
+       */
+      spacing: {
+        15: '3.75rem', // 60px — stat-card icon chip (measured y213-272)
+        18: '4.5rem', // 72px — header height, search input height
+      },
+
       borderRadius: {
         // Measured 16px via corner probe (inset 16 -> 0 over y172-188).
         // Same as Tailwind's `rounded-2xl`; named so intent is explicit.

@@ -37,7 +37,7 @@ function daysLeft(iso: string | null): number | null {
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-ink-300/25 bg-white p-6 ${className}`}>
+    <section className={`rounded-card bg-surface-card p-8 shadow-card ${className}`}>
       {children}
     </section>
   );
@@ -74,7 +74,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
   const badges = (
     <>
       {listing.sale_type === 'distress' && (
-        <span className="w-fit rounded-full bg-red-500 px-2.5 py-1 text-xs font-semibold text-white">
+        <span className="w-fit rounded-full bg-status-urgent px-2.5 py-1 text-xs font-semibold text-white">
           🔥 Distress Sale
         </span>
       )}

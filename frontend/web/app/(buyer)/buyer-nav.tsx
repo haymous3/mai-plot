@@ -11,18 +11,31 @@ function greeting(): string {
   return 'Good evening';
 }
 
-/** Shared buyer header (SCRUM-95): brand · greeting · notification bell ·
- * account menu. Rendered on every buyer page via the (buyer) layout. */
+/**
+ * Shared buyer header (SCRUM-95): brand · greeting · notification bell ·
+ * account menu. Rendered on every buyer page via the (buyer) layout.
+ *
+ * Measured against the design (SCRUM-166): 72px tall, 44px inline padding,
+ * `#144735` fill and a 1px `#e5e7eb` bottom rule. The fill is `brand-header`,
+ * not `emerald-deep` — the buyer top bar is the one place the design uses a
+ * lighter green than the `#0f3d2e` primary. Seller and realtor have a sidebar
+ * instead, so this token is used nowhere else.
+ *
+ * The greeting is centred absolutely rather than by `justify-between`, which
+ * only centres it when both flanking groups happen to be the same width.
+ */
 export function BuyerNav() {
   return (
-    <header className="flex items-center justify-between bg-emerald-deep px-6 py-3">
+    <header className="relative flex h-18 items-center justify-between border-b border-line bg-brand-header px-11">
       <Link href={BUYER_HOME} className="flex items-center gap-2.5">
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 font-display text-sm text-bone">
           M
         </span>
         <span className="font-display text-lg tracking-tight text-bone">Maiplot</span>
       </Link>
-      <p className="hidden text-sm text-bone/80 sm:block">{greeting()}</p>
+      <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">
+        {greeting()}
+      </p>
       <div className="flex items-center gap-1.5">
         <NotificationBell />
         <AvatarMenu />
