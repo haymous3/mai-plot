@@ -55,7 +55,7 @@ export function PropertyCard({
     return (
       <Link
         href={href}
-        className="group block overflow-hidden rounded-card bg-surface-card shadow-card transition hover:shadow-md"
+        className="group block overflow-hidden rounded-card border border-line/50 bg-surface-card transition hover:border-line"
       >
         <div className="relative">
           <Thumb item={item} className="h-40 w-full" />
@@ -101,7 +101,7 @@ export function PropertyCard({
   return (
     <Link
       href={href}
-      className="flex gap-4 rounded-card bg-surface-card p-3 shadow-card transition hover:shadow-md"
+      className="flex gap-4 rounded-card border border-line/50 bg-surface-card p-3 transition hover:border-line"
     >
       <div className="relative flex-none">
         <Thumb item={item} className="h-24 w-32 rounded-lg" />

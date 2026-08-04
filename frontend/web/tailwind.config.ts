@@ -101,37 +101,44 @@ const config: Config = {
       },
 
       borderRadius: {
-        // Measured 16px via corner probe (inset 16 -> 0 over y172-188).
-        // Same as Tailwind's `rounded-2xl`; named so intent is explicit.
-        card: '1rem',
-      },
-
-      boxShadow: {
         /**
-         * Cards in the design have a shadow and NO border. The edge is a ~2px
-         * luminance ramp (#f5f5f6 -> #f8f8f9 -> #ffffff), not a hard 1px line.
-         *
-         * The ramp constrains the shadow but does not fully determine it —
-         * exact blur/spread/opacity needs Figma (SCRUM-165). This is the
-         * closest fit to the measured ramp.
+         * 20px. Corrected in SCRUM-169 from a pixel-measured 16px — the corner
+         * probe found where pure #ffffff begins, which undercounts the arc.
+         * Figma node 228:20937 gives `rounded-[21.194px]`; at the frame's
+         * 1.0597 scale factor that is exactly 20px.
          */
-        card: '0 1px 2px 0 rgb(16 24 40 / 0.05)',
+        card: '1.25rem',
       },
 
       /**
-       * INFERRED, not measured. Ink heights are facts; converting them to font
-       * sizes needs the typeface's cap-height and descender ratios, and the
-       * typeface is not identified — a PNG cannot report a font family.
+       * NOTE: there is deliberately no `shadow-card`.
        *
-       * Defined so the scale exists, but deliberately NOT applied to any
-       * component yet. Confirm against Figma before sweeping usage, or wrong
-       * sizes get baked into 76 files.
+       * SCRUM-163 concluded from pixel measurement that cards use a shadow and
+       * no border. That was WRONG. Figma (228:20937) gives:
+       *   border-[1.06px] border-[rgba(229,231,235,0.5)] border-solid
+       * — a 1px #e5e7eb border at 50% opacity, and no shadow at all.
+       *
+       * A half-opacity border composited over white produces a soft two-pixel
+       * ramp (#f5f5f6 -> #f8f8f9) that is indistinguishable from a small shadow
+       * in a raster. Border-vs-shadow cannot be resolved from a PNG — take it
+       * from Figma. Cards use `border border-line/50`.
+       */
+
+      /**
+       * Confirmed against Figma in SCRUM-169. Values are the frame's numbers
+       * divided by its 1.0597 scale factor. The PNG-inferred sizes were close
+       * (~18 / ~40 vs actual 17.5 / 37.5), so the inference held up.
+       *
+       * The design specifies Inter throughout. The app keeps Archivo + Fraunces
+       * — a deliberate brand choice, and Inter may simply be the designer's
+       * default. Sizes are corrected here; the typeface is not, pending
+       * confirmation with the designer.
        */
       fontSize: {
-        stat: ['2.5rem', { lineHeight: '1.1' }], // ~40px — 29px ink, no descender
-        'heading-lg': ['2.5rem', { lineHeight: '1.15' }], // ~40px — 38px ink with descender
-        'field': ['1.25rem', { lineHeight: '1.4' }], // ~20px — search placeholder
-        'label-lg': ['1.125rem', { lineHeight: '1.4' }], // ~18px — card labels
+        stat: ['2.375rem', { lineHeight: '2.8125rem' }], // 38/45 — 228:20943
+        'heading-lg': ['2.375rem', { lineHeight: '2.8125rem' }],
+        field: ['1.25rem', { lineHeight: '1.4' }], // 20px — search placeholder, 228:20974
+        'label-lg': ['1.125rem', { lineHeight: '1.5625rem' }], // 18/25 — 228:20941
       },
     },
   },

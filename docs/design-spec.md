@@ -1,10 +1,94 @@
 # Design Spec
 
-Values extracted from the Figma PNG exports in `frontend/web/design/` (gitignored — see [`design-index.md`](./design-index.md)).
+> ## ⚠️ Read this first — the buyer values below have been superseded
+>
+> This document was originally derived by **measuring PNG exports**. The Figma file is now available (`mvrQtmad3nf82ZalpUtFcY`), and several measured values turned out to be **wrong**. The corrected buyer values are in [Figma-derived values](#figma-derived-values-scrum-169), which take precedence over anything in the pixel-derived sections.
+>
+> **The seller and realtor tickets must measure from Figma directly.** Do not inherit the pixel-derived numbers below.
+>
+> ### The one thing a raster cannot tell you
+>
+> SCRUM-163 concluded that cards use **a shadow and no border**, because the card edge is a soft two-pixel ramp (`#f5f5f6` → `#f8f8f9` → `#ffffff`). Figma shows the truth:
+>
+> ```
+> border-[1.06px] border-[rgba(229,231,235,0.5)] border-solid
+> ```
+>
+> A **1px `#e5e7eb` border at 50% opacity**, and no shadow. A half-opacity border composited over white produces exactly that ramp — it is *indistinguishable* from a small shadow in pixel data.
+>
+> **A luminance ramp does not prove a shadow.** Border-vs-shadow, and any other property involving alpha, must come from Figma. The measurement was sound; the inference was not.
 
-Every value below was **measured**, not estimated by eye, using the tools in [`scripts/design/`](../scripts/design/). Each row cites its source file and the coordinates the measurement came from, so anything here can be re-derived or challenged.
+Values below were measured using the tools in [`scripts/design/`](../scripts/design/), each citing its source file and coordinates so it can be re-derived or challenged.
 
-Produced for SCRUM-163. Consumed by SCRUM-164 (tokens), SCRUM-165 (components), SCRUM-166/167 (buyer screens).
+Produced for SCRUM-163, corrected by SCRUM-169. Consumed by SCRUM-164 (tokens), SCRUM-165 (components), SCRUM-166/167 (buyer screens).
+
+---
+
+## Figma-derived values (SCRUM-169)
+
+**These supersede the pixel-derived measurements.** Source: file `mvrQtmad3nf82ZalpUtFcY`, buyer dashboard frame `228:20933`.
+
+### The 1.0597 scale factor
+
+The frame is `1562×4526` — byte-identical to the PNG, which independently confirms the 1× export conclusion. But every value inside it is exactly **1.0597×** a round number:
+
+| Figma | ÷ 1.0597 | |
+|---|---|---|
+| `1.06px` | **1** | border |
+| `21.194px` | **20** | radius |
+| `63.582px` | **60** | icon chip |
+| `26.493px` | **25** | label line-height |
+| `47.687px` | **45** | value line-height |
+| `31.797px` | **30** | grid gutter |
+| `79.478px` | **75** | stat row height |
+| `15.896px` | **15** | chip padding |
+
+The artboard was authored at **1474px** and scaled to 1562. Implement the **intrinsic** (÷1.0597) values — a `21.194px` radius is an artifact of that resize, not a design decision.
+
+### Buyer values
+
+| Property | Figma | Implement | Node |
+|---|---|---|---|
+| Card border | `rgba(229,231,235,0.5)` 1.06px | **1px `#e5e7eb` @ 50%** | 228:20937 |
+| Card shadow | none | **none** | 228:20937 |
+| Card radius | 21.194px | **20px** | 228:20937 |
+| Card padding | 32.851px | **31px** (`p-8` = 32, within 1px) | 228:20937 |
+| Card box | 471.2 × 145.2 | 3-col grid, not fixed | 228:20936 |
+| Grid gutter | 31.797px | **30px** (`gap-8` = 32, on grid) | x=0/503/1006 |
+| Icon chip | 63.582px, radius 21.194 | **60px**, radius 20px | 228:20944 |
+| Chip tint (emerald) | `rgba(15,61,46,0.08)` | **`#0f3d2e` @ 8%** | 228:20944 |
+| Chip tint (gold) | `rgba(201,166,70,0.08)` | **`#c9a646` @ 8%** | 228:20966 |
+| Stat label | 18.545 / lh 26.493, `#6b7280` | **18px / lh 25px** | 228:20941 |
+| Stat value | 39.739 / lh 47.687, `#1a1a1a` | **38px / lh 45px** | 228:20943 |
+| Label→value gap | 5.299px | **5px** | 228:20939 |
+| Search input | 76px, radius 21.194, bg `#fafafa`, border `#e5e7eb` | **72px**, radius 20px | 228:20973 |
+| Placeholder | `rgba(26,26,26,0.5)`, 21.194px | **`#1a1a1a` @ 50%**, 20px | 228:20974 |
+| Filters button | 78px | **72px** (+2 = border) | 228:20978 |
+| Quick-filter pill | 48px, Inter SemiBold 18.545 | **48px, 18px semibold** | 228:20999 |
+| Active pill fill | `#0f3d2e`, fully rounded | ✅ already correct | 228:20999 |
+
+### Typeface
+
+Every Maiplot frame specifies **Inter**. The app uses **Archivo + Fraunces**.
+
+Product decision: **keep Archivo + Fraunces.** The pairing was a deliberate brand choice, and Inter may simply be the designer's default. Type **sizes** are corrected; the **typeface** is not, pending confirmation with the designer.
+
+### Buyer body text is `#1a1a1a`
+
+Figma confirms the buyer surface genuinely uses `#1a1a1a`, not `#101828`. The two-palette finding was real, and SCRUM-164's standardisation moved buyer text off its designed value. **Open decision:** single standardised ramp (consistency) vs per-surface text colours (fidelity).
+
+### What Figma does *not* provide
+
+- **No Variables.** The account is on **Starter**, where they are gated — `get_variable_defs` returns `{}`.
+- **No Maiplot interaction states.** The file has a component library at `72:8209`–`72:8610` with `state=hover`, `State=focused`, `State=disabled` — but it is a stock shadcn/ui kit in slate (`#94a3b8`, `#cbd5e1`, `#0f172a`) that the Maiplot screens **never instance**: 315 of 324 instances sit in the `1:*` range (mobile chrome from the unrelated *Ridex* and *Foodio* projects sharing the file), and **zero** in the Maiplot sections. Maiplot screens are static frames.
+
+So **SCRUM-165 remains blocked** — hover, focus-visible and disabled do not exist for Maiplot in any source.
+
+### Working with this file
+
+`get_metadata` on page `0:1` returns **4.7M characters**. Query it with grep/python; do not read it. Node tags are `<frame|text|symbol|instance|section id=`.
+
+Sections: `111:7003` Ridex · `111:7004` Foodio · `125:6328` Onboarding+auth · `142:7930` Buyers Dashboard · `240:314` Seller side · `272:4048` Realtor dashboard · `312:379` Admin Portal.
 
 ---
 
@@ -136,17 +220,17 @@ Buyer uses a top bar; seller and realtor use a left sidebar. There is no single 
 
 ### Cards
 
-| Property | Value | Source |
+> ⚠️ **This table is superseded.** See [Figma-derived values](#figma-derived-values-scrum-169). Radius is 20px not 16px, gap is 30px not 36px, and the card has a **border, not a shadow**. Kept as a record of what the raster method produced and where it went wrong.
+
+| Property | Pixel-derived | Actual (Figma) |
 |---|---|---|
-| Corner radius | **16px** | `buyer` tile y0, corner probe y172–188: inset 16→0 |
-| Box height (stat card) | **144px** | interior `#ffffff` y172–313 = 142px + 2px edge |
-| Grid gap | **36px** | row 243: card1 ends 511, card2 starts 547 |
-| Border | **none** | no 1px run at any card edge |
-| Shadow | **~2px soft ramp** | row 243: `#f5f5f6` x42 → `#f8f8f9` x43 → `#ffffff` x44 |
+| Corner radius | 16px — corner probe y172–188 | **20px** ❌ |
+| Box height (stat card) | 144px — interior y172–313 + 2px edge | 145.2 ✅ |
+| Grid gap | 36px — card1 ends 511, card2 starts 547 | **30px** ❌ |
+| Border | none | **1px `#e5e7eb` @ 50%** ❌ |
+| Shadow | ~2px ramp `#f5f5f6`→`#f8f8f9`→`#ffffff` | **none** ❌ |
 
-**Cards use a shadow, not a border.** The edge is a two-step luminance ramp, not a hard 1px line. This is invisible by eye at normal zoom and is the single most likely thing to be implemented wrong.
-
-Exact shadow blur/spread/opacity cannot be derived from a ramp this short — **needs Figma**. The ramp is consistent with a small, low-opacity shadow in the `0 1px 2px rgba(16,24,40,0.05)` family.
+The radius probe undercounted because it looked for where *pure* `#ffffff` begins, which sits inside the arc. The border/shadow call is explained in the banner at the top — a translucent border and a small shadow are the same pixels.
 
 ### Controls
 

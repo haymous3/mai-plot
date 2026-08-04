@@ -66,7 +66,7 @@ export function BuyerOffersList({ offers }: { offers: BuyerOffer[] }) {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-1 rounded-card bg-surface-card p-1 shadow-card">
+      <div className="flex flex-wrap gap-1 rounded-card border border-line/50 bg-surface-card p-1">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -90,7 +90,7 @@ export function BuyerOffersList({ offers }: { offers: BuyerOffer[] }) {
           </div>
         ) : (
           visible.map((o) => (
-            <div key={o.id} className="rounded-card bg-surface-card p-4 shadow-card">
+            <div key={o.id} className="rounded-card border border-line/50 bg-surface-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <a href={`/listings/${o.listing_id}`} className="font-medium text-ink-900 hover:underline">

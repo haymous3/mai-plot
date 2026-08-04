@@ -49,11 +49,12 @@ export function SearchFilterBar() {
     <button
       type="button"
       onClick={() => setQuick(v)}
-      // Pills are 48px tall, matching the primary button. Active fill is the
-      // #0f3d2e primary; inactive is `surface-muted` (#f3f4f6) — measured at
-      // row 535 of the dashboard export.
-      className={`h-12 rounded-full px-5 text-sm font-medium transition ${
-        quick === v ? 'bg-emerald-deep text-bone' : 'bg-surface-muted text-ink-700 hover:bg-ink-300/40'
+      // 48px tall, fully rounded. Label is 18px semibold, not 14px medium —
+      // Figma node 228:20999 gives Inter Semi Bold 18.545px at the frame's
+      // 1.0597 scale, i.e. 17.5px. Active fill is the #0f3d2e primary;
+      // inactive is `surface-muted` (#f3f4f6).
+      className={`h-12 rounded-full px-5 text-label-lg font-semibold transition ${
+        quick === v ? 'bg-emerald-deep text-white' : 'bg-surface-muted text-ink-700 hover:bg-ink-300/40'
       }`}
     >
       {label}
@@ -63,13 +64,14 @@ export function SearchFilterBar() {
   return (
     // Search card is p-10 (40px) with a 36px gap to the quick-filter row —
     // measured from the card bounds y360-600 on the dashboard export.
-    <div className="rounded-card bg-surface-card p-10 shadow-card">
+    <div className="rounded-card border border-line/50 bg-surface-card p-10">
       <div className="flex gap-4">
         <div className="relative flex-1">
           <span aria-hidden className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-ink-300">
             🔍
           </span>
-          {/* 72px tall on a #fafafa fill — measured y403-475 at column x=1000. */}
+          {/* 72px tall, #fafafa fill, 1px #e5e7eb border, 20px radius —
+              Figma 228:20973 (76px / rounded-[21.194px] at 1.0597 scale). */}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
