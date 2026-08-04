@@ -55,13 +55,16 @@ export function PropertyCard({
     return (
       <Link
         href={href}
-        className="group block overflow-hidden rounded-xl border border-ink-300/25 bg-white transition hover:border-ink-500/40 hover:shadow-sm"
+        className="group block overflow-hidden rounded-card bg-surface-card shadow-card transition hover:shadow-md"
       >
         <div className="relative">
           <Thumb item={item} className="h-40 w-full" />
           <div className="absolute left-2 top-2 flex flex-col gap-1">
+            {/* Measured #fb2c36. That is Tailwind v4's red-500; this project is
+                v3.4, where `bg-red-500` is #ef4444 — a visibly different red.
+                Hence the explicit `status-urgent` token. */}
             {item.sale_type === 'distress' && (
-              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+              <span className="rounded-full bg-status-urgent px-2 py-0.5 text-[11px] font-semibold text-white">
                 🔥 {saleLabel(item.sale_type)}
               </span>
             )}
@@ -98,13 +101,13 @@ export function PropertyCard({
   return (
     <Link
       href={href}
-      className="flex gap-4 rounded-xl border border-ink-300/25 bg-white p-3 transition hover:border-ink-500/40 hover:shadow-sm"
+      className="flex gap-4 rounded-card bg-surface-card p-3 shadow-card transition hover:shadow-md"
     >
       <div className="relative flex-none">
         <Thumb item={item} className="h-24 w-32 rounded-lg" />
         <span
           className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-            item.sale_type === 'distress' ? 'bg-red-500 text-white' : 'bg-ink-900/80 text-white'
+            item.sale_type === 'distress' ? 'bg-status-urgent text-white' : 'bg-ink-900/80 text-white'
           }`}
         >
           {saleLabel(item.sale_type)}

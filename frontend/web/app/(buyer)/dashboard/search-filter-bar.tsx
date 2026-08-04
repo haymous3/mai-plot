@@ -49,8 +49,11 @@ export function SearchFilterBar() {
     <button
       type="button"
       onClick={() => setQuick(v)}
-      className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-        quick === v ? 'bg-emerald-deep text-bone' : 'bg-bone text-ink-700 hover:bg-ink-300/20'
+      // Pills are 48px tall, matching the primary button. Active fill is the
+      // #0f3d2e primary; inactive is `surface-muted` (#f3f4f6) — measured at
+      // row 535 of the dashboard export.
+      className={`h-12 rounded-full px-5 text-sm font-medium transition ${
+        quick === v ? 'bg-emerald-deep text-bone' : 'bg-surface-muted text-ink-700 hover:bg-ink-300/40'
       }`}
     >
       {label}
@@ -58,33 +61,36 @@ export function SearchFilterBar() {
   );
 
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-4">
-      <div className="flex gap-2">
+    // Search card is p-10 (40px) with a 36px gap to the quick-filter row —
+    // measured from the card bounds y360-600 on the dashboard export.
+    <div className="rounded-card bg-surface-card p-10 shadow-card">
+      <div className="flex gap-4">
         <div className="relative flex-1">
-          <span aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300">
+          <span aria-hidden className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-ink-300">
             🔍
           </span>
+          {/* 72px tall on a #fafafa fill — measured y403-475 at column x=1000. */}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && apply({ q: q.trim() || null })}
             placeholder="Search by location, property type, or price range…"
-            className="w-full rounded-lg border border-ink-300/50 bg-white py-2.5 pl-10 pr-3.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+            className="h-18 w-full rounded-card border border-line bg-surface-page pl-14 pr-5 text-field text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
           />
         </div>
         <button
           type="button"
           onClick={() => setShowFilters((s) => !s)}
-          className={`flex items-center gap-1.5 rounded-lg px-4 text-sm font-medium transition ${
-            showFilters ? 'bg-emerald-deep text-bone' : 'border border-ink-300/50 text-ink-700 hover:border-ink-500'
+          className={`flex h-18 items-center gap-1.5 rounded-card px-6 text-sm font-medium transition ${
+            showFilters ? 'bg-emerald-deep text-bone' : 'border border-line text-ink-700 hover:border-ink-500'
           }`}
         >
           ⚙ Filters
         </button>
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <span className="text-xs text-ink-400">Quick filters:</span>
+      <div className="mt-9 flex items-center gap-3">
+        <span className="text-sm text-ink-500">Quick filters:</span>
         {quickBtn('all', 'All Properties')}
         {quickBtn('verified', 'Verified Only')}
         {quickBtn('distress', 'Distress Sales')}

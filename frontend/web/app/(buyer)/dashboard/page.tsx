@@ -48,14 +48,25 @@ async function fetchFeed(url: string): Promise<FeedResponse | null> {
   return result.ok ? result.data : null;
 }
 
+/**
+ * Cards in the design have a shadow and NO border — the edge is a ~2px
+ * luminance ramp (#f5f5f6 -> #f8f8f9 -> #ffffff), not a hard 1px line
+ * (SCRUM-163). Every card in the app previously had this inverted.
+ *
+ * Measured: 144px box, 16px radius, 32px padding, 60px icon chip centred
+ * vertically against the card rather than aligned to the padding box.
+ */
 function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="flex items-start justify-between rounded-2xl border border-ink-300/25 bg-white px-5 py-4">
+    <div className="flex items-center justify-between rounded-card bg-surface-card p-8 shadow-card">
       <div>
-        <p className="text-xs text-ink-500">{label}</p>
-        <p className="mt-1 font-display text-2xl text-ink-900">{value}</p>
+        <p className="text-label-lg text-ink-500">{label}</p>
+        <p className="mt-3 font-display text-stat text-ink-900">{value}</p>
       </div>
-      <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-emerald-deep">
+      <span
+        aria-hidden
+        className="flex h-15 w-15 flex-none items-center justify-center rounded-card bg-surface-tint text-emerald-deep"
+      >
         {icon}
       </span>
     </div>
@@ -63,7 +74,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 }
 
 function SidebarCard({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-ink-300/25 bg-white p-5">{children}</div>;
+  return <div className="rounded-card bg-surface-card p-8 shadow-card">{children}</div>;
 }
 
 export default async function BuyerDashboardPage({
@@ -93,14 +104,26 @@ export default async function BuyerDashboardPage({
   const activeDeals = (dealsRes.ok ? dealsRes.data.data : []).filter((d) => isDealActive(d.stage));
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    /*
+     * The design is full-bleed with 44px inline padding, not width-constrained:
+     * content spans x44-1517 of a 1562px artboard. `max-w-6xl` (1152px) was
+     * roughly 320px narrower than intended. Capped at the artboard width so it
+     * matches the design exactly at 1562 and does not stretch indefinitely on
+     * ultrawide displays.
+     *
+     * Stat cards are a 3-column grid with a 36px gap — NOT fixed 468px widths.
+     * The measured 468/36/467 sequence is fractional grid maths
+     * (44 + 467.33*3 + 36*2 + 44 = 1562), so hardcoding 468 would not hold at
+     * any other viewport width.
+     */
+    <main className="mx-auto max-w-[1562px] px-11 py-8">
+      <div className="grid grid-cols-1 gap-9 sm:grid-cols-3">
         <StatCard label="Active Listings" value={String(activeListings)} icon="📈" />
         <StatCard label="Verified This Week" value={PLACEHOLDER_STATS.verifiedPct} icon="🛡" />
         <StatCard label="Avg. Deal Time" value={PLACEHOLDER_STATS.avgDealDays} icon="⏱" />
       </div>
 
-      <div className="mt-5">
+      <div className="mt-9">
         <SearchFilterBar />
       </div>
 

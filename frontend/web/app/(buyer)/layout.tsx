@@ -14,7 +14,10 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
   if (!buyerAccessToken()) redirect(BUYER_LOGIN);
 
   return (
-    <div className="min-h-screen bg-bone">
+    // Page background is `surface-page` (#f9fafb), not `bone` — measured on the
+    // buyer dashboard export (SCRUM-166). `bone` (#f6f4ee) is the warm brand
+    // cream, used for panels, not as the app canvas.
+    <div className="min-h-screen bg-surface-page">
       <OfflineBanner />
       <BuyerNav />
       {children}

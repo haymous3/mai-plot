@@ -20,7 +20,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 export function LoanStatusCard({ loan }: { loan: BuyerLoan }) {
   const badge = STATUS[loan.status] ?? { label: loan.status, cls: 'bg-ink-300/20 text-ink-600' };
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
+    <div className="rounded-card bg-surface-card p-8 shadow-card">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 font-semibold text-ink-900">💳 Loan Status</p>
         <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>

@@ -20,7 +20,7 @@ export function RecentlyViewedCard() {
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
+    <div className="rounded-card bg-surface-card p-8 shadow-card">
       <p className="font-semibold text-ink-900">Recently Viewed</p>
       <ul className="mt-3 space-y-3">
         {items.slice(0, 5).map((item) => (
