@@ -121,7 +121,7 @@ export function BuyerOffersList({ offers }: { offers: BuyerOffer[] }) {
                       type="button"
                       disabled={busyId === o.id}
                       onClick={() => respond(o, 'accept')}
-                      className="rounded-lg bg-emerald-accent px-4 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                      className="rounded-lg bg-emerald-deep px-4 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
                     >
                       ✓ Accept Counter
                     </button>

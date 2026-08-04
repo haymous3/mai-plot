@@ -65,7 +65,7 @@ export default async function SellerDocumentsPage() {
             <ul className="mt-2 space-y-1 text-xs text-ink-600">
               {REQUIREMENTS.map((r) => (
                 <li key={r} className="flex gap-2">
-                  <span className="text-emerald-accent">•</span> {r}
+                  <span className="text-emerald-deep">•</span> {r}
                 </li>
               ))}
             </ul>

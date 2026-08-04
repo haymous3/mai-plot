@@ -114,7 +114,7 @@ export function PropertyCard({
         <div className="flex items-center gap-1.5">
           <p className="truncate font-medium text-ink-900">{item.title}</p>
           {verified && (
-            <span aria-label="Verified" className="text-emerald-accent">
+            <span aria-label="Verified" className="text-emerald-deep">
               ✓
             </span>
           )}

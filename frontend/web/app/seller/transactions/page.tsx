@@ -100,7 +100,7 @@ export default async function SellerTransactionsPage() {
             <ul className="mt-2 space-y-1.5 text-xs text-ink-700">
               {RESPONSIBILITIES.map((r) => (
                 <li key={r} className="flex gap-2">
-                  <span className="text-emerald-accent">✓</span> {r}
+                  <span className="text-emerald-deep">✓</span> {r}
                 </li>
               ))}
             </ul>

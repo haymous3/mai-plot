@@ -18,7 +18,7 @@ export function SaleProgress({ stage, compact }: { stage: string; compact?: bool
               <span
                 className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-xs ${
                   isDone
-                    ? 'bg-emerald-accent text-white'
+                    ? 'bg-emerald-deep text-white'
                     : isCurrent
                       ? 'border-2 border-amber-500 text-amber-600'
                       : 'border border-ink-300/50 text-ink-300'
@@ -26,7 +26,7 @@ export function SaleProgress({ stage, compact }: { stage: string; compact?: bool
               >
                 {isDone ? '✓' : isCurrent ? '◷' : ''}
               </span>
-              {!last && <span className={`w-px flex-1 ${isDone ? 'bg-emerald-accent' : 'bg-ink-300/30'} ${compact ? 'min-h-5' : 'min-h-7'}`} />}
+              {!last && <span className={`w-px flex-1 ${isDone ? 'bg-emerald-deep' : 'bg-ink-300/30'} ${compact ? 'min-h-5' : 'min-h-7'}`} />}
             </div>
             <div className={last ? 'pb-0' : 'pb-4'}>
               <p className={`text-sm ${isDone || isCurrent ? 'font-medium text-ink-900' : 'text-ink-500'}`}>

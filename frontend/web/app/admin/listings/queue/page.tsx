@@ -57,7 +57,7 @@ export default async function ListingQueuePage({
           </div>
           {result.ok && (
             <span className="inline-flex items-center gap-2 rounded-full bg-emerald-deep/5 px-3.5 py-1.5 text-sm font-medium text-emerald-deep ring-1 ring-emerald-deep/15">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-accent" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-deep" />
               {result.data.pagination.total} awaiting review
             </span>
           )}

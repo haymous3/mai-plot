@@ -118,7 +118,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
                   <Metric label="Asking Price" value={formatNaira(o.asking_price_kobo)} />
                   <div>
                     <p className="text-xs text-ink-500">Difference</p>
-                    <p className={`font-medium ${diff.up ? 'text-emerald-accent' : 'text-red-600'}`}>
+                    <p className={`font-medium ${diff.up ? 'text-emerald-deep' : 'text-red-600'}`}>
                       {diff.up ? '▲' : '▼'} {diff.text}
                     </p>
                   </div>
@@ -152,7 +152,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
                             type="button"
                             disabled={busyId === o.id}
                             onClick={() => act(o, 'accept')}
-                            className="rounded-lg bg-emerald-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                            className="rounded-lg bg-emerald-deep px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
                           >
                             ✓ Accept Offer
                           </button>

@@ -38,7 +38,7 @@ export function AvatarMenu() {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-bone/90 transition hover:bg-white/10"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-accent text-sm font-semibold text-white">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-deep text-sm font-semibold text-white">
           👤
         </span>
         <span className="text-left text-xs leading-tight">

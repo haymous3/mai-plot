@@ -96,7 +96,7 @@ export function VerifyEmailClient() {
 function Icon({ tone, children }: { tone: 'neutral' | 'success' | 'warn' | 'error'; children: React.ReactNode }) {
   const toneClass = {
     neutral: 'bg-ink-300/20 text-ink-500',
-    success: 'bg-emerald-accent/12 text-emerald-deep',
+    success: 'bg-emerald-deep/12 text-emerald-deep',
     warn: 'bg-amber-100 text-amber-700',
     error: 'bg-red-50 text-red-700',
   }[tone];
@@ -234,7 +234,7 @@ function ResendBox() {
   // address had an account (mirrors the backend's no-enumeration response).
   if (status === 'done') {
     return (
-      <p className="mt-6 rounded-md bg-emerald-accent/10 px-3.5 py-3 text-sm text-emerald-deep">
+      <p className="mt-6 rounded-md bg-emerald-deep/10 px-3.5 py-3 text-sm text-emerald-deep">
         If that email needs verification, we&rsquo;ve sent a new link. Check your inbox — and your
         spam or promotions folder.
       </p>

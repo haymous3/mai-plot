@@ -118,7 +118,7 @@ export function FinancingCalculator({
                 <p className="text-sm text-ink-500">Finance up to 50% of the property value</p>
               </div>
               {eligible && (
-                <span className="rounded-full bg-emerald-accent/10 px-3 py-1 text-xs font-semibold text-emerald-accent">
+                <span className="rounded-full bg-emerald-deep/10 px-3 py-1 text-xs font-semibold text-emerald-deep">
                   ✓ Eligible
                 </span>
               )}
@@ -218,7 +218,7 @@ export function FinancingCalculator({
                         <span
                           className={`flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
                             active
-                              ? 'border-emerald-accent bg-emerald-accent text-white'
+                              ? 'border-emerald-deep bg-emerald-deep text-white'
                               : 'border-ink-300'
                           }`}
                           aria-hidden
@@ -318,7 +318,7 @@ function InfoPanel({ title, items }: { title: string; items: string[] }) {
       <ul className="mt-4 space-y-2 text-sm text-ink-500">
         {items.map((i) => (
           <li key={i} className="flex gap-2">
-            <span className="text-emerald-accent" aria-hidden>
+            <span className="text-emerald-deep" aria-hidden>
               ✓
             </span>
             {i}
