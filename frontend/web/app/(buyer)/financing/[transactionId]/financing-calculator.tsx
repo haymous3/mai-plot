@@ -67,7 +67,7 @@ export function FinancingCalculator({
 
   return (
     <div>
-      <header className="border-b border-ink-300/30 bg-white px-6 py-4">
+      <header className="border-b border-line bg-surface-card px-11 py-4">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-deep text-bone">
             <WalletIcon />
@@ -79,10 +79,10 @@ export function FinancingCalculator({
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[1.7fr_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           {/* Property summary */}
-          <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+          <section className="rounded-card bg-surface-card p-8 shadow-card">
             <h2 className="font-display text-lg text-ink-900">Property Summary</h2>
             <div className="mt-4 flex gap-4">
               {summary.property.primary_image_url ? (
@@ -111,7 +111,7 @@ export function FinancingCalculator({
           </section>
 
           {/* Calculator */}
-          <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+          <section className="rounded-card bg-surface-card p-8 shadow-card">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="font-display text-lg text-ink-900">Calculate Your Loan</h2>
@@ -189,7 +189,7 @@ export function FinancingCalculator({
           </section>
 
           {/* Bank selection */}
-          <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+          <section className="rounded-card bg-surface-card p-8 shadow-card">
             <h2 className="font-display text-lg text-ink-900">Select Your Bank</h2>
             {partners.length === 0 ? (
               <p className="mt-4 text-sm text-ink-500">No bank partners are available right now.</p>
@@ -264,7 +264,7 @@ export function FinancingCalculator({
             ]}
           />
 
-          <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+          <section className="rounded-card bg-surface-card p-8 shadow-card">
             <h3 className="font-medium text-ink-900">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
@@ -311,7 +311,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function InfoPanel({ title, items }: { title: string; items: string[] }) {
   return (
-    <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+    <section className="rounded-card bg-surface-card p-8 shadow-card">
       <h3 className="flex items-center gap-2 font-medium text-ink-900">
         <ShieldIcon /> {title}
       </h3>

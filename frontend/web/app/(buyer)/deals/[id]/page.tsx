@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: 'Deal Progress · Maiplot' };
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-ink-300/25 bg-white p-6 ${className}`}>
+    <section className={`rounded-card bg-surface-card p-8 shadow-card ${className}`}>
       {children}
     </section>
   );
@@ -39,7 +39,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
   const escrowSecured = ['payment_held', 'title_held', 'completed'].includes(s.stage);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-6">
+    <main className="mx-auto max-w-5xl px-11 py-6">
       <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-900">
         ← Back
       </Link>
@@ -64,7 +64,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
                 {active ? 'Active Deal' : 'Closed'}
               </span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-ink-300/20 pt-4">
+            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-line pt-4">
               <div>
                 <p className="text-xs text-ink-500">Your Bid</p>
                 <p className="mt-0.5 font-display text-xl text-emerald-deep">

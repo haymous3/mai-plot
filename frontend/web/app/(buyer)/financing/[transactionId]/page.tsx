@@ -49,7 +49,7 @@ export default async function FinancingPage({
   // Already applied — send them to their application status instead.
   if (summary.existing_loan) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16 text-center">
+      <main className="mx-auto max-w-2xl px-11 py-16 text-center">
         <h1 className="font-display text-2xl text-ink-900">You&rsquo;ve already applied</h1>
         <p className="mt-3 text-sm text-ink-500">
           You have a loan application in progress for this property.
@@ -69,7 +69,7 @@ export default async function FinancingPage({
 
 function ErrorCard({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <main className="mx-auto max-w-2xl px-11 py-16">
       <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
         {children}
       </div>

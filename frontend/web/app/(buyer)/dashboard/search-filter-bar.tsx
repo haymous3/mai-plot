@@ -97,7 +97,7 @@ export function SearchFilterBar() {
       </div>
 
       {showFilters && (
-        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-ink-300/20 pt-4 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-4">
           <label className="text-xs font-medium text-ink-700">
             Location (state)
             <input
