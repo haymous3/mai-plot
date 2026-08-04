@@ -49,23 +49,41 @@ async function fetchFeed(url: string): Promise<FeedResponse | null> {
 }
 
 /**
- * Cards in the design have a shadow and NO border — the edge is a ~2px
- * luminance ramp (#f5f5f6 -> #f8f8f9 -> #ffffff), not a hard 1px line
- * (SCRUM-163). Every card in the app previously had this inverted.
+ * Values from Figma node 228:20937, divided by the frame's 1.0597 scale factor.
  *
- * Measured: 144px box, 16px radius, 32px padding, 60px icon chip centred
+ * The card edge is a 1px `#e5e7eb` border at 50% opacity and NO shadow.
+ * SCRUM-163 read the resulting soft two-pixel ramp as a shadow — a translucent
+ * border and a small shadow are indistinguishable in a raster. Corrected in
+ * SCRUM-169.
+ *
+ * 20px radius, 31px padding (p-8 = 32, within 1px), 60px chip centred
  * vertically against the card rather than aligned to the padding box.
+ *
+ * Chip tint is the stat's own accent at 8% opacity — emerald for listings and
+ * verification, gold for deal time (`rgba(201,166,70,0.08)` at node 228:20966).
  */
-function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  accent = 'emerald',
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  accent?: 'emerald' | 'gold';
+}) {
   return (
-    <div className="flex items-center justify-between rounded-card bg-surface-card p-8 shadow-card">
+    <div className="flex items-center justify-between rounded-card border border-line/50 bg-surface-card p-8">
       <div>
         <p className="text-label-lg text-ink-500">{label}</p>
-        <p className="mt-3 font-display text-stat text-ink-900">{value}</p>
+        <p className="mt-1.5 font-display text-stat text-ink-900">{value}</p>
       </div>
       <span
         aria-hidden
-        className="flex h-15 w-15 flex-none items-center justify-center rounded-card bg-surface-tint text-emerald-deep"
+        className={`flex h-15 w-15 flex-none items-center justify-center rounded-card ${
+          accent === 'gold' ? 'bg-status-gold/[0.08] text-status-gold' : 'bg-emerald-deep/[0.08] text-emerald-deep'
+        }`}
       >
         {icon}
       </span>
@@ -74,7 +92,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 }
 
 function SidebarCard({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-card bg-surface-card p-8 shadow-card">{children}</div>;
+  return <div className="rounded-card border border-line/50 bg-surface-card p-8">{children}</div>;
 }
 
 export default async function BuyerDashboardPage({
@@ -105,22 +123,21 @@ export default async function BuyerDashboardPage({
 
   return (
     /*
-     * The design is full-bleed with 44px inline padding, not width-constrained:
-     * content spans x44-1517 of a 1562px artboard. `max-w-6xl` (1152px) was
-     * roughly 320px narrower than intended. Capped at the artboard width so it
-     * matches the design exactly at 1562 and does not stretch indefinitely on
-     * ultrawide displays.
+     * Full-bleed with 44px inline padding, not width-constrained — the design's
+     * content spans 1477 of a 1562px frame. `max-w-6xl` (1152px) was ~320px
+     * narrower than intended. Capped at the frame width so it matches at 1562
+     * and does not stretch indefinitely on ultrawide displays.
      *
-     * Stat cards are a 3-column grid with a 36px gap — NOT fixed 468px widths.
-     * The measured 468/36/467 sequence is fractional grid maths
-     * (44 + 467.33*3 + 36*2 + 44 = 1562), so hardcoding 468 would not hold at
-     * any other viewport width.
+     * A 3-column grid, NOT fixed widths: Figma places the cards at x=0/503/1006
+     * at 471.2 wide, i.e. a 31.8px gutter — 30px once the frame's 1.0597 scale
+     * is removed, so `gap-8` (32px) on the 4px grid. Hardcoding 471 would not
+     * hold at any other viewport.
      */
     <main className="mx-auto max-w-[1562px] px-11 py-8">
-      <div className="grid grid-cols-1 gap-9 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
         <StatCard label="Active Listings" value={String(activeListings)} icon="📈" />
         <StatCard label="Verified This Week" value={PLACEHOLDER_STATS.verifiedPct} icon="🛡" />
-        <StatCard label="Avg. Deal Time" value={PLACEHOLDER_STATS.avgDealDays} icon="⏱" />
+        <StatCard label="Avg. Deal Time" value={PLACEHOLDER_STATS.avgDealDays} icon="⏱" accent="gold" />
       </div>
 
       <div className="mt-9">

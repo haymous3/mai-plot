@@ -44,7 +44,7 @@ export function TransactionHistory({ payments }: { payments: WalletPayment[] }) 
   );
 
   return (
-    <section className="rounded-card bg-surface-card p-8 shadow-card">
+    <section className="rounded-card border border-line/50 bg-surface-card p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-xl text-ink-900">Transaction History</h2>
         <div className="flex gap-2">

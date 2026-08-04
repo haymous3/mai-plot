@@ -37,7 +37,7 @@ function daysLeft(iso: string | null): number | null {
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-card bg-surface-card p-8 shadow-card ${className}`}>
+    <section className={`rounded-card border border-line/50 bg-surface-card p-8 ${className}`}>
       {children}
     </section>
   );

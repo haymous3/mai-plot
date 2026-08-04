@@ -73,7 +73,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
   ];
   return (
     <>
-      <section className="rounded-card bg-surface-card px-6 py-10 text-center shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card px-6 py-10 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-ink-300 text-ink-500" aria-hidden>
           ⏱
         </div>
@@ -85,7 +85,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
         <p className="mt-4 text-xs text-ink-500">⏱ Estimated time: 3-5 days</p>
       </section>
 
-      <section className="rounded-card bg-surface-card p-8 shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card p-8">
         <h3 className="font-medium text-ink-900">Application Details</h3>
         <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <Detail label="Application ID" value={appId(loan.loan_id)} />
@@ -95,7 +95,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
         </dl>
       </section>
 
-      <section className="rounded-card bg-surface-card p-8 shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card p-8">
         <h3 className="font-medium text-ink-900">Review Progress</h3>
         <ul className="mt-4 space-y-4">
           {steps.map(([title, desc, state]) => (
@@ -161,7 +161,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
 
   return (
     <>
-      <section className="rounded-card bg-surface-card px-6 py-10 text-center shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card px-6 py-10 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl text-emerald-deep" aria-hidden>
           ✓
         </div>
@@ -175,7 +175,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
         )}
       </section>
 
-      <section className="rounded-card bg-surface-card p-8 shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card p-8">
         <h3 className="font-medium text-ink-900">Loan Details</h3>
         <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <Detail label="Approved Amount" value={formatNaira(principal)} strong />
@@ -187,7 +187,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
         </dl>
       </section>
 
-      <section className="rounded-card bg-surface-card p-8 shadow-card">
+      <section className="rounded-card border border-line/50 bg-surface-card p-8">
         <h3 className="font-medium text-ink-900">Next Steps</h3>
         <ol className="mt-4 space-y-4">
           {steps.map(([title, desc], i) => (
@@ -209,7 +209,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
 
 function RejectedView() {
   return (
-    <section className="rounded-card bg-surface-card px-6 py-10 text-center shadow-card">
+    <section className="rounded-card border border-line/50 bg-surface-card px-6 py-10 text-center">
       <h2 className="font-display text-xl text-ink-900">Application Not Approved</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
         Unfortunately your loan application was not approved this time. Our team will reach out with

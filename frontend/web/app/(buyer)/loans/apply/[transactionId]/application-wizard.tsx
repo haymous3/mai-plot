@@ -340,7 +340,7 @@ export function ApplicationWizard({
             </ul>
           </section>
 
-          <section className="rounded-card bg-surface-card p-8 shadow-card">
+          <section className="rounded-card border border-line/50 bg-surface-card p-8">
             <h3 className="font-medium text-ink-900">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
@@ -376,7 +376,7 @@ function inputClass(hasError: boolean): string {
 function StepIndicator({ step }: { step: number }) {
   const steps = ['Personal Info', 'Documents', 'Review'];
   return (
-    <div className="rounded-card bg-surface-card p-8 shadow-card">
+    <div className="rounded-card border border-line/50 bg-surface-card p-8">
       <ol className="flex items-center">
         {steps.map((label, i) => {
           const n = i + 1;
@@ -418,7 +418,7 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-card bg-surface-card p-8 shadow-card">
+    <section className="rounded-card border border-line/50 bg-surface-card p-8">
       <h2 className="font-display text-lg text-ink-900">{title}</h2>
       {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       <div className="mt-5 space-y-5">{children}</div>

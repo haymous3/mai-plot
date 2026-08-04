@@ -79,7 +79,7 @@ export default async function WalletPage() {
         />
       </div>
 
-      <section className="mt-8 rounded-card bg-surface-card p-8 shadow-card">
+      <section className="mt-8 rounded-card border border-line/50 bg-surface-card p-8">
         <h2 className="font-display text-xl text-ink-900">Active Property Payments</h2>
         <div className="mt-4 space-y-4">
           {!summary || summary.active_payments.length === 0 ? (
