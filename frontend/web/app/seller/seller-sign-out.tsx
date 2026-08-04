@@ -21,13 +21,19 @@ export function SellerSignOut() {
   }
 
   return (
+    // Matches the sidebar nav item (44px, 12px radius, 16px inset) but in
+    // `status-danger` — the design gives Logout #e7000b, node 276:434.
+    // `text-red-600` was #dc2626, a different red.
     <button
       type="button"
       onClick={signOut}
       disabled={busy}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+      className="flex h-11 w-full items-center gap-3 rounded-xl px-4 text-sm font-semibold text-status-danger transition hover:bg-status-danger/5 disabled:opacity-60"
     >
-      <span aria-hidden>⎋</span> {busy ? 'Logging out…' : 'Logout'}
+      <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center">
+        ⎋
+      </span>
+      {busy ? 'Logging out…' : 'Logout'}
     </button>
   );
 }
