@@ -18,7 +18,7 @@ export default async function BuyerOffersPage() {
   const offers = result.ok ? result.data.data : [];
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl px-11 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl text-emerald-deep">My Offers</h1>

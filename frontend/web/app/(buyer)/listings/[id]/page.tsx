@@ -118,7 +118,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
             <p className="mt-4 font-display text-3xl text-emerald-deep">
               {formatNaira(listing.asking_price_kobo)}
             </p>
-            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ink-300/20 pt-4 sm:grid-cols-3">
+            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 sm:grid-cols-3">
               <div>
                 <p className="text-xs text-ink-500">Property Type</p>
                 <p className="mt-0.5 font-medium capitalize text-ink-900">{listing.property_type}</p>

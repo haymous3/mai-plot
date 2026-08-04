@@ -56,7 +56,7 @@ export default async function WalletPage() {
   const payments = paymentsRes.ok ? paymentsRes.data.data : [];
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main className="mx-auto max-w-5xl px-11 py-8">
       <h1 className="font-display text-3xl text-ink-900">My Wallet</h1>
       <p className="mt-1 text-sm text-ink-500">Track your escrow, payments, and property investments</p>
 
@@ -79,7 +79,7 @@ export default async function WalletPage() {
         />
       </div>
 
-      <section className="mt-8 rounded-2xl border border-ink-300/25 bg-white p-6">
+      <section className="mt-8 rounded-card bg-surface-card p-8 shadow-card">
         <h2 className="font-display text-xl text-ink-900">Active Property Payments</h2>
         <div className="mt-4 space-y-4">
           {!summary || summary.active_payments.length === 0 ? (

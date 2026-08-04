@@ -17,7 +17,7 @@ export default async function LoanStatusPage({ params }: { params: { loanId: str
 
   if (!result.ok) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
+      <main className="mx-auto max-w-2xl px-11 py-16">
         <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
           {result.status === 404
             ? 'We could not find this loan application.'

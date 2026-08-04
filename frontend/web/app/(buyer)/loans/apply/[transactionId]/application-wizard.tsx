@@ -172,7 +172,7 @@ export function ApplicationWizard({
 
   return (
     <div>
-      <header className="flex items-center justify-between border-b border-ink-300/30 bg-white px-6 py-4">
+      <header className="flex items-center justify-between border-b border-line bg-surface-card px-11 py-4">
         <button
           type="button"
           onClick={() => (step > 1 ? setStep(step - 1) : router.push(`/financing/${transactionId}`))}
@@ -184,7 +184,7 @@ export function ApplicationWizard({
         <span className="w-12" />
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[1.7fr_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           <StepIndicator step={step} />
 
@@ -254,7 +254,7 @@ export function ApplicationWizard({
                 error={docsTouched && !files.passport ? 'Passport photo is required' : undefined}
                 onSelect={(f) => setFiles((s) => ({ ...s, passport: f }))}
               />
-              <div className="flex items-center justify-between border-t border-ink-300/20 pt-5">
+              <div className="flex items-center justify-between border-t border-line pt-5">
                 <button type="button" onClick={() => setStep(1)} className="text-sm font-medium text-ink-700">
                   ← Back
                 </button>
@@ -308,7 +308,7 @@ export function ApplicationWizard({
                 </p>
               )}
 
-              <div className="flex items-center justify-between border-t border-ink-300/20 pt-5">
+              <div className="flex items-center justify-between border-t border-line pt-5">
                 <button type="button" onClick={() => setStep(2)} className="text-sm font-medium text-ink-700">
                   ← Back
                 </button>
@@ -340,7 +340,7 @@ export function ApplicationWizard({
             </ul>
           </section>
 
-          <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+          <section className="rounded-card bg-surface-card p-8 shadow-card">
             <h3 className="font-medium text-ink-900">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
@@ -376,7 +376,7 @@ function inputClass(hasError: boolean): string {
 function StepIndicator({ step }: { step: number }) {
   const steps = ['Personal Info', 'Documents', 'Review'];
   return (
-    <div className="rounded-xl border border-ink-300/25 bg-white px-6 py-5">
+    <div className="rounded-card bg-surface-card p-8 shadow-card">
       <ol className="flex items-center">
         {steps.map((label, i) => {
           const n = i + 1;
@@ -418,7 +418,7 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-ink-300/25 bg-white p-6">
+    <section className="rounded-card bg-surface-card p-8 shadow-card">
       <h2 className="font-display text-lg text-ink-900">{title}</h2>
       {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       <div className="mt-5 space-y-5">{children}</div>
