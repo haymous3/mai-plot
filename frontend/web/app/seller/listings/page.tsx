@@ -33,7 +33,7 @@ function ListingCard({ item }: { item: SellerListingItem }) {
   const badge = STATUS_BADGE[item.status] ?? { label: item.status, cls: 'bg-ink-300/20 text-ink-600' };
   const doc = DOC_BADGE[item.doc_verification_status];
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-4">
+    <div className="rounded-2xl border border-line bg-surface-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

@@ -51,7 +51,7 @@ export default async function SellerOverviewPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_300px]">
         <div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2">
             <Stat icon="🏠" value={String(activeListings)} label="Active Listings" />
             <Stat icon="🤝" value={String(offers.length)} label="Offers Received" hint={`${pendingOffers} pending`} />
             <Stat icon="📈" value={String(dealsInProgress)} label="Deals in Progress" />
@@ -63,9 +63,9 @@ export default async function SellerOverviewPage() {
             />
           </div>
 
-          <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+          <section className="mt-6 rounded-2xl border border-line bg-surface-card p-6">
             <h2 className="font-display text-lg text-ink-900">Recent Activity</h2>
-            <ul className="mt-3 divide-y divide-ink-300/15">
+            <ul className="mt-3 divide-y divide-line">
               {activity.length === 0 ? (
                 <li className="py-8 text-center text-sm text-ink-500">No recent activity yet.</li>
               ) : (
@@ -102,14 +102,14 @@ export default async function SellerOverviewPage() {
             </Link>
           </div>
 
-          <div className="rounded-2xl bg-bone/70 p-5">
+          <div className="rounded-2xl bg-surface-warm p-6">
             <p className="text-sm font-medium text-ink-800">Performance Insights</p>
             <Insight label="Total Views" value={totalViews.toLocaleString()} />
             <Insight label="Saves / Bookmarks" value={String(totalSaves)} />
             <Insight label="Offer Conversion" value={`${conversion.toFixed(1)}%`} />
           </div>
 
-          <div className="rounded-2xl border border-emerald-deep/15 bg-emerald-deep/5 p-5">
+          <div className="rounded-2xl border border-emerald-deep/15 bg-emerald-deep/5 p-6">
             <p className="text-sm font-medium text-emerald-deep">Pro Tip</p>
             <p className="mt-1 text-xs text-ink-700">
               Verified listings with complete documentation perform 3× better. Upload all documents to
@@ -122,20 +122,34 @@ export default async function SellerOverviewPage() {
   );
 }
 
+/**
+ * Seller stat card — Figma node 276:458. This artboard is 1:1, so the values
+ * are literal.
+ *
+ * Note the divergences from the buyer stat card: seller uses a SOLID #e5e7eb
+ * border and a 16px radius, where buyer uses #e5e7eb at 50% and 20px. The value
+ * is also green (#0f3d2e) at 30px here, versus #1a1a1a at 38px on buyer. The
+ * two surfaces are genuinely styled differently — do not unify them.
+ *
+ * 24px padding, 48px icon chip at 12px radius on emerald 8%, value 30/36,
+ * label 14/20 in ink-600, hint 12/16 in ink-500.
+ */
 function Stat({ icon, value, label, hint }: { icon: string; value: string; label: string; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">{icon}</span>
-      <p className="mt-3 font-display text-3xl text-ink-900">{value}</p>
-      <p className="text-sm text-ink-600">{label}</p>
-      {hint && <p className="mt-0.5 text-xs text-emerald-deep">↗ {hint}</p>}
+    <div className="rounded-2xl border border-line bg-surface-card p-6">
+      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-deep/[0.08] text-lg">
+        {icon}
+      </span>
+      <p className="mt-4 font-display text-3xl font-bold leading-9 text-emerald-deep">{value}</p>
+      <p className="mt-1 text-sm leading-5 text-ink-600">{label}</p>
+      {hint && <p className="mt-2 text-xs leading-4 text-ink-500">↗ {hint}</p>}
     </div>
   );
 }
 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-3 flex items-center justify-between border-t border-ink-300/15 pt-2 first:border-0 first:pt-0">
+    <div className="mt-3 flex items-center justify-between border-t border-line pt-2 first:border-0 first:pt-0">
       <span className="text-xs text-ink-600">{label}</span>
       <span className="text-sm font-semibold text-ink-900">{value}</span>
     </div>
