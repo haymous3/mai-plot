@@ -162,7 +162,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
   return (
     <>
       <section className="rounded-xl border border-ink-300/25 bg-white px-6 py-10 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl text-emerald-accent" aria-hidden>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl text-emerald-deep" aria-hidden>
           ✓
         </div>
         <h2 className="mt-3 font-display text-xl text-ink-900">Loan Approved!</h2>

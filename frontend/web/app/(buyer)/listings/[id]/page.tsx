@@ -164,7 +164,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                       className="flex items-center justify-between rounded-lg bg-bone px-4 py-3"
                     >
                       <span className="flex items-center gap-2 text-sm text-ink-900">
-                        <span className={verified ? 'text-emerald-accent' : 'text-ink-300'}>
+                        <span className={verified ? 'text-emerald-deep' : 'text-ink-300'}>
                           {verified ? '✓' : '○'}
                         </span>
                         {DOC_LABELS[d.document_type] ?? d.document_type}
@@ -220,7 +220,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                 </div>
                 <div className="mt-1 h-1.5 rounded-full bg-ink-300/30">
                   <div
-                    className="h-1.5 rounded-full bg-emerald-accent"
+                    className="h-1.5 rounded-full bg-emerald-deep"
                     style={{ width: `${listing.seller.trust_score}%` }}
                   />
                 </div>

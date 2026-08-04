@@ -278,7 +278,7 @@ export function ApplicationWizard({
                 <ul className="space-y-2 text-sm text-ink-700">
                   {[files.bankStatement, files.employment, files.passport].map((f, i) => (
                     <li key={i} className="flex items-center gap-2">
-                      <span className="text-emerald-accent" aria-hidden>✓</span>
+                      <span className="text-emerald-deep" aria-hidden>✓</span>
                       {f?.name ?? '—'}
                     </li>
                   ))}

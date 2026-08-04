@@ -225,7 +225,7 @@ function RoleSelect({
                   <span className="mt-1 block text-xs text-ink-500">{r.desc}</span>
                 </span>
                 {active && (
-                  <span className="ml-3 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-accent text-xs text-white">
+                  <span className="ml-3 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-deep text-xs text-white">
                     ✓
                   </span>
                 )}
@@ -294,7 +294,7 @@ function AccountStep({
   const passed = Object.values(checks).filter(Boolean).length;
   const strong = passed === 3;
   const strength = passed <= 1 ? 'Weak' : passed === 2 ? 'Medium' : 'Strong';
-  const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-accent';
+  const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-deep';
 
   const local = phone.replace(/\D/g, '').replace(/^0/, '');
   const nameOk = fullName.trim().length > 0;
@@ -420,7 +420,7 @@ function AccountStep({
 
 function Requirement({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
-    <p className={`flex items-center gap-2 ${ok ? 'text-emerald-accent' : 'text-ink-500'}`}>
+    <p className={`flex items-center gap-2 ${ok ? 'text-emerald-deep' : 'text-ink-500'}`}>
       <span aria-hidden>{ok ? '✓' : '○'}</span>
       {children}
     </p>

@@ -89,7 +89,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
             </div>
             <div className="mt-3 h-2 rounded-full bg-ink-300/25">
               <div
-                className="h-2 rounded-full bg-emerald-accent"
+                className="h-2 rounded-full bg-emerald-deep"
                 style={{ width: `${(completed / DEAL_TOTAL_STEPS) * 100}%` }}
               />
             </div>

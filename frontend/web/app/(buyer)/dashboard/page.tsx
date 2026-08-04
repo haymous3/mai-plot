@@ -224,7 +224,7 @@ export default async function BuyerDashboardPage({
                       </div>
                       <div className="mt-1.5 h-1 rounded-full bg-ink-300/30">
                         <div
-                          className="h-1 rounded-full bg-emerald-accent"
+                          className="h-1 rounded-full bg-emerald-deep"
                           style={{
                             width: `${(dealCompletedSteps(d.stage) / DEAL_TOTAL_STEPS) * 100}%`,
                           }}

@@ -128,7 +128,7 @@ function Stat({ icon, value, label, hint }: { icon: string; value: string; label
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">{icon}</span>
       <p className="mt-3 font-display text-3xl text-ink-900">{value}</p>
       <p className="text-sm text-ink-600">{label}</p>
-      {hint && <p className="mt-0.5 text-xs text-emerald-accent">↗ {hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-emerald-deep">↗ {hint}</p>}
     </div>
   );
 }
