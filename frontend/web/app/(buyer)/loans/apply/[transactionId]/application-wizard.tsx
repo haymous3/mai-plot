@@ -176,11 +176,11 @@ export function ApplicationWizard({
         <button
           type="button"
           onClick={() => (step > 1 ? setStep(step - 1) : router.push(`/financing/${transactionId}`))}
-          className="text-sm text-ink-500 transition hover:text-ink-900"
+          className="text-sm text-ink-500 transition hover:text-ink-buyer"
         >
           ← Back
         </button>
-        <h1 className="font-display text-lg text-ink-900">Loan Application</h1>
+        <h1 className="font-display text-lg text-ink-buyer">Loan Application</h1>
         <span className="w-12" />
       </header>
 
@@ -295,7 +295,7 @@ export function ApplicationWizard({
                 />
               </ReviewBlock>
               <ReviewBlock title="Property">
-                <p className="text-sm font-medium text-ink-900">{summary.property.title}</p>
+                <p className="text-sm font-medium text-ink-buyer">{summary.property.title}</p>
                 <p className="text-xs text-ink-500">
                   {summary.property.lga}, {summary.property.state}
                 </p>
@@ -341,7 +341,7 @@ export function ApplicationWizard({
           </section>
 
           <section className="rounded-card border border-line/50 bg-surface-card p-8">
-            <h3 className="font-medium text-ink-900">What Happens Next?</h3>
+            <h3 className="font-medium text-ink-buyer">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
                 ['Application Review', "We'll verify your documents"],
@@ -354,7 +354,7 @@ export function ApplicationWizard({
                     {i + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-ink-900">{t}</p>
+                    <p className="text-sm font-medium text-ink-buyer">{t}</p>
                     <p className="text-xs text-ink-500">{d}</p>
                   </div>
                 </li>
@@ -368,7 +368,7 @@ export function ApplicationWizard({
 }
 
 function inputClass(hasError: boolean): string {
-  return `w-full rounded-md border bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:ring-2 focus:ring-emerald-accent/20 ${
+  return `w-full rounded-md border bg-white px-3.5 py-2.5 text-sm text-ink-buyer outline-none transition placeholder:text-ink-300 focus:ring-2 focus:ring-emerald-accent/20 ${
     hasError ? 'border-red-400 focus:border-red-400' : 'border-ink-300/60 focus:border-emerald-accent'
   }`;
 }
@@ -392,7 +392,7 @@ function StepIndicator({ step }: { step: number }) {
                 >
                   {done ? '✓' : n}
                 </span>
-                <span className={`mt-1 text-xs ${active ? 'text-ink-900' : 'text-ink-500'}`}>
+                <span className={`mt-1 text-xs ${active ? 'text-ink-buyer' : 'text-ink-500'}`}>
                   Step {n}
                 </span>
                 <span className="text-xs text-ink-500">{label}</span>
@@ -419,7 +419,7 @@ function StepCard({
 }) {
   return (
     <section className="rounded-card border border-line/50 bg-surface-card p-8">
-      <h2 className="font-display text-lg text-ink-900">{title}</h2>
+      <h2 className="font-display text-lg text-ink-buyer">{title}</h2>
       {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       <div className="mt-5 space-y-5">{children}</div>
     </section>
@@ -496,7 +496,7 @@ function UploadSlot({
 function ReviewBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg bg-bone px-5 py-4">
-      <h3 className="font-medium text-ink-900">{title}</h3>
+      <h3 className="font-medium text-ink-buyer">{title}</h3>
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -508,7 +508,7 @@ function ReviewGrid({ rows }: { rows: [string, string][] }) {
       {rows.map(([label, value]) => (
         <div key={label}>
           <dt className="text-xs text-ink-500">{label}</dt>
-          <dd className="mt-0.5 font-medium text-ink-900">{value}</dd>
+          <dd className="mt-0.5 font-medium text-ink-buyer">{value}</dd>
         </div>
       ))}
     </dl>

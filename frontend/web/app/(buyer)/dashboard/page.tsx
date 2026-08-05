@@ -77,7 +77,7 @@ function StatCard({
     <div className="flex items-center justify-between rounded-card border border-line/50 bg-surface-card p-8">
       <div>
         <p className="text-label-lg text-ink-500">{label}</p>
-        <p className="mt-1.5 font-display text-stat text-ink-900">{value}</p>
+        <p className="mt-1.5 font-display text-stat text-ink-buyer">{value}</p>
       </div>
       <span
         aria-hidden
@@ -150,7 +150,7 @@ export default async function BuyerDashboardPage({
             <section>
               <div className="flex items-end justify-between">
                 <div>
-                  <h2 className="font-display text-2xl text-ink-900">🔥 Urgent Deals</h2>
+                  <h2 className="font-display text-2xl text-ink-buyer">🔥 Urgent Deals</h2>
                   <p className="text-xs text-ink-500">Below market value · Limited time</p>
                 </div>
                 <Link
@@ -174,7 +174,7 @@ export default async function BuyerDashboardPage({
           )}
 
           <section className="mt-8">
-            <h2 className="font-display text-2xl text-ink-900">All Properties</h2>
+            <h2 className="font-display text-2xl text-ink-buyer">All Properties</h2>
             <p className="text-xs text-ink-500">{activeListings} listings available</p>
             <div className="mt-4 space-y-3">
               {!all ? (
@@ -213,7 +213,7 @@ export default async function BuyerDashboardPage({
           {latestLoan && <LoanStatusCard loan={latestLoan} />}
 
           <SidebarCard>
-            <p className="flex items-center gap-2 font-semibold text-ink-900">💳 Get Financing</p>
+            <p className="flex items-center gap-2 font-semibold text-ink-buyer">💳 Get Financing</p>
             <p className="mt-1 text-xs text-ink-500">Pre-approval for up to 50% of property value.</p>
             <Link
               href="/dashboard"
@@ -225,7 +225,7 @@ export default async function BuyerDashboardPage({
 
           <SidebarCard>
             <div className="flex items-center justify-between">
-              <p className="flex items-center gap-2 font-semibold text-ink-900">💼 Your Active Deals</p>
+              <p className="flex items-center gap-2 font-semibold text-ink-buyer">💼 Your Active Deals</p>
               {activeDeals.length > 0 && (
                 <span className="rounded-full bg-emerald-deep/10 px-2 py-0.5 text-xs font-medium text-emerald-deep">
                   {activeDeals.length} active
@@ -250,7 +250,7 @@ export default async function BuyerDashboardPage({
                       href={`/deals/${d.transaction_id}`}
                       className="block rounded-xl border border-ink-300/25 p-3 transition hover:border-ink-500/40"
                     >
-                      <p className="truncate text-sm font-medium text-ink-900">
+                      <p className="truncate text-sm font-medium text-ink-buyer">
                         {d.property_title ?? 'Property deal'}
                       </p>
                       <p className="mt-0.5 text-xs text-ink-500">
@@ -279,7 +279,7 @@ export default async function BuyerDashboardPage({
           </SidebarCard>
 
           <SidebarCard>
-            <p className="font-semibold text-ink-900">Saved Properties</p>
+            <p className="font-semibold text-ink-buyer">Saved Properties</p>
             {!saved || saved.data.length === 0 ? (
               <p className="mt-4 text-center text-sm text-ink-400">No saved properties yet.</p>
             ) : (
@@ -291,7 +291,7 @@ export default async function BuyerDashboardPage({
                         🏠
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-ink-900 group-hover:underline">
+                        <span className="block truncate text-sm font-medium text-ink-buyer group-hover:underline">
                           {item.title}
                         </span>
                         <span className="block truncate text-xs text-ink-500">

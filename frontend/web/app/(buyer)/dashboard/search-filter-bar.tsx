@@ -77,7 +77,7 @@ export function SearchFilterBar() {
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && apply({ q: q.trim() || null })}
             placeholder="Search by location, property type, or price range…"
-            className="h-18 w-full rounded-card border border-line bg-surface-page pl-14 pr-5 text-field text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+            className="h-18 w-full rounded-card border border-line bg-surface-page pl-14 pr-5 text-field text-ink-buyer outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
           />
         </div>
         <button
@@ -106,7 +106,7 @@ export function SearchFilterBar() {
               defaultValue={params.get('state') ?? ''}
               onBlur={(e) => apply({ state: e.target.value.trim() || null })}
               placeholder="e.g. Lagos"
-              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-900 outline-none focus:border-emerald-accent"
+              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             />
           </label>
           <label className="text-xs font-medium text-ink-700">
@@ -114,7 +114,7 @@ export function SearchFilterBar() {
             <select
               defaultValue={params.get('property_type') ?? ''}
               onChange={(e) => apply({ property_type: e.target.value || null })}
-              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-900 outline-none focus:border-emerald-accent"
+              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             >
               {PROPERTY_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -133,7 +133,7 @@ export function SearchFilterBar() {
                 apply({ price_min: naira ? String(Number(naira) * 100) : null });
               }}
               placeholder="₦0"
-              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-900 outline-none focus:border-emerald-accent"
+              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             />
           </label>
           <label className="text-xs font-medium text-ink-700">
@@ -146,7 +146,7 @@ export function SearchFilterBar() {
                 apply({ price_max: naira ? String(Number(naira) * 100) : null });
               }}
               placeholder="No limit"
-              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-900 outline-none focus:border-emerald-accent"
+              className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             />
           </label>
         </div>

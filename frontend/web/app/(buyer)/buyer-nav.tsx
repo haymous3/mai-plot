@@ -31,7 +31,15 @@ export function BuyerNav() {
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 font-display text-sm text-bone">
           M
         </span>
-        <span className="font-display text-lg tracking-tight text-bone">Maiplot</span>
+        {/* The design was inconsistent here — "MaiHome" in 5 buyer export
+            frames, "Maiplot" in 2. Product owner chose "Maihomme" (SCRUM-173),
+            confirmed verbatim.
+
+            BUYER ONLY. Seller, realtor and admin sidebars and every page title
+            still read "Maiplot", as do CLAUDE.md, the repo and the maiplot.ng
+            domain. That inconsistency is deliberate and accepted; a full
+            rebrand would be its own ticket outside this epic. */}
+        <span className="font-display text-lg tracking-tight text-bone">Maihomme</span>
       </Link>
       <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">
         {greeting()}

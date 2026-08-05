@@ -73,9 +73,17 @@ Every Maiplot frame specifies **Inter**. The app uses **Archivo + Fraunces**.
 
 Product decision: **keep Archivo + Fraunces.** The pairing was a deliberate brand choice, and Inter may simply be the designer's default. Type **sizes** are corrected; the **typeface** is not, pending confirmation with the designer.
 
-### Buyer body text is `#1a1a1a`
+### Buyer body text is `#1a1a1a` — ✅ RESOLVED (SCRUM-173)
 
-Figma confirms the buyer surface genuinely uses `#1a1a1a`, not `#101828`. The two-palette finding was real, and SCRUM-164's standardisation moved buyer text off its designed value. **Open decision:** single standardised ramp (consistency) vs per-surface text colours (fidelity).
+Figma confirms the buyer surface genuinely uses `#1a1a1a`, not `#101828`. The two-palette finding was real, and SCRUM-164's standardisation moved buyer text off its designed value.
+
+**Product owner chose fidelity over consistency.** Buyer is back on `#1a1a1a` via the `ink-buyer` token; seller, realtor and admin stay on `ink-900` (`#101828`). Do not merge the two.
+
+### Buyer wordmark — ✅ RESOLVED (SCRUM-173)
+
+The design was inconsistent: "MaiHome" in 5 buyer export frames, "Maiplot" in 2. Product owner chose **"Maihomme"**, confirmed verbatim.
+
+**Buyer sidebar only.** Seller, realtor and admin sidebars, every page title, `CLAUDE.md`, the `mai-plot` repo and the `maiplot.ng` domain all still read "Maiplot". That inconsistency is deliberate and accepted; a full rebrand is its own ticket outside this epic.
 
 ### What Figma does *not* provide
 

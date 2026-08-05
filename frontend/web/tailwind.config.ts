@@ -55,13 +55,28 @@ const config: Config = {
          * inherited their parent colour. Defining them fixes that.
          */
         ink: {
-          900: '#101828', // measured — primary text
+          900: '#101828', // measured — primary text on SELLER and REALTOR
           800: '#1e2939', // interpolated
           700: '#364153', // interpolated
           600: '#4a5565', // interpolated — was undefined, 41 usages
           500: '#6b7280', // measured — muted / secondary text
           400: '#99a1af', // interpolated — was undefined, 17 usages
           300: '#d1d5dc', // measured — borders, disabled edges, placeholder icons
+
+          /**
+           * Buyer primary text. Figma confirms the buyer surface genuinely uses
+           * #1a1a1a, not the #101828 used by seller and realtor (node 228:20943).
+           *
+           * SCRUM-164 standardised all three onto #101828 for consistency, which
+           * moved buyer off its designed value. Product owner chose fidelity over
+           * consistency (SCRUM-173), so buyer is back on #1a1a1a.
+           *
+           * DO NOT "harmonise" this into ink-900. The three surfaces genuinely
+           * diverge on several axes — card radius is 20/16/14, badge tints are
+           * none/-50/-100, and this is the text colour. All measured, all
+           * intentional as far as we can tell.
+           */
+          buyer: '#1a1a1a',
         },
 
         surface: {

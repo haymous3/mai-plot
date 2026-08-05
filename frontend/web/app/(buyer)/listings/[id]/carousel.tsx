@@ -52,7 +52,7 @@ export function Carousel({
             type="button"
             onClick={() => go(-1)}
             aria-label="Previous image"
-            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-ink-900 transition hover:bg-white"
+            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-ink-buyer transition hover:bg-white"
           >
             ‹
           </button>
@@ -60,7 +60,7 @@ export function Carousel({
             type="button"
             onClick={() => go(1)}
             aria-label="Next image"
-            className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-ink-900 transition hover:bg-white"
+            className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-ink-buyer transition hover:bg-white"
           >
             ›
           </button>

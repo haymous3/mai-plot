@@ -22,7 +22,7 @@ export function LoanStatusCard({ loan }: { loan: BuyerLoan }) {
   return (
     <div className="rounded-card border border-line/50 bg-surface-card p-8">
       <div className="flex items-center justify-between">
-        <p className="flex items-center gap-2 font-semibold text-ink-900">💳 Loan Status</p>
+        <p className="flex items-center gap-2 font-semibold text-ink-buyer">💳 Loan Status</p>
         <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
           {badge.label}
         </span>

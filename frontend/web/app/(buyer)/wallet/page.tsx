@@ -39,7 +39,7 @@ function Tile({
         {icon}
       </span>
       <p className={`mt-3 text-xs ${emphasis ? 'text-bone/70' : 'text-ink-500'}`}>{label}</p>
-      <p className={`mt-1 font-display text-2xl ${emphasis ? 'text-bone' : 'text-ink-900'}`}>{value}</p>
+      <p className={`mt-1 font-display text-2xl ${emphasis ? 'text-bone' : 'text-ink-buyer'}`}>{value}</p>
       {sub && <p className={`mt-1 text-xs ${emphasis ? 'text-bone/70' : 'text-ink-400'}`}>{sub}</p>}
     </div>
   );
@@ -57,7 +57,7 @@ export default async function WalletPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-11 py-8">
-      <h1 className="font-display text-3xl text-ink-900">My Wallet</h1>
+      <h1 className="font-display text-3xl text-ink-buyer">My Wallet</h1>
       <p className="mt-1 text-sm text-ink-500">Track your escrow, payments, and property investments</p>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -80,7 +80,7 @@ export default async function WalletPage() {
       </div>
 
       <section className="mt-8 rounded-card border border-line/50 bg-surface-card p-8">
-        <h2 className="font-display text-xl text-ink-900">Active Property Payments</h2>
+        <h2 className="font-display text-xl text-ink-buyer">Active Property Payments</h2>
         <div className="mt-4 space-y-4">
           {!summary || summary.active_payments.length === 0 ? (
             <p className="py-6 text-center text-sm text-ink-400">No active property payments.</p>
@@ -92,7 +92,7 @@ export default async function WalletPage() {
                 <div key={p.transaction_id} className="rounded-xl border border-ink-300/25 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-ink-900">{p.property_title ?? 'Property'}</p>
+                      <p className="font-medium text-ink-buyer">{p.property_title ?? 'Property'}</p>
                       <p className="mt-0.5 text-xs text-ink-500">
                         {formatNaira(p.paid_kobo)} of {formatNaira(p.total_kobo)} paid
                       </p>

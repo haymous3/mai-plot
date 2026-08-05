@@ -40,7 +40,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
 
   return (
     <main className="mx-auto max-w-5xl px-11 py-6">
-      <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-900">
+      <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-buyer">
         ← Back
       </Link>
       <h1 className="mt-3 font-display text-3xl text-emerald-deep">Deal Progress</h1>
@@ -51,7 +51,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
           <Card>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="font-display text-2xl text-ink-900">{s.property.title}</h2>
+                <h2 className="font-display text-2xl text-ink-buyer">{s.property.title}</h2>
                 <p className="mt-1 text-sm text-ink-500">
                   📍 {s.property.lga}, {s.property.state}
                 </p>
@@ -73,7 +73,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
               </div>
               <div>
                 <p className="text-xs text-ink-500">Asking Price</p>
-                <p className="mt-0.5 font-display text-xl text-ink-900">
+                <p className="mt-0.5 font-display text-xl text-ink-buyer">
                   {formatNaira(s.property.asking_price_kobo)}
                 </p>
               </div>
@@ -82,7 +82,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
 
           <Card>
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-xl text-ink-900">Overall Progress</h2>
+              <h2 className="font-display text-xl text-ink-buyer">Overall Progress</h2>
               <span className="text-sm text-ink-500">
                 {completed} of {DEAL_TOTAL_STEPS} complete
               </span>
@@ -96,7 +96,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
           </Card>
 
           <Card>
-            <h2 className="font-display text-xl text-ink-900">Milestones</h2>
+            <h2 className="font-display text-xl text-ink-buyer">Milestones</h2>
             <ol className="mt-4 space-y-4">
               {DEAL_MILESTONES.map((m, i) => {
                 const done = i < completed;
@@ -116,7 +116,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
                     </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className={`font-medium ${done || current ? 'text-ink-900' : 'text-ink-400'}`}>
+                        <p className={`font-medium ${done || current ? 'text-ink-buyer' : 'text-ink-400'}`}>
                           {m.title}
                         </p>
                         {current && <span className="text-xs text-amber-600">In progress</span>}
@@ -147,17 +147,17 @@ export default async function DealProgressPage({ params }: { params: { id: strin
           )}
 
           <Card className="!p-5">
-            <h3 className="font-display text-lg text-ink-900">Deal Summary</h3>
+            <h3 className="font-display text-lg text-ink-buyer">Deal Summary</h3>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-ink-500">Stage</dt>
-                <dd className="font-medium capitalize text-ink-900">
+                <dd className="font-medium capitalize text-ink-buyer">
                   {s.stage.replace(/_/g, ' ')}
                 </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink-500">Agreed price</dt>
-                <dd className="font-medium text-ink-900">{formatNaira(s.agreed_price_kobo)}</dd>
+                <dd className="font-medium text-ink-buyer">{formatNaira(s.agreed_price_kobo)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink-500">Escrow</dt>

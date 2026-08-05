@@ -87,7 +87,7 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-ink-300/30 bg-white shadow-lg">
           <div className="flex items-center justify-between border-b border-ink-300/20 px-4 py-3">
-            <span className="text-sm font-semibold text-ink-900">Notifications</span>
+            <span className="text-sm font-semibold text-ink-buyer">Notifications</span>
             {unread > 0 && (
               <button
                 type="button"
@@ -104,7 +104,7 @@ export function NotificationBell() {
             ) : (
               data.items.slice(0, 8).map((n) => (
                 <li key={n.id} className={`px-4 py-3 ${n.is_read ? '' : 'bg-emerald-deep/5'}`}>
-                  <p className="text-sm font-medium text-ink-900">{n.title ?? 'Notification'}</p>
+                  <p className="text-sm font-medium text-ink-buyer">{n.title ?? 'Notification'}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs text-ink-500">{n.body}</p>
                   <p className="mt-1 text-[11px] text-ink-400">{timeAgo(n.created_at)}</p>
                 </li>

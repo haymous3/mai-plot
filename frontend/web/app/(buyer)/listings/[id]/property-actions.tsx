@@ -41,7 +41,7 @@ export function PropertyActions({
           <button
             type="button"
             onClick={() => setModal('bid')}
-            className="flex-1 rounded-lg border border-ink-300/50 px-4 py-2.5 text-sm font-semibold text-ink-900 transition hover:border-ink-500 sm:flex-none"
+            className="flex-1 rounded-lg border border-ink-300/50 px-4 py-2.5 text-sm font-semibold text-ink-buyer transition hover:border-ink-500 sm:flex-none"
           >
             Place a Bid
           </button>
@@ -84,14 +84,14 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/40 p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-buyer/40 p-4 sm:items-center">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-display text-xl text-ink-900">{title}</h3>
+            <h3 className="font-display text-xl text-ink-buyer">{title}</h3>
             {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-400 hover:text-ink-900">
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-400 hover:text-ink-buyer">
             ✕
           </button>
         </div>
@@ -175,7 +175,7 @@ function BidModal({
             inputMode="numeric"
             value={naira}
             onChange={(e) => setNaira(e.target.value.replace(/\D/g, ''))}
-            className="mt-1.5 w-full rounded-md border border-ink-300/60 px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+            className="mt-1.5 w-full rounded-md border border-ink-300/60 px-3.5 py-2.5 text-sm text-ink-buyer outline-none focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
           />
           <div className="mt-3 flex items-center justify-between rounded-lg bg-bone px-3 py-2 text-xs">
             <span className="text-ink-500">Asking {formatNaira(askingPriceKobo)}</span>
@@ -255,7 +255,7 @@ function InterestModal({ listingId, onClose }: { listingId: string; onClose: () 
             onChange={(e) => setMessage(e.target.value)}
             rows={3}
             placeholder="Add a message for the seller (optional)"
-            className="mt-1.5 w-full rounded-md border border-ink-300/60 px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+            className="mt-1.5 w-full rounded-md border border-ink-300/60 px-3.5 py-2.5 text-sm text-ink-buyer outline-none focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
           />
           {error && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <div className="mt-4 flex gap-2">

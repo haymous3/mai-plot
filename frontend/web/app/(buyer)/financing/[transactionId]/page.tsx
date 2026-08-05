@@ -50,7 +50,7 @@ export default async function FinancingPage({
   if (summary.existing_loan) {
     return (
       <main className="mx-auto max-w-2xl px-11 py-16 text-center">
-        <h1 className="font-display text-2xl text-ink-900">You&rsquo;ve already applied</h1>
+        <h1 className="font-display text-2xl text-ink-buyer">You&rsquo;ve already applied</h1>
         <p className="mt-3 text-sm text-ink-500">
           You have a loan application in progress for this property.
         </p>

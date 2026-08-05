@@ -96,7 +96,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
           thumbnail_url: listing.media[0]?.url ?? null,
         }}
       />
-      <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-900">
+      <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-buyer">
         ← Back to listings
       </Link>
 
@@ -113,7 +113,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <Card>
-            <h1 className="font-display text-3xl text-ink-900">{listing.title}</h1>
+            <h1 className="font-display text-3xl text-ink-buyer">{listing.title}</h1>
             <p className="mt-1 text-sm text-ink-500">📍 {listing.address_text}</p>
             <p className="mt-4 font-display text-3xl text-emerald-deep">
               {formatNaira(listing.asking_price_kobo)}
@@ -121,26 +121,26 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
             <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 sm:grid-cols-3">
               <div>
                 <p className="text-xs text-ink-500">Property Type</p>
-                <p className="mt-0.5 font-medium capitalize text-ink-900">{listing.property_type}</p>
+                <p className="mt-0.5 font-medium capitalize text-ink-buyer">{listing.property_type}</p>
               </div>
               {listing.size_sqm && (
                 <div>
                   <p className="text-xs text-ink-500">Size</p>
-                  <p className="mt-0.5 font-medium text-ink-900">
+                  <p className="mt-0.5 font-medium text-ink-buyer">
                     ⤢ {Number(listing.size_sqm).toLocaleString()} sqm
                   </p>
                 </div>
               )}
               <div>
                 <p className="text-xs text-ink-500">Views</p>
-                <p className="mt-0.5 font-medium text-ink-900">{listing.view_count}</p>
+                <p className="mt-0.5 font-medium text-ink-buyer">{listing.view_count}</p>
               </div>
             </div>
           </Card>
 
           {listing.description && (
             <Card>
-              <h2 className="font-display text-xl text-ink-900">Description</h2>
+              <h2 className="font-display text-xl text-ink-buyer">Description</h2>
               <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink-700">
                 {listing.description}
               </p>
@@ -148,7 +148,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
           )}
 
           <Card>
-            <h2 className="flex items-center gap-2 font-display text-xl text-ink-900">
+            <h2 className="flex items-center gap-2 font-display text-xl text-ink-buyer">
               📄 Document Verification
             </h2>
             <p className="text-xs text-ink-500">Reviewed by our legal team</p>
@@ -163,7 +163,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                       key={n}
                       className="flex items-center justify-between rounded-lg bg-bone px-4 py-3"
                     >
-                      <span className="flex items-center gap-2 text-sm text-ink-900">
+                      <span className="flex items-center gap-2 text-sm text-ink-buyer">
                         <span className={verified ? 'text-emerald-deep' : 'text-ink-300'}>
                           {verified ? '✓' : '○'}
                         </span>
@@ -186,7 +186,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
           </Card>
 
           <Card>
-            <h2 className="font-display text-xl text-ink-900">Location</h2>
+            <h2 className="font-display text-xl text-ink-buyer">Location</h2>
             <p className="mt-2 text-sm text-ink-500">{listing.address_text}</p>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${listing.location.lat},${listing.location.lng}`}
@@ -206,7 +206,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                 {(listing.seller.poa_owner_name ?? 'S')[0].toUpperCase()}
               </span>
               <div>
-                <p className="font-medium text-ink-900">
+                <p className="font-medium text-ink-buyer">
                   {listing.seller.poa_owner_name ?? 'Property Seller'}
                 </p>
                 <p className="text-xs text-ink-500">{isPoa ? 'Power of Attorney' : 'Direct Owner'}</p>
@@ -242,7 +242,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
 
           {listing.loan_eligibility_kobo !== null && (
             <Card className="!p-5">
-              <p className="flex items-center gap-2 font-semibold text-ink-900">💳 Loan Eligibility</p>
+              <p className="flex items-center gap-2 font-semibold text-ink-buyer">💳 Loan Eligibility</p>
               <p className="mt-2 text-sm text-ink-500">
                 You may finance up to{' '}
                 <span className="font-semibold text-emerald-deep">
@@ -254,7 +254,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
           )}
 
           <Card className="!p-5">
-            <p className="flex items-center gap-2 font-semibold text-ink-900">📈 Market Insight</p>
+            <p className="flex items-center gap-2 font-semibold text-ink-buyer">📈 Market Insight</p>
             <p className="mt-2 text-sm text-ink-500">
               This listing has {listing.interest_count} interested{' '}
               {listing.interest_count === 1 ? 'buyer' : 'buyers'} and {listing.view_count} views.

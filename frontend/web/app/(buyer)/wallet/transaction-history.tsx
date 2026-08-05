@@ -46,7 +46,7 @@ export function TransactionHistory({ payments }: { payments: WalletPayment[] }) 
   return (
     <section className="rounded-card border border-line/50 bg-surface-card p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-xl text-ink-900">Transaction History</h2>
+        <h2 className="font-display text-xl text-ink-buyer">Transaction History</h2>
         <div className="flex gap-2">
           {tabBtn('all', 'All')}
           {tabBtn('payment', 'Payments')}
@@ -63,7 +63,7 @@ export function TransactionHistory({ payments }: { payments: WalletPayment[] }) 
             return (
               <li key={p.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink-900">
+                  <p className="truncate text-sm font-medium text-ink-buyer">
                     {TYPE_LABEL[p.payment_type] ?? p.payment_type.replace(/_/g, ' ')}
                     {p.property_title ? ` · ${p.property_title}` : ''}
                   </p>
@@ -73,7 +73,7 @@ export function TransactionHistory({ payments }: { payments: WalletPayment[] }) 
                   </p>
                 </div>
                 <div className="flex-none text-right">
-                  <p className={`text-sm font-semibold ${incoming ? 'text-emerald-deep' : 'text-ink-900'}`}>
+                  <p className={`text-sm font-semibold ${incoming ? 'text-emerald-deep' : 'text-ink-buyer'}`}>
                     {incoming ? '+' : '−'}
                     {formatNaira(p.amount_kobo)}
                   </p>

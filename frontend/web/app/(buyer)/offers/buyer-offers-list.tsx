@@ -93,7 +93,7 @@ export function BuyerOffersList({ offers }: { offers: BuyerOffer[] }) {
             <div key={o.id} className="rounded-card border border-line/50 bg-surface-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <a href={`/listings/${o.listing_id}`} className="font-medium text-ink-900 hover:underline">
+                  <a href={`/listings/${o.listing_id}`} className="font-medium text-ink-buyer hover:underline">
                     {o.property_title}
                   </a>
                   <p className="text-xs text-ink-500">📍 {o.lga}, {o.state}</p>
