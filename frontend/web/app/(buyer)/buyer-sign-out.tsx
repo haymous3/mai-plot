@@ -23,7 +23,7 @@ export function BuyerSignOut() {
     <button
       onClick={signOut}
       disabled={busy}
-      className="rounded-md border border-ink-300/50 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-ink-500 hover:text-ink-900 disabled:opacity-60"
+      className="rounded-md border border-ink-300/50 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-ink-500 hover:text-ink-buyer disabled:opacity-60"
     >
       {busy ? 'Signing out…' : 'Sign out'}
     </button>

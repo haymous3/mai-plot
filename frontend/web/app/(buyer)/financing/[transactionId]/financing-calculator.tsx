@@ -73,7 +73,7 @@ export function FinancingCalculator({
             <WalletIcon />
           </span>
           <div>
-            <h1 className="font-display text-lg text-ink-900">Property Financing</h1>
+            <h1 className="font-display text-lg text-ink-buyer">Property Financing</h1>
             <p className="text-xs text-ink-500">Get a loan for your property purchase</p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export function FinancingCalculator({
         <div className="space-y-6">
           {/* Property summary */}
           <section className="rounded-card border border-line/50 bg-surface-card p-8">
-            <h2 className="font-display text-lg text-ink-900">Property Summary</h2>
+            <h2 className="font-display text-lg text-ink-buyer">Property Summary</h2>
             <div className="mt-4 flex gap-4">
               {summary.property.primary_image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -98,12 +98,12 @@ export function FinancingCalculator({
                 </div>
               )}
               <div>
-                <p className="font-medium text-ink-900">{summary.property.title}</p>
+                <p className="font-medium text-ink-buyer">{summary.property.title}</p>
                 <p className="mt-1 text-sm text-ink-500">
                   {summary.property.lga}, {summary.property.state}
                 </p>
                 <p className="mt-2">
-                  <span className="font-display text-xl text-ink-900">{compactNaira(price)}</span>{' '}
+                  <span className="font-display text-xl text-ink-buyer">{compactNaira(price)}</span>{' '}
                   <span className="text-xs text-ink-500">Total Price</span>
                 </p>
               </div>
@@ -114,7 +114,7 @@ export function FinancingCalculator({
           <section className="rounded-card border border-line/50 bg-surface-card p-8">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="font-display text-lg text-ink-900">Calculate Your Loan</h2>
+                <h2 className="font-display text-lg text-ink-buyer">Calculate Your Loan</h2>
                 <p className="text-sm text-ink-500">Finance up to 50% of the property value</p>
               </div>
               {eligible && (
@@ -130,7 +130,7 @@ export function FinancingCalculator({
                   Loan Amount
                 </label>
                 <div className="text-right">
-                  <span className="font-display text-2xl text-ink-900">{compactNaira(amount)}</span>
+                  <span className="font-display text-2xl text-ink-buyer">{compactNaira(amount)}</span>
                   <p className="text-xs text-ink-500">
                     {Math.round((amount / price) * 100)}% of property value
                   </p>
@@ -172,7 +172,7 @@ export function FinancingCalculator({
                             : 'cursor-not-allowed border-ink-300/20 opacity-40'
                       }`}
                     >
-                      <span className="block font-display text-lg text-ink-900">{t}</span>
+                      <span className="block font-display text-lg text-ink-buyer">{t}</span>
                       <span className="block text-xs text-ink-500">months</span>
                     </button>
                   );
@@ -190,7 +190,7 @@ export function FinancingCalculator({
 
           {/* Bank selection */}
           <section className="rounded-card border border-line/50 bg-surface-card p-8">
-            <h2 className="font-display text-lg text-ink-900">Select Your Bank</h2>
+            <h2 className="font-display text-lg text-ink-buyer">Select Your Bank</h2>
             {partners.length === 0 ? (
               <p className="mt-4 text-sm text-ink-500">No bank partners are available right now.</p>
             ) : (
@@ -209,7 +209,7 @@ export function FinancingCalculator({
                         }`}
                       >
                         <div>
-                          <p className="font-medium text-ink-900">{p.name}</p>
+                          <p className="font-medium text-ink-buyer">{p.name}</p>
                           <p className="mt-1 text-xs text-ink-500">
                             {bpsToPercent(p.interest_rate_bps)} interest · Up to{' '}
                             {p.max_tenure_months} months
@@ -265,7 +265,7 @@ export function FinancingCalculator({
           />
 
           <section className="rounded-card border border-line/50 bg-surface-card p-8">
-            <h3 className="font-medium text-ink-900">What Happens Next?</h3>
+            <h3 className="font-medium text-ink-buyer">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
                 ['Submit Application', 'Complete the loan form'],
@@ -278,7 +278,7 @@ export function FinancingCalculator({
                     {i + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-ink-900">{t}</p>
+                    <p className="text-sm font-medium text-ink-buyer">{t}</p>
                     <p className="text-xs text-ink-500">{d}</p>
                   </div>
                 </li>
@@ -295,7 +295,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className="mt-1 font-medium text-ink-900">{value}</dd>
+      <dd className="mt-1 font-medium text-ink-buyer">{value}</dd>
     </div>
   );
 }
@@ -312,7 +312,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 function InfoPanel({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="rounded-card border border-line/50 bg-surface-card p-8">
-      <h3 className="flex items-center gap-2 font-medium text-ink-900">
+      <h3 className="flex items-center gap-2 font-medium text-ink-buyer">
         <ShieldIcon /> {title}
       </h3>
       <ul className="mt-4 space-y-2 text-sm text-ink-500">

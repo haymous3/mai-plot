@@ -82,7 +82,7 @@ export function PropertyCard({
           <SaveHeart listingId={item.id} initialSaved={saved} className="absolute right-2 top-2" />
         </div>
         <div className="p-3">
-          <p className="truncate font-medium text-ink-900">{item.title}</p>
+          <p className="truncate font-medium text-ink-buyer">{item.title}</p>
           <p className="mt-0.5 truncate text-xs text-ink-500">
             📍 {item.lga}, {item.state}
           </p>
@@ -107,7 +107,7 @@ export function PropertyCard({
         <Thumb item={item} className="h-24 w-32 rounded-lg" />
         <span
           className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-            item.sale_type === 'distress' ? 'bg-status-urgent text-white' : 'bg-ink-900/80 text-white'
+            item.sale_type === 'distress' ? 'bg-status-urgent text-white' : 'bg-ink-buyer/80 text-white'
           }`}
         >
           {saleLabel(item.sale_type)}
@@ -115,7 +115,7 @@ export function PropertyCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <p className="truncate font-medium text-ink-900">{item.title}</p>
+          <p className="truncate font-medium text-ink-buyer">{item.title}</p>
           {verified && (
             <span aria-label="Verified" className="text-emerald-deep">
               ✓

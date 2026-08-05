@@ -40,10 +40,10 @@ export function LoanStatus({ initial }: { initial: LoanDetail }) {
   return (
     <div>
       <header className="flex items-center justify-between border-b border-line bg-surface-card px-11 py-4">
-        <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-900">
+        <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-buyer">
           ⌂ Dashboard
         </Link>
-        <h1 className="font-display text-lg text-ink-900">Loan Application</h1>
+        <h1 className="font-display text-lg text-ink-buyer">Loan Application</h1>
         <span className="w-16" />
       </header>
 
@@ -77,7 +77,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-ink-300 text-ink-500" aria-hidden>
           ⏱
         </div>
-        <h2 className="mt-4 font-display text-xl text-ink-900">Application Under Review</h2>
+        <h2 className="mt-4 font-display text-xl text-ink-buyer">Application Under Review</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
           Your loan application has been submitted successfully. We&rsquo;re currently reviewing
           your documents and verifying your information.
@@ -86,7 +86,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
       </section>
 
       <section className="rounded-card border border-line/50 bg-surface-card p-8">
-        <h3 className="font-medium text-ink-900">Application Details</h3>
+        <h3 className="font-medium text-ink-buyer">Application Details</h3>
         <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <Detail label="Application ID" value={appId(loan.loan_id)} />
           <Detail label="Submitted Date" value={formatDate(loan.created_at)} />
@@ -96,7 +96,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
       </section>
 
       <section className="rounded-card border border-line/50 bg-surface-card p-8">
-        <h3 className="font-medium text-ink-900">Review Progress</h3>
+        <h3 className="font-medium text-ink-buyer">Review Progress</h3>
         <ul className="mt-4 space-y-4">
           {steps.map(([title, desc, state]) => (
             <li key={title} className="flex items-start justify-between">
@@ -105,7 +105,7 @@ function PendingView({ loan }: { loan: LoanDetail }) {
                   {state === 'completed' ? '✓' : state === 'in_progress' ? '↻' : '•'}
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-ink-900">{title}</p>
+                  <p className="text-sm font-medium text-ink-buyer">{title}</p>
                   <p className="text-xs text-ink-500">{desc}</p>
                 </div>
               </div>
@@ -165,7 +165,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl text-emerald-deep" aria-hidden>
           ✓
         </div>
-        <h2 className="mt-3 font-display text-xl text-ink-900">Loan Approved!</h2>
+        <h2 className="mt-3 font-display text-xl text-ink-buyer">Loan Approved!</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
           Congratulations! Your loan application has been approved by {loan.bank_name}. You can now
           proceed to the next steps.
@@ -176,7 +176,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
       </section>
 
       <section className="rounded-card border border-line/50 bg-surface-card p-8">
-        <h3 className="font-medium text-ink-900">Loan Details</h3>
+        <h3 className="font-medium text-ink-buyer">Loan Details</h3>
         <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <Detail label="Approved Amount" value={formatNaira(principal)} strong />
           <Detail label="Interest Rate" value={`${bpsToPercent(rate)} per annum`} />
@@ -188,7 +188,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
       </section>
 
       <section className="rounded-card border border-line/50 bg-surface-card p-8">
-        <h3 className="font-medium text-ink-900">Next Steps</h3>
+        <h3 className="font-medium text-ink-buyer">Next Steps</h3>
         <ol className="mt-4 space-y-4">
           {steps.map(([title, desc], i) => (
             <li key={title} className="flex gap-3">
@@ -196,7 +196,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
                 {i + 1}
               </span>
               <div>
-                <p className="text-sm font-medium text-ink-900">{title}</p>
+                <p className="text-sm font-medium text-ink-buyer">{title}</p>
                 <p className="text-xs text-ink-500">{desc}</p>
               </div>
             </li>
@@ -210,7 +210,7 @@ function ApprovedView({ loan }: { loan: LoanDetail }) {
 function RejectedView() {
   return (
     <section className="rounded-card border border-line/50 bg-surface-card px-6 py-10 text-center">
-      <h2 className="font-display text-xl text-ink-900">Application Not Approved</h2>
+      <h2 className="font-display text-xl text-ink-buyer">Application Not Approved</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
         Unfortunately your loan application was not approved this time. Our team will reach out with
         next steps, or you can contact support for more information.
@@ -229,7 +229,7 @@ function Detail({ label, value, strong }: { label: string; value: string; strong
   return (
     <div>
       <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className={`mt-0.5 text-ink-900 ${strong ? 'font-display text-lg' : 'font-medium'}`}>
+      <dd className={`mt-0.5 text-ink-buyer ${strong ? 'font-display text-lg' : 'font-medium'}`}>
         {value}
       </dd>
     </div>

@@ -21,7 +21,7 @@ export function RecentlyViewedCard() {
 
   return (
     <div className="rounded-card border border-line/50 bg-surface-card p-8">
-      <p className="font-semibold text-ink-900">Recently Viewed</p>
+      <p className="font-semibold text-ink-buyer">Recently Viewed</p>
       <ul className="mt-3 space-y-3">
         {items.slice(0, 5).map((item) => (
           <li key={item.id}>
@@ -37,7 +37,7 @@ export function RecentlyViewedCard() {
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-ink-900 group-hover:underline">
+                <span className="block truncate text-sm font-medium text-ink-buyer group-hover:underline">
                   {item.title}
                 </span>
                 <span className="block truncate text-xs text-ink-500">
