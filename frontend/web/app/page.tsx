@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { FeaturedCard } from './_landing/featured-card';
+import { Footer } from './_landing/footer';
 import {
   Categories,
   Financing,
@@ -125,6 +126,7 @@ export default async function HomePage() {
       <Stats />
       <Financing />
       <FinalCta />
+      <Footer />
     </main>
   );
 }
