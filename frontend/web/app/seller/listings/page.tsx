@@ -14,12 +14,12 @@ export const metadata: Metadata = { title: 'My Listings · Maiplot Seller' };
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active: { label: 'live', cls: 'bg-emerald-deep/10 text-emerald-deep' },
-  paused: { label: 'paused', cls: 'bg-amber-100 text-amber-700' },
-  pending_review: { label: 'under review', cls: 'bg-amber-100 text-amber-700' },
-  under_offer: { label: 'under offer', cls: 'bg-blue-100 text-blue-700' },
+  paused: { label: 'paused', cls: 'bg-amber-50 text-amber-700' },
+  pending_review: { label: 'under review', cls: 'bg-amber-50 text-amber-700' },
+  under_offer: { label: 'under offer', cls: 'bg-blue-50 text-blue-700' },
   sold: { label: 'sold', cls: 'bg-ink-300/20 text-ink-600' },
   expired: { label: 'expired', cls: 'bg-ink-300/20 text-ink-500' },
-  rejected: { label: 'rejected', cls: 'bg-red-100 text-red-700' },
+  rejected: { label: 'rejected', cls: 'bg-red-50 text-red-700' },
 };
 
 const DOC_BADGE: Record<string, { label: string; cls: string }> = {

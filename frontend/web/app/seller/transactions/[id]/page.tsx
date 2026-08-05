@@ -41,7 +41,7 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
         ← Back to Transactions
       </Link>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-ink-300/25 bg-white">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface-card">
         <div className="relative h-52 bg-ink-300/20">
           {hero ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -57,7 +57,7 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 border-b border-ink-300/20 p-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 border-b border-line p-5 sm:grid-cols-3">
           <Fact label="Address" value={address ?? '—'} />
           <Fact label="Buyer" value={deal.buyer_ref} />
           <Fact label="Sale Price" value={formatNaira(deal.agreed_price_kobo)} />
@@ -71,7 +71,7 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
         </div>
 
         {realtor && (
-          <div className="border-t border-ink-300/20 p-5">
+          <div className="border-t border-line p-5">
             <h2 className="font-display text-lg text-ink-900">Assigned Realtor</h2>
             <div className="mt-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-deep/10 font-medium text-emerald-deep">
