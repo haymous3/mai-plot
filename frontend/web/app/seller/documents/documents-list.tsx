@@ -23,9 +23,9 @@ function bucket(status: string): Exclude<Tab, 'all'> {
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   verified: { label: '✓ Verified', cls: 'bg-emerald-deep/10 text-emerald-deep' },
-  pending: { label: '◷ Pending Review', cls: 'bg-amber-100 text-amber-700' },
-  under_review: { label: '◷ Under Review', cls: 'bg-amber-100 text-amber-700' },
-  failed: { label: '✕ Rejected', cls: 'bg-red-100 text-red-700' },
+  pending: { label: '◷ Pending Review', cls: 'bg-amber-50 text-amber-700' },
+  under_review: { label: '◷ Under Review', cls: 'bg-amber-50 text-amber-700' },
+  failed: { label: '✕ Rejected', cls: 'bg-red-50 text-red-700' },
 };
 
 export function DocumentsList({ documents }: { documents: SellerDocument[] }) {
@@ -41,7 +41,7 @@ export function DocumentsList({ documents }: { documents: SellerDocument[] }) {
 
   return (
     <div>
-      <div className="mt-6 flex flex-wrap gap-1 rounded-xl border border-ink-300/25 bg-white p-1">
+      <div className="mt-6 flex flex-wrap gap-1 rounded-xl border border-line bg-surface-card p-1">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -116,7 +116,7 @@ function DocumentCard({
   const verified = doc.verification_status === 'verified';
 
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-4">
+    <div className="rounded-2xl border border-line bg-surface-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-medium text-ink-900">

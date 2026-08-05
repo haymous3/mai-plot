@@ -178,7 +178,7 @@ export function CreateListingWizard() {
       <p className="mt-1 text-sm text-ink-500">Fill in the details to list your property</p>
 
       {/* Stepper */}
-      <ol className="mt-6 flex flex-wrap gap-y-4 rounded-2xl border border-ink-300/25 bg-white px-4 py-5">
+      <ol className="mt-6 flex flex-wrap gap-y-4 rounded-2xl border border-line bg-surface-card px-4 py-5">
         {STEPS.map((label, i) => (
           <li key={label} className="flex flex-1 min-w-[120px] flex-col items-center gap-1.5 text-center">
             <span
@@ -197,7 +197,7 @@ export function CreateListingWizard() {
         ))}
       </ol>
 
-      <div className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6 sm:p-8">
+      <div className="mt-6 rounded-2xl border border-line bg-surface-card p-6 sm:p-8">
         {step === 0 && (
           <Section title="Property Details">
             <Field label="Listing Title">
@@ -214,7 +214,7 @@ export function CreateListingWizard() {
               <input className={inputCls} value={sizeSqm} onChange={(e) => setSizeSqm(e.target.value)} placeholder="e.g., 1,000" inputMode="decimal" />
             </Field>
             <Field label="Description">
-              <textarea className={`${inputCls} min-h-32`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe your property in detail…" />
+              <textarea className={`${textareaCls} min-h-[169px]`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe your property in detail…" />
             </Field>
           </Section>
         )}
@@ -315,7 +315,7 @@ export function CreateListingWizard() {
             </p>
             <div className="space-y-3">
               {DOC_SLOTS.map((slot) => (
-                <div key={slot.key} className="rounded-xl border border-ink-300/30 p-4">
+                <div key={slot.key} className="rounded-xl border border-line p-4">
                   <p className="text-sm font-medium text-ink-800">
                     {slot.label} {slot.required && <span className="text-red-500">*</span>}
                   </p>
@@ -353,7 +353,7 @@ export function CreateListingWizard() {
             <div className="rounded-xl bg-bone/70 p-5">
               <p className="text-sm font-medium text-ink-800">Listing Preview</p>
               <p className="text-xs text-ink-500">This is how your listing will appear to buyers</p>
-              <div className="mt-3 rounded-lg border border-ink-300/30 bg-white p-4">
+              <div className="mt-3 rounded-lg border border-line bg-surface-card p-4">
                 <p className="font-medium text-ink-900">{title || '—'}</p>
                 <p className="text-sm text-ink-500">{address || '—'}</p>
                 <p className="mt-1 font-display text-lg text-emerald-deep">
@@ -361,7 +361,7 @@ export function CreateListingWizard() {
                 </p>
               </div>
             </div>
-            <dl className="mt-4 divide-y divide-ink-300/20 text-sm">
+            <dl className="mt-4 divide-y divide-line text-sm">
               <Row k="Property Type" v={PROPERTY_TYPES.find((p) => p.value === propertyType)?.label ?? '—'} />
               <Row k="Location" v={[lga, state].filter(Boolean).join(', ') || '—'} />
               <Row k="Price" v={priceKobo > 0 ? formatNaira(priceKobo) : '—'} />
@@ -413,13 +413,33 @@ export function CreateListingWizard() {
   );
 }
 
+/**
+ * Form field — Figma node 244:401 (Text Input) / 244:389 (Dropdown).
+ *
+ * 48px tall, 12px radius, 16px inset, 16px text, on a `#d1d5dc` border. That
+ * border is `line-strong`, which SCRUM-164 defined and nothing used until now —
+ * it is specifically the input border, distinct from the `#e5e7eb` used on card
+ * edges and dividers.
+ *
+ * Placeholder is `#1a1a1a` at 50%, not a separate grey (node 244:402).
+ *
+ * The CreateListing artboard reports 48.8px heights and 0.8px borders; those are
+ * sub-pixel borders accumulating into the height, not a scale factor — the
+ * radii, gaps, insets and type sizes are all clean integers.
+ */
 const inputCls =
-  'w-full rounded-lg border border-ink-300/50 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20';
+  'h-12 w-full rounded-xl border border-line-strong bg-surface-card px-4 text-base text-ink-900 outline-none transition placeholder:text-ink-900/50 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20';
+
+/** Multi-line variant — 12px vertical padding rather than a fixed height. */
+const textareaCls =
+  'w-full rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-base leading-6 text-ink-900 outline-none transition placeholder:text-ink-900/50 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-4">
-      <h2 className="font-display text-xl text-emerald-deep">{title}</h2>
+    // Heading 2 is 24/32 bold in #0f3d2e; fields sit on a 24px rhythm with an
+    // 8px label-to-input gap (nodes 244:385, 244:383, 244:386).
+    <div className="space-y-6">
+      <h2 className="font-display text-2xl font-bold leading-8 text-emerald-deep">{title}</h2>
       {children}
     </div>
   );
@@ -427,8 +447,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="block text-sm font-medium text-ink-700">{label}</span>
+    // Label is 14/20 semibold in #364153 (ink-700) with an 8px gap to the
+    // control — Figma node 244:388.
+    <label className="block space-y-2">
+      <span className="block text-sm font-semibold leading-5 text-ink-700">{label}</span>
       {children}
     </label>
   );

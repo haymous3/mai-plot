@@ -20,7 +20,7 @@ const RESPONSIBILITIES = [
 
 function SaleCard({ deal }: { deal: SellerDeal }) {
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
+    <div className="rounded-2xl border border-line bg-surface-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-medium text-ink-900">{deal.property_title ?? 'Property'}</p>
@@ -28,7 +28,7 @@ function SaleCard({ deal }: { deal: SellerDeal }) {
           <span
             className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
               isSaleActive(deal.stage)
-                ? 'bg-amber-100 text-amber-700'
+                ? 'bg-amber-50 text-amber-700'
                 : 'bg-emerald-deep/10 text-emerald-deep'
             }`}
           >
@@ -45,7 +45,7 @@ function SaleCard({ deal }: { deal: SellerDeal }) {
         <SaleProgress stage={deal.stage} />
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-ink-300/20 pt-3">
+      <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
         <p className="text-xs text-ink-500">
           Transaction {deal.transaction_id.slice(0, 8)}
         </p>

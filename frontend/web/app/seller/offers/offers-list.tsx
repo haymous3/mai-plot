@@ -16,10 +16,10 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-700',
+  pending: 'bg-amber-50 text-amber-700',
   accepted: 'bg-emerald-deep/10 text-emerald-deep',
-  countered: 'bg-blue-100 text-blue-700',
-  rejected: 'bg-red-100 text-red-700',
+  countered: 'bg-blue-50 text-blue-700',
+  rejected: 'bg-red-50 text-red-700',
   withdrawn: 'bg-ink-300/20 text-ink-500',
 };
 
@@ -74,7 +74,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
 
   return (
     <div>
-      <div className="mt-6 flex flex-wrap gap-1 rounded-xl border border-ink-300/25 bg-white p-1">
+      <div className="mt-6 flex flex-wrap gap-1 rounded-xl border border-line bg-surface-card p-1">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -100,7 +100,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
             const open = openId === o.id;
             const actionable = o.status === 'pending';
             return (
-              <div key={o.id} className="rounded-2xl border border-ink-300/25 bg-white p-4">
+              <div key={o.id} className="rounded-2xl border border-line bg-surface-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-ink-900">
@@ -152,7 +152,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
                             type="button"
                             disabled={busyId === o.id}
                             onClick={() => act(o, 'accept')}
-                            className="rounded-lg bg-emerald-deep px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                            className="rounded-lg bg-status-success px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
                           >
                             ✓ Accept Offer
                           </button>
@@ -160,7 +160,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
                             type="button"
                             disabled={busyId === o.id}
                             onClick={() => act(o, 'reject')}
-                            className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
+                            className="rounded-lg bg-status-danger px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-60"
                           >
                             ✕ Reject Offer
                           </button>
