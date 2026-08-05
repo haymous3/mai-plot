@@ -51,7 +51,7 @@ export default async function InspectionReportPage({ params }: { params: { id: s
         <RealtorHeader title="Inspection Report" subtitle={insp.property_title ?? 'Property inspection'} />
       </div>
 
-      <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-5">
+      <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
         <p className="text-xs text-ink-500">Property under inspection</p>
         <p className="mt-1 font-medium text-ink-900">{insp.property_title ?? 'Property inspection'}</p>
         <p className="mt-0.5 text-sm text-ink-500">📍 {inspectionLocation(insp)}</p>

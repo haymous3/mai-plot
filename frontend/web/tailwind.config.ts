@@ -100,14 +100,27 @@ const config: Config = {
         18: '4.5rem', // 72px — header height, search input height
       },
 
+      /**
+       * ⚠️ Card radius differs per surface in the design — buyer 20px, seller
+       * 16px (`rounded-2xl`), realtor 14px. Border treatment differs too: buyer
+       * is #e5e7eb at 50% opacity, seller and realtor are solid.
+       *
+       * These are measured, not assumed, but 20/16/14 is close enough that it
+       * may be unintentional drift in the design rather than three deliberate
+       * choices. Flagged for the designer (SCRUM-172). Encoded faithfully until
+       * someone confirms otherwise — guessing at "they meant one value" would
+       * be inventing.
+       */
       borderRadius: {
         /**
-         * 20px. Corrected in SCRUM-169 from a pixel-measured 16px — the corner
-         * probe found where pure #ffffff begins, which undercounts the arc.
-         * Figma node 228:20937 gives `rounded-[21.194px]`; at the frame's
-         * 1.0597 scale factor that is exactly 20px.
+         * Buyer, 20px. Corrected in SCRUM-169 from a pixel-measured 16px — the
+         * corner probe found where pure #ffffff begins, which undercounts the
+         * arc. Figma node 228:20937 gives `rounded-[21.194px]`; at that frame's
+         * 1.0597 scale factor, exactly 20px.
          */
         card: '1.25rem',
+        /** Realtor, 14px — Figma node 276:87. Seller uses stock `rounded-2xl`. */
+        'card-sm': '0.875rem',
       },
 
       /**

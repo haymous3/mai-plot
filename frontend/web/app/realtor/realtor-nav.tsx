@@ -18,37 +18,40 @@ const NAV = [
 export function RealtorNav() {
   const pathname = usePathname();
 
+  const itemClass = (active: boolean) =>
+    `flex h-11 items-center gap-3 rounded-xl px-4 text-sm font-semibold transition ${
+      active ? 'bg-emerald-deep text-white' : 'text-ink-700 hover:bg-surface-muted'
+    }`;
+
   return (
-    <aside className="flex w-60 flex-none flex-col border-r border-ink-300/25 bg-white">
-      <div className="flex items-center gap-2.5 px-5 py-4">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-deep font-display text-lg text-bone">
-          M
-        </span>
-        <span>
-          <span className="block font-display text-lg leading-tight text-ink-900">Maiplot</span>
-          <span className="block text-xs text-ink-500">Realtor Portal</span>
-        </span>
+    // Same rail as the seller sidebar (SCRUM-170, Figma 276:364): 256px,
+    // 101px brand block, 44px items at a 48px pitch, 12px radius, 16px inset.
+    <aside className="flex w-64 flex-none flex-col border-r border-line bg-surface-card">
+      <div className="flex h-[101px] flex-none flex-col gap-1 border-b border-line px-6 pt-6">
+        <div className="flex h-8 items-center gap-2">
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-emerald-deep text-sm font-bold text-white">
+            M
+          </span>
+          <span className="font-display text-lg font-bold leading-7 text-emerald-deep">Maiplot</span>
+        </div>
+        <span className="text-xs leading-4 text-ink-500">Realtor Portal</span>
       </div>
 
-      <nav className="mt-2 flex-1 space-y-1 px-3">
+      <nav className="flex flex-1 flex-col gap-1 px-4 pt-4">
         {NAV.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                active ? 'bg-emerald-deep font-medium text-bone' : 'text-ink-600 hover:bg-bone'
-              }`}
-            >
-              <span aria-hidden>{item.icon}</span>
+            <Link key={item.href} href={item.href} className={itemClass(active)}>
+              <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center">
+                {item.icon}
+              </span>
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="space-y-1 border-t border-ink-300/20 px-3 py-3">
+      <div className="flex flex-none flex-col gap-2 border-t border-line px-4 py-4">
         <RealtorSignOut />
       </div>
     </aside>

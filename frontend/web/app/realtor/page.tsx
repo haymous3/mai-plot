@@ -83,7 +83,7 @@ export default async function RealtorOverviewPage() {
             />
           </div>
 
-          <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+          <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg text-ink-900">Upcoming Inspections</h2>
               <Link
@@ -104,9 +104,9 @@ export default async function RealtorOverviewPage() {
             </div>
           </section>
 
-          <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+          <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
             <h2 className="font-display text-lg text-ink-900">Recent Activity</h2>
-            <ul className="mt-3 divide-y divide-ink-300/15">
+            <ul className="mt-3 divide-y divide-line">
               {activity.length === 0 ? (
                 <li className="py-8 text-center text-sm text-ink-500">No recent activity yet.</li>
               ) : (
@@ -168,7 +168,7 @@ function UpcomingRow({ insp }: { insp: RealtorInspection }) {
   return (
     <Link
       href="/realtor/inspections"
-      className="flex items-start justify-between gap-3 rounded-xl border border-ink-300/25 p-3 transition hover:border-ink-500/40"
+      className="flex items-start justify-between gap-3 rounded-[10px] border border-line p-3 transition hover:border-ink-500/40"
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-ink-900">
@@ -201,7 +201,7 @@ function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
+    <div className="rounded-card-sm border border-line bg-surface-card p-6">
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">
         {icon}
       </span>
@@ -214,7 +214,7 @@ function Stat({
 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-3 flex items-center justify-between border-t border-ink-300/15 pt-2 first:border-0 first:pt-0">
+    <div className="mt-3 flex items-center justify-between border-t border-line pt-2 first:border-0 first:pt-0">
       <span className="text-xs text-ink-600">{label}</span>
       <span className="text-sm font-semibold text-ink-900">{value}</span>
     </div>

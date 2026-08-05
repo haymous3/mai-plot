@@ -57,7 +57,7 @@ export default async function RealtorEarningsPage() {
             becomes available. Payouts are made by our team once available.
           </div>
 
-          <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+          <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
             <h2 className="font-display text-lg text-ink-900">Transaction History</h2>
             {history.length === 0 ? (
               <p className="py-8 text-center text-sm text-ink-500">
@@ -67,7 +67,7 @@ export default async function RealtorEarningsPage() {
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-ink-300/20 text-xs text-ink-500">
+                    <tr className="border-b border-line text-xs text-ink-500">
                       <th className="pb-2 pr-4 font-medium">Property</th>
                       <th className="pb-2 pr-4 font-medium">Date</th>
                       <th className="pb-2 pr-4 font-medium">Rate</th>
@@ -75,7 +75,7 @@ export default async function RealtorEarningsPage() {
                       <th className="pb-2 font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-ink-300/15">
+                  <tbody className="divide-y divide-line">
                     {history.map((c) => (
                       <Row key={c.commission_id} c={c} />
                     ))}

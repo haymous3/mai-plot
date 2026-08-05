@@ -62,7 +62,7 @@ export function RealtorOnboardingForm() {
   }
 
   return (
-    <div className="mt-6 max-w-xl rounded-2xl border border-ink-300/25 bg-white p-6 sm:p-8">
+    <div className="mt-6 max-w-xl rounded-card-sm border border-line bg-surface-card p-6 sm:p-8">
       <label className="block text-sm font-medium text-ink-700">
         ESVARBON License Number <span className="text-red-500">*</span>
       </label>
@@ -70,7 +70,7 @@ export function RealtorOnboardingForm() {
         value={esvarbon}
         onChange={(e) => setEsvarbon(e.target.value)}
         placeholder="ESV/2024/123456"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+        className="mt-2 w-full rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
       />
       <p className="mt-1.5 text-xs text-ink-500">
         Your Estate Surveyors and Valuers Registration Board licence number.
@@ -104,7 +104,7 @@ export function RealtorOnboardingForm() {
         value={coverage}
         onChange={(e) => setCoverage(e.target.value)}
         placeholder="e.g., Lagos, Lekki, Victoria Island"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+        className="mt-2 w-full rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
       />
       <p className="mt-1.5 text-xs text-ink-500">Comma-separated areas where you provide services.</p>
 

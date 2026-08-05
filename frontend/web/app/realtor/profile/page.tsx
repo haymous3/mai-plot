@@ -56,7 +56,7 @@ export default async function RealtorProfilePage() {
       <RealtorHeader title="Profile" subtitle="Your realtor credentials and coverage" />
 
       <div className="mt-6 space-y-6">
-        <section className="rounded-2xl border border-ink-300/25 bg-white p-6">
+        <section className="rounded-card-sm border border-line bg-surface-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-ink-500">Account status</p>
@@ -88,7 +88,7 @@ export default async function RealtorProfilePage() {
           </dl>
         </section>
 
-        <section className="rounded-2xl border border-ink-300/25 bg-white p-6">
+        <section className="rounded-card-sm border border-line bg-surface-card p-6">
           <h2 className="font-display text-lg text-ink-900">Coverage area</h2>
           <p className="mt-1 text-sm text-ink-500">Where you provide inspection services.</p>
 

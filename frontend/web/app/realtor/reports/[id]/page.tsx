@@ -57,7 +57,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
         <RealtorHeader title="Inspection Report" subtitle={title} />
       </div>
 
-      <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+      <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             {insp && <p className="text-sm text-ink-500">📍 {inspectionLocation(insp)}</p>}
@@ -72,7 +72,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
           </span>
         </div>
 
-        <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-ink-300/15 pt-4">
+        <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4">
           <Detail label="Property condition" value={conditionLabel(report.property_condition)} />
           <Detail
             label="Amenities"
@@ -100,7 +100,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
         )}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+      <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
         <h2 className="font-display text-lg text-ink-900">
           Photos ({report.photo_urls.length})
         </h2>
@@ -125,7 +125,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
       </section>
 
       {report.video_url && (
-        <section className="mt-6 rounded-2xl border border-ink-300/25 bg-white p-6">
+        <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
           <h2 className="font-display text-lg text-ink-900">Video walkthrough</h2>
           <video
             src={report.video_url}
