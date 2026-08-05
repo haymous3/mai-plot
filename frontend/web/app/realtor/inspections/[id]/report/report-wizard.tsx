@@ -129,7 +129,7 @@ export function ReportWizard({ inspectionId }: { inspectionId: string }) {
     <div className="mt-6">
       <ProgressRail step={step} />
 
-      <div className="mt-4 rounded-2xl border border-ink-300/25 bg-white p-6">
+      <div className="mt-4 rounded-card-sm border border-line bg-surface-card p-6">
         {step === 1 && <StepProperty form={form} patch={patch} />}
         {step === 2 && <StepCondition form={form} patch={patch} />}
         {step === 3 && <StepDocuments form={form} patch={patch} />}
@@ -237,7 +237,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const textareaCls =
-  'w-full rounded-lg border border-ink-300/50 px-3 py-2 text-sm text-ink-900 outline-none focus:border-emerald-deep';
+  'w-full rounded-xl border border-line-strong px-3 py-2 text-sm text-ink-900 outline-none focus:border-emerald-deep';
 
 function StepProperty({ form, patch }: { form: ReportForm; patch: PatchFn }) {
   return (
@@ -330,7 +330,7 @@ function StepCondition({ form, patch }: { form: ReportForm; patch: PatchFn }) {
         <select
           value={form.accessibility}
           onChange={(e) => patch({ accessibility: e.target.value })}
-          className="w-full rounded-lg border border-ink-300/50 bg-white px-3 py-2 text-sm text-ink-900 outline-none focus:border-emerald-deep"
+          className="w-full rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-sm text-ink-900 outline-none focus:border-emerald-deep"
         >
           <option value="">Not assessed</option>
           {ACCESSIBILITY_OPTIONS.map((o) => (
@@ -464,7 +464,7 @@ function StepMedia({
         </div>
       )}
 
-      <div className="rounded-xl border border-ink-300/40 bg-white px-4 py-3">
+      <div className="rounded-card-sm border border-line bg-surface-card px-4 py-3">
         <p className="text-sm font-medium text-ink-800">Video walkthrough (optional)</p>
         {form.video ? (
           <div className="mt-2 flex items-center justify-between gap-3">

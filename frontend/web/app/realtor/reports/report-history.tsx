@@ -41,7 +41,7 @@ export function ReportHistory({ reports }: { reports: RealtorInspection[] }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search by property or location…"
-        className="w-full rounded-lg border border-ink-300/50 px-4 py-2.5 text-sm text-ink-900 outline-none focus:border-emerald-deep"
+        className="w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink-900 outline-none focus:border-emerald-deep"
       />
 
       <div className="rounded-xl border border-emerald-deep/15 bg-emerald-deep/5 px-4 py-3 text-xs text-ink-700">
@@ -56,7 +56,7 @@ export function ReportHistory({ reports }: { reports: RealtorInspection[] }) {
             <Link
               key={r.inspection_id}
               href={`/realtor/reports/${r.inspection_id}`}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-ink-300/25 bg-white p-5 transition hover:border-ink-500/40"
+              className="flex items-center justify-between gap-3 rounded-card-sm border border-line bg-surface-card p-6 transition hover:border-ink-500/40"
             >
               <div className="min-w-0">
                 <p className="truncate font-medium text-ink-900">
@@ -85,7 +85,7 @@ export function ReportHistory({ reports }: { reports: RealtorInspection[] }) {
 
 function Tile({ icon, value, label }: { icon: string; value: string; label: string }) {
   return (
-    <div className="rounded-2xl border border-ink-300/25 bg-white p-5">
+    <div className="rounded-card-sm border border-line bg-surface-card p-6">
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">
         {icon}
       </span>
