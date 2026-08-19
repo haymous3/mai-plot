@@ -13,6 +13,7 @@ InMemoryTwilioClient that the test can inspect.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import AsyncIterator, Generator
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -109,9 +110,19 @@ def extract_email_token(verify_url: str) -> str:
     return tokens[0]
 
 
-async def register_and_verify(
+def extract_otp_code(message: str) -> str:
+    """Pull the 6-digit OTP out of a captured SMS body.
+
+    The plaintext code is never returned by the API and never logged — the
+    captured SMS is the only place a test can read it, exactly as in
+    production (CLAUDE.md §4)."""
+    match = re.search(r"\b(\d{6})\b", message)
+    assert match, f"no 6-digit code in sms: {message!r}"
+    return match.group(1)
+
+
+async def register_only(
     http_client: AsyncClient,
-    email_fake: InMemoryEmailClient,
     *,
     phone: str = "08012345678",
     role: str = "buyer",
@@ -119,10 +130,10 @@ async def register_and_verify(
     password: str | None = None,
     seller_authority_type: str | None = None,
 ) -> dict[str, Any]:
-    """Register a user then confirm the emailed magic link; return the
-    /auth/verify/email response body (access_token, refresh_token, user{...}).
-    Replaces the old register+OTP-verify helper now that registration verifies
-    via email (SCRUM-152)."""
+    """POST /auth/register and assert a 201; return the response body.
+
+    Split out of register_and_verify for tests that need an account left in
+    the `unverified` state (the email-resend path, for instance)."""
     payload: dict[str, Any] = {"phone": phone, "role": role, "email": email}
     if password is not None:
         payload["password"] = password
@@ -130,10 +141,37 @@ async def register_and_verify(
         payload["seller_authority_type"] = seller_authority_type
     reg = await http_client.post("/auth/register", json=payload)
     assert reg.status_code == 201, reg.text
+    body: dict[str, Any] = reg.json()
+    return body
 
-    token = extract_email_token(email_fake.sent[-1].verify_url)
+
+async def register_and_verify(
+    http_client: AsyncClient,
+    sms: InMemoryTwilioClient,
+    *,
+    phone: str = "08012345678",
+    role: str = "buyer",
+    email: str = "user@example.com",
+    password: str | None = None,
+    seller_authority_type: str | None = None,
+) -> dict[str, Any]:
+    """Register a user then confirm the OTP from the captured SMS; return the
+    /auth/otp/verify response body (access_token, refresh_token, user{...}).
+
+    SCRUM-175 pointed this back at the phone-OTP path. The response shape is
+    identical to /auth/verify/email's, so callers were unaffected."""
+    await register_only(
+        http_client,
+        phone=phone,
+        role=role,
+        email=email,
+        password=password,
+        seller_authority_type=seller_authority_type,
+    )
+
+    code = extract_otp_code(sms.sent[-1].message)
     verify = await http_client.post(
-        "/auth/verify/email", json={"token": token, "purpose": "registration"}
+        "/auth/otp/verify", json={"phone": phone, "otp": code, "purpose": "registration"}
     )
     assert verify.status_code == 200, verify.text
     body: dict[str, Any] = verify.json()

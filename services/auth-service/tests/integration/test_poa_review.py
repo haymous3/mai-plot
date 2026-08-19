@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.document_storage import InMemoryDocumentStorage
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
 from app.services.jwt_service import JwtService
 from tests.integration.conftest import assert_error_envelope, register_and_verify
@@ -45,13 +45,13 @@ def _legal_team_token(db_engine: Engine) -> str:
 
 
 async def _seed_pending_poa_seller(
-    http_client: AsyncClient, email_fake: InMemoryEmailClient, phone: str
+    http_client: AsyncClient, sms: InMemoryTwilioClient, phone: str
 ) -> tuple[str, str]:
     """Register + verify a PoA seller and upload a PoA doc. Returns
     (user_id, seller_access_token); leaves poa_verified_status='pending'."""
     body = await register_and_verify(
         http_client,
-        email_fake,
+        sms,
         phone=phone,
         role="seller",
         email=f"user{phone[-4:]}@maiplot.ng",
@@ -72,12 +72,12 @@ async def _seed_pending_poa_seller(
 async def test_legal_team_sees_pending_submission_in_queue(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.get("/admin/poa/queue", headers=_auth(token))
@@ -91,13 +91,11 @@ async def test_legal_team_sees_pending_submission_in_queue(
 async def test_non_legal_team_is_forbidden(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, seller_token = await _seed_pending_poa_seller(
-        http_client, email_verification_fake, "08012345678"
-    )
+    _, seller_token = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     response = await http_client.get("/admin/poa/queue", headers=_auth(seller_token))
     assert response.status_code == 403
     assert_error_envelope(response.json(), "LEGAL_TEAM_FORBIDDEN")
@@ -117,12 +115,12 @@ async def test_queue_requires_authentication(
 async def test_approve_verifies_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -155,12 +153,12 @@ async def test_approve_verifies_seller(
 async def test_reject_without_reason_is_422(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -180,12 +178,12 @@ async def test_reject_without_reason_is_422(
 async def test_reject_with_reason_sets_rejected(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     response = await http_client.post(
@@ -207,12 +205,12 @@ async def test_reject_with_reason_sets_rejected(
 async def test_review_already_decided_is_409(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, _ = await _seed_pending_poa_seller(http_client, email_verification_fake, "08012345678")
+    user_id, _ = await _seed_pending_poa_seller(http_client, sms_fake, "08012345678")
     token = _legal_team_token(db_engine)
 
     first = await http_client.post(

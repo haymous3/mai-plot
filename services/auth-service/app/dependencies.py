@@ -204,20 +204,19 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
 
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
-    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
+    otps: Annotated[OtpRepository, Depends(_otp_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
-    email_sender: EmailSenderDep,
+    sms: SmsClientDep,
     settings: SettingsDep,
 ) -> RegistrationService:
     return RegistrationService(
         users=users,
-        email_tokens=email_tokens,
+        otps=otps,
         credentials=credentials,
         rate_limiter=rate_limiter,
-        email_sender=email_sender,
-        verification_expire_minutes=settings.email_verification_expire_minutes,
-        verify_base_url=settings.email_verification_base_url,
+        sms=sms,
+        otp_expire_minutes=settings.otp_expire_minutes,
     )
 
 

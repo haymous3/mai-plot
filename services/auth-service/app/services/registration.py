@@ -5,12 +5,19 @@ and translates errors to HTTP status codes. All the side effects
 (insert user, persist the verification token, dispatch the email, hit the
 rate limiter) live here so they can be unit tested with mocked collaborators.
 
-SCRUM-152: account verification moved from phone-OTP-over-SMS to an email
-magic link. The OTP machinery (otp.py, otp_repo, otp_verification, the
-/auth/otp/verify endpoint, the otp_codes table) is deliberately left intact
-and live — registration simply no longer emits an OTP. The old OTP dispatch
-is kept as a commented block at the end of `register()` so the delivery
-channel can be reverted without archaeology.
+SCRUM-175: account verification is phone OTP over SMS again, now dispatched
+via Twilio. This reverses the channel SCRUM-152 chose (an email magic link)
+while leaving that machinery intact and live — email_verification.py,
+email_token.py, resend_verification.py, POST /auth/verify/email and the
+email_verification_tokens table are all untouched; registration simply no
+longer mints a link. That is the exact mirror of what SCRUM-152 did to the
+OTP path, so the channel can be flipped back without archaeology.
+
+Note the consequence: because `resend_verification` mints a link for any
+account still `unverified`, POST /auth/verify/email/resend remains a
+reachable second route to verification. That is deliberate — SMS delivery
+to Nigerian numbers from a US long code is unreliable (see adapters/twilio.py),
+so an email fallback is worth keeping until a NG sender ID is registered.
 """
 
 from __future__ import annotations
@@ -20,15 +27,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from app.adapters.email_verification import (
-    EmailDeliveryError,
-    EmailVerificationSender,
-    VerificationEmail,
-)
+from app.adapters.twilio import SmsClient, SmsError
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
-from app.repositories.email_verification_repo import EmailVerificationRepository
+from app.repositories.otp_repo import OtpRepository
 from app.repositories.user_repo import UserRepository
-from app.services.email_token import build_verify_url, generate_token, hash_token
+from app.services.otp import generate_code, hash_code
 from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
 
@@ -51,7 +54,7 @@ class VerificationRateLimited(RegistrationError):
     pass
 
 
-class VerificationEmailFailed(RegistrationError):
+class OtpDispatchFailed(RegistrationError):
     pass
 
 
@@ -61,31 +64,23 @@ class RegistrationResult:
     verification_expires_in_seconds: int
 
 
-def _email_domain(address: str) -> str:
-    """Domain part only, for safe logging — never the full address."""
-    _, _, domain = address.rpartition("@")
-    return domain or "?"
-
-
 class RegistrationService:
     def __init__(
         self,
         *,
         users: UserRepository,
-        email_tokens: EmailVerificationRepository,
+        otps: OtpRepository,
         credentials: AuthCredentialsRepository,
         rate_limiter: OtpRateLimiter,
-        email_sender: EmailVerificationSender,
-        verification_expire_minutes: int,
-        verify_base_url: str,
+        sms: SmsClient,
+        otp_expire_minutes: int,
     ) -> None:
         self._users = users
-        self._email_tokens = email_tokens
+        self._otps = otps
         self._credentials = credentials
         self._rate_limiter = rate_limiter
-        self._email_sender = email_sender
-        self._verification_expire_minutes = verification_expire_minutes
-        self._verify_base_url = verify_base_url
+        self._sms = sms
+        self._otp_expire_minutes = otp_expire_minutes
 
     async def register(
         self,
@@ -97,21 +92,24 @@ class RegistrationService:
         seller_authority_type: str | None,
         full_name: str | None = None,
     ) -> RegistrationResult:
-        # Email is the verification channel now, so uniqueness is checked first.
+        # Email is still collected and still unique-checked — it is the login
+        # identifier (SCRUM-45) even though it is no longer the verification
+        # channel, so a duplicate must fail here rather than at the DB.
         if await self._users.get_active_by_email(email) is not None:
             raise EmailAlreadyRegistered()
         if await self._users.get_by_phone(phone) is not None:
             raise PhoneAlreadyRegistered()
 
-        # Rate-limit verification-email sends per email address to stop a
-        # single address being bombarded with links.
-        limit = await self._rate_limiter.check_and_record(email)
+        # Rate-limit OTP sends per PHONE (CLAUDE.md §4: 5/hour) — the limiter
+        # was keyed on email while the magic link was the channel. Fails open
+        # on a Redis outage by design (review.md R5).
+        limit = await self._rate_limiter.check_and_record(phone)
         if not limit.allowed:
             raise VerificationRateLimited()
 
-        token = generate_token()
-        token_hash = hash_token(token)
-        expires_at = datetime.now(UTC) + timedelta(minutes=self._verification_expire_minutes)
+        code = generate_code()
+        code_hash = hash_code(code)
+        expires_at = datetime.now(UTC) + timedelta(minutes=self._otp_expire_minutes)
 
         user_id = await self._users.create_with_pii(
             phone=phone,
@@ -124,65 +122,42 @@ class RegistrationService:
         # log in via email/password (SCRUM-45).
         if password is not None:
             await self._credentials.upsert(user_id=user_id, password_hash=hash_password(password))
-        await self._email_tokens.create(
-            user_id=user_id,
-            email=email,
-            token_hash=token_hash,
+        # Only the bcrypt hash is persisted; the plaintext code exists solely
+        # in the SMS body below and is never logged or returned.
+        await self._otps.create(
+            phone=phone,
+            code_hash=code_hash,
             purpose="registration",
             expires_at=expires_at,
         )
 
-        verify_url = build_verify_url(self._verify_base_url, token)
         try:
-            await self._email_sender.send_verification(
-                VerificationEmail(to=email, verify_url=verify_url)
+            await self._sms.send_sms(
+                phone=phone,
+                message=(
+                    f"Your Maiplot verification code is {code}. "
+                    f"It expires in {self._otp_expire_minutes} minutes."
+                ),
             )
-        except EmailDeliveryError as exc:
+        except SmsError as exc:
             # The surrounding request session rolls back on this exception (see
-            # db.get_session), so the half-registered user + token are undone
+            # db.get_session), so the half-registered user + OTP row are undone
             # and the client can safely retry.
             logger.error(
-                "registration.verification_email_failed",
-                extra={"email_domain": _email_domain(email), "error": str(exc)},
+                "registration.otp_dispatch_failed",
+                extra={"phone_suffix": phone[-4:], "error": str(exc)},
             )
-            raise VerificationEmailFailed() from exc
+            raise OtpDispatchFailed() from exc
 
         logger.info(
             "registration.ok",
             extra={
                 "user_id": str(user_id),
                 "role": role,
-                "email_domain": _email_domain(email),
+                "phone_suffix": phone[-4:],
             },
         )
         return RegistrationResult(
             user_id=user_id,
-            verification_expires_in_seconds=self._verification_expire_minutes * 60,
+            verification_expires_in_seconds=self._otp_expire_minutes * 60,
         )
-
-        # --- Retained OTP dispatch (SCRUM-152 rollback reference) --------------
-        # The phone-OTP flow this replaced. The OTP verify path is still live
-        # (POST /auth/otp/verify); only this send was swapped for the email
-        # link. To revert the channel, restore the otps/sms collaborators on
-        # __init__ and re-enable the block below.
-        #
-        # from app.adapters.twilio import SmsError
-        # from app.services.otp import generate_code, hash_code
-        #
-        # code = generate_code()
-        # code_hash = hash_code(code)
-        # await self._otps.create(
-        #     phone=phone, code_hash=code_hash, purpose="registration",
-        #     expires_at=expires_at,
-        # )
-        # try:
-        #     await self._sms.send_sms(
-        #         phone=phone,
-        #         message=(
-        #             f"Your Maiplot verification code is {code}. "
-        #             f"It expires in {self._otp_expire_minutes} minutes."
-        #         ),
-        #     )
-        # except SmsError as exc:
-        #     raise OtpDispatchFailed() from exc
-        # ----------------------------------------------------------------------

@@ -1,29 +1,34 @@
-"""RegistrationService with mocked repos + adapters (email flow, SCRUM-152).
+"""RegistrationService with mocked repos + adapters (phone OTP flow, SCRUM-175).
 
 Exercises the orchestration logic the integration tests can't isolate
-cleanly (e.g. an email-delivery failure rolls into VerificationEmailFailed,
-and the duplicate/rate-limit short-circuits happen before any write).
+cleanly (e.g. an SMS-delivery failure rolls into OtpDispatchFailed, and the
+duplicate/rate-limit short-circuits happen before any write).
+
+SCRUM-175 reverted the verification channel from the SCRUM-152 email magic
+link back to phone OTP over SMS, now dispatched via Twilio.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
+from app.services.otp import verify_code
 from app.services.rate_limit import RateLimitResult
 from app.services.registration import (
     EmailAlreadyRegistered,
+    OtpDispatchFailed,
     PhoneAlreadyRegistered,
     RegistrationService,
-    VerificationEmailFailed,
     VerificationRateLimited,
 )
 
-_BASE_URL = "https://app.maiplot.ng/verify-email"
+_OTP_EXPIRE_MINUTES = 5
 
 
 class _StubUserRepo:
@@ -49,7 +54,7 @@ class _StubUserRepo:
         return self._new_id
 
 
-class _StubEmailTokenRepo:
+class _StubOtpRepo:
     def __init__(self) -> None:
         self.created: list[dict[str, Any]] = []
 
@@ -79,28 +84,27 @@ class _StubLimiter:
 def _build_service(
     *,
     user_repo: _StubUserRepo,
-    token_repo: _StubEmailTokenRepo | None = None,
+    otp_repo: _StubOtpRepo | None = None,
     creds_repo: _StubCredsRepo | None = None,
     limiter: _StubLimiter | None = None,
-    email_sender: InMemoryEmailClient | None = None,
+    sms: InMemoryTwilioClient | None = None,
 ) -> RegistrationService:
     return RegistrationService(
         users=user_repo,  # type: ignore[arg-type]
-        email_tokens=token_repo or _StubEmailTokenRepo(),  # type: ignore[arg-type]
+        otps=otp_repo or _StubOtpRepo(),  # type: ignore[arg-type]
         credentials=creds_repo or _StubCredsRepo(),  # type: ignore[arg-type]
         rate_limiter=limiter or _StubLimiter(),  # type: ignore[arg-type]
-        email_sender=email_sender or InMemoryEmailClient(),
-        verification_expire_minutes=30,
-        verify_base_url=_BASE_URL,
+        sms=sms or InMemoryTwilioClient(),
+        otp_expire_minutes=_OTP_EXPIRE_MINUTES,
     )
 
 
 @pytest.mark.asyncio
-async def test_happy_path_creates_user_and_sends_email() -> None:
+async def test_happy_path_creates_user_and_sends_otp() -> None:
     user_repo = _StubUserRepo()
-    token_repo = _StubEmailTokenRepo()
-    email = InMemoryEmailClient()
-    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient()
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, sms=sms)
 
     result = await service.register(
         phone="+2348012345678",
@@ -111,25 +115,45 @@ async def test_happy_path_creates_user_and_sends_email() -> None:
     )
 
     assert isinstance(result.user_id, UUID)
-    assert result.verification_expires_in_seconds == 30 * 60
+    assert result.verification_expires_in_seconds == _OTP_EXPIRE_MINUTES * 60
     assert user_repo.created[0]["phone"] == "+2348012345678"
+    # Email is still collected and stored — it is the login identifier even
+    # though it is no longer the verification channel.
     assert user_repo.created[0]["email"] == "buyer@example.com"
 
-    assert token_repo.created[0]["purpose"] == "registration"
-    assert token_repo.created[0]["email"] == "buyer@example.com"
-    assert isinstance(token_repo.created[0]["expires_at"], datetime)
-    # The persisted value is the SHA-256 hash (64 hex chars), never the token.
-    token_hash = token_repo.created[0]["token_hash"]
-    assert len(token_hash) == 64
+    assert otp_repo.created[0]["purpose"] == "registration"
+    assert otp_repo.created[0]["phone"] == "+2348012345678"
+    assert isinstance(otp_repo.created[0]["expires_at"], datetime)
 
-    assert len(email.sent) == 1
-    sent = email.sent[0]
-    assert sent.to == "buyer@example.com"
-    # The magic link points at the configured landing page and carries a token.
-    assert sent.verify_url.startswith(f"{_BASE_URL}?token=")
-    # The raw token is in the link but must NOT equal the stored hash.
-    raw_token = sent.verify_url.split("token=", 1)[1]
-    assert raw_token and raw_token != token_hash
+    assert len(sms.sent) == 1
+    assert sms.sent[0].phone == "+2348012345678"
+
+
+@pytest.mark.asyncio
+async def test_sms_carries_a_six_digit_code_matching_the_stored_hash() -> None:
+    """The plaintext code exists only in the SMS; the DB holds a bcrypt hash.
+    This is the whole security property of the OTP flow (CLAUDE.md §4)."""
+    user_repo = _StubUserRepo()
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient()
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, sms=sms)
+
+    await service.register(
+        phone="+2348012345678",
+        role="buyer",
+        email="buyer@example.com",
+        password=None,
+        seller_authority_type=None,
+    )
+
+    match = re.search(r"\b(\d{6})\b", sms.sent[0].message)
+    assert match is not None, f"no 6-digit code in {sms.sent[0].message!r}"
+    code = match.group(1)
+
+    stored_hash = otp_repo.created[0]["code_hash"]
+    assert stored_hash != code
+    assert stored_hash.startswith("$2")
+    assert verify_code(code, stored_hash)
 
 
 @pytest.mark.asyncio
@@ -207,9 +231,9 @@ async def test_password_skipped_when_absent() -> None:
 @pytest.mark.asyncio
 async def test_duplicate_email_rejected_before_anything_else() -> None:
     user_repo = _StubUserRepo(existing_email="buyer@example.com")
-    token_repo = _StubEmailTokenRepo()
-    email = InMemoryEmailClient()
-    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient()
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, sms=sms)
 
     with pytest.raises(EmailAlreadyRegistered):
         await service.register(
@@ -221,16 +245,16 @@ async def test_duplicate_email_rejected_before_anything_else() -> None:
         )
 
     assert user_repo.created == []
-    assert token_repo.created == []
-    assert email.sent == []
+    assert otp_repo.created == []
+    assert sms.sent == []
 
 
 @pytest.mark.asyncio
 async def test_duplicate_phone_rejected() -> None:
     user_repo = _StubUserRepo(existing_phone="+2348012345678")
-    token_repo = _StubEmailTokenRepo()
-    email = InMemoryEmailClient()
-    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient()
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, sms=sms)
 
     with pytest.raises(PhoneAlreadyRegistered):
         await service.register(
@@ -242,19 +266,17 @@ async def test_duplicate_phone_rejected() -> None:
         )
 
     assert user_repo.created == []
-    assert token_repo.created == []
-    assert email.sent == []
+    assert otp_repo.created == []
+    assert sms.sent == []
 
 
 @pytest.mark.asyncio
-async def test_rate_limited_short_circuits_and_keys_on_email() -> None:
+async def test_rate_limited_short_circuits_and_keys_on_phone() -> None:
     user_repo = _StubUserRepo()
-    token_repo = _StubEmailTokenRepo()
-    email = InMemoryEmailClient()
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient()
     limiter = _StubLimiter(allowed=False)
-    service = _build_service(
-        user_repo=user_repo, token_repo=token_repo, limiter=limiter, email_sender=email
-    )
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, limiter=limiter, sms=sms)
 
     with pytest.raises(VerificationRateLimited):
         await service.register(
@@ -265,21 +287,22 @@ async def test_rate_limited_short_circuits_and_keys_on_email() -> None:
             seller_authority_type=None,
         )
 
-    # The limiter is keyed on the email address, not the phone.
-    assert limiter.keys == ["buyer@example.com"]
+    # SCRUM-175: the limiter is keyed on the PHONE again (CLAUDE.md §4 caps OTP
+    # sends per phone). It was keyed on email while the magic link was live.
+    assert limiter.keys == ["+2348012345678"]
     assert user_repo.created == []
-    assert token_repo.created == []
-    assert email.sent == []
+    assert otp_repo.created == []
+    assert sms.sent == []
 
 
 @pytest.mark.asyncio
-async def test_email_delivery_failure_surfaces_as_verification_error() -> None:
+async def test_sms_delivery_failure_surfaces_as_otp_dispatch_failed() -> None:
     user_repo = _StubUserRepo()
-    token_repo = _StubEmailTokenRepo()
-    email = InMemoryEmailClient(fail_next=True)
-    service = _build_service(user_repo=user_repo, token_repo=token_repo, email_sender=email)
+    otp_repo = _StubOtpRepo()
+    sms = InMemoryTwilioClient(fail_next=True)
+    service = _build_service(user_repo=user_repo, otp_repo=otp_repo, sms=sms)
 
-    with pytest.raises(VerificationEmailFailed):
+    with pytest.raises(OtpDispatchFailed):
         await service.register(
             phone="+2348012345678",
             role="buyer",
@@ -287,8 +310,8 @@ async def test_email_delivery_failure_surfaces_as_verification_error() -> None:
             password=None,
             seller_authority_type=None,
         )
-    # User + token were persisted before the send attempt; the DB transaction
-    # is rolled back by the route handler's get_session dependency, so this is
+    # User + OTP were persisted before the send attempt; the DB transaction is
+    # rolled back by the route handler's get_session dependency, so this is
     # consistent with the contract.
     assert len(user_repo.created) == 1
-    assert len(token_repo.created) == 1
+    assert len(otp_repo.created) == 1
