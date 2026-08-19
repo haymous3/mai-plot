@@ -227,6 +227,12 @@ services:
       # — enqueues notifications.dispatch on the shared broker, best-effort.
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      # SMS OTP via Twilio (SCRUM-175, replaced Termii). Fake by default so a
+      # bare `docker compose up` never dials out; real creds come from .env.
+      TWILIO_USE_FAKE: ${TWILIO_USE_FAKE:-true}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
 
   listing-service:
     <<: *fastapi-defaults

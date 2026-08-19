@@ -1,6 +1,6 @@
 """Provider-agnostic verification-email adapter (SCRUM-152).
 
-Mirrors the Termii adapter's shape (Protocol + real client + in-memory
+Mirrors the Twilio adapter's shape (Protocol + real client + in-memory
 fake + factory), but for transactional email:
 
   * EmailVerificationSender — the Protocol every call site depends on.

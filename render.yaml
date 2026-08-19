@@ -149,6 +149,11 @@ projects:
                 generateValue: true
 
               # Outbound messaging — nothing leaves the environment.
+              # TWILIO_USE_FAKE covers auth-service's OTP SMS (SCRUM-175);
+              # TERMII_USE_FAKE still covers notification-service's alert SMS,
+              # which has not migrated off Termii yet.
+              - key: TWILIO_USE_FAKE
+                value: "true"
               - key: TERMII_USE_FAKE
                 value: "true"
               - key: SES_USE_FAKE

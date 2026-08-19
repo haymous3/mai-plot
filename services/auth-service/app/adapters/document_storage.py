@@ -1,6 +1,6 @@
 """Document storage adapter — private S3 bucket for PoA documents.
 
-Mirrors the Termii/BVN/NIN adapter shape:
+Mirrors the Twilio/BVN/NIN adapter shape:
   * DocumentStorage — Protocol every call site depends on.
   * S3DocumentStorage — real adapter, puts to a PRIVATE bucket and mints
     short-TTL pre-signed GET URLs (CLAUDE.md: documents are never public).
