@@ -1,4 +1,4 @@
-"""Integration test fixtures — real DB, fake Termii.
+"""Integration test fixtures — real DB, fake Twilio.
 
 `clean_auth_tables` truncates the four auth tables before each test so
 state from one test doesn't leak into the next. We can't use the
@@ -6,8 +6,8 @@ transactional rollback pattern from tests/conftest.py here because the
 FastAPI app commits on a different connection than the sync test
 session.
 
-`override_termii` swaps the process-wide Termii client out for a fresh
-InMemoryTermiiClient that the test can inspect.
+`sms_fake` swaps the process-wide Twilio client out for a fresh
+InMemoryTwilioClient that the test can inspect.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from app.adapters.bvn import InMemoryBvnVerifier
 from app.adapters.document_storage import InMemoryDocumentStorage
 from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.nin import InMemoryNinVerifier
-from app.adapters.termii import InMemoryTermiiClient
+from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
 from app.db import dispose_engine
 
@@ -78,15 +78,15 @@ def _force_async_database_url() -> Generator[None, None, None]:
 
 
 @pytest_asyncio.fixture
-async def termii_fake() -> AsyncIterator[InMemoryTermiiClient]:
-    """Bind a fresh InMemoryTermiiClient for the duration of the test."""
-    from app.dependencies import get_termii
+async def sms_fake() -> AsyncIterator[InMemoryTwilioClient]:
+    """Bind a fresh InMemoryTwilioClient for the duration of the test."""
+    from app.dependencies import get_sms_client
     from app.main import app
 
-    fake = InMemoryTermiiClient()
-    app.dependency_overrides[get_termii] = lambda: fake
+    fake = InMemoryTwilioClient()
+    app.dependency_overrides[get_sms_client] = lambda: fake
     yield fake
-    app.dependency_overrides.pop(get_termii, None)
+    app.dependency_overrides.pop(get_sms_client, None)
 
 
 @pytest_asyncio.fixture

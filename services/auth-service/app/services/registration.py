@@ -163,10 +163,10 @@ class RegistrationService:
         # --- Retained OTP dispatch (SCRUM-152 rollback reference) --------------
         # The phone-OTP flow this replaced. The OTP verify path is still live
         # (POST /auth/otp/verify); only this send was swapped for the email
-        # link. To revert the channel, restore the otps/termii collaborators on
+        # link. To revert the channel, restore the otps/sms collaborators on
         # __init__ and re-enable the block below.
         #
-        # from app.adapters.termii import TermiiError
+        # from app.adapters.twilio import SmsError
         # from app.services.otp import generate_code, hash_code
         #
         # code = generate_code()
@@ -176,13 +176,13 @@ class RegistrationService:
         #     expires_at=expires_at,
         # )
         # try:
-        #     await self._termii.send_sms(
+        #     await self._sms.send_sms(
         #         phone=phone,
         #         message=(
         #             f"Your Maiplot verification code is {code}. "
         #             f"It expires in {self._otp_expire_minutes} minutes."
         #         ),
         #     )
-        # except TermiiError as exc:
+        # except SmsError as exc:
         #     raise OtpDispatchFailed() from exc
         # ----------------------------------------------------------------------

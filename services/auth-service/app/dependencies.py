@@ -21,7 +21,7 @@ from app.adapters.email_verification import (
     build_email_verification_client,
 )
 from app.adapters.nin import NinVerifier, build_nin_verifier
-from app.adapters.termii import TermiiClient, build_termii_client
+from app.adapters.twilio import SmsClient, build_sms_client
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
@@ -58,7 +58,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _redis: Redis | None = None
-_termii: TermiiClient | None = None
+_sms_client: SmsClient | None = None
 _email_sender: EmailVerificationSender | None = None
 _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
@@ -83,18 +83,19 @@ async def get_redis(settings: SettingsDep) -> Redis | None:
     return _redis
 
 
-async def get_termii(settings: SettingsDep) -> TermiiClient:
-    """Process-wide Termii client. The factory picks fake vs real."""
-    global _termii
-    if _termii is None:
-        _termii = build_termii_client(
-            use_fake=settings.termii_use_fake,
-            api_key=settings.termii_api_key,
-            sender_id=settings.termii_sender_id,
-            base_url=settings.termii_base_url,
-            timeout_seconds=settings.termii_timeout_seconds,
+async def get_sms_client(settings: SettingsDep) -> SmsClient:
+    """Process-wide Twilio client. The factory picks fake vs real."""
+    global _sms_client
+    if _sms_client is None:
+        _sms_client = build_sms_client(
+            use_fake=settings.twilio_use_fake,
+            account_sid=settings.twilio_account_sid,
+            auth_token=settings.twilio_auth_token,
+            from_number=settings.twilio_from_number,
+            base_url=settings.twilio_base_url,
+            timeout_seconds=settings.twilio_timeout_seconds,
         )
-    return _termii
+    return _sms_client
 
 
 async def get_email_sender(settings: SettingsDep) -> EmailVerificationSender:
@@ -153,7 +154,7 @@ async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
 
 
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
-TermiiDep = Annotated[TermiiClient, Depends(get_termii)]
+SmsClientDep = Annotated[SmsClient, Depends(get_sms_client)]
 EmailSenderDep = Annotated[EmailVerificationSender, Depends(get_email_sender)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]

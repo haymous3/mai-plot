@@ -29,14 +29,20 @@ class Settings(BaseSettings):
     otp_expire_minutes: int = 5
     otp_rate_limit_per_hour: int = 5
 
-    # Termii — the fake adapter is the default so local + CI runs work
-    # without a sandbox API key. Production sets termii_use_fake=false
-    # and provides the real key + base URL.
-    termii_use_fake: bool = True
-    termii_api_key: str = ""
-    termii_sender_id: str = "Maiplot"
-    termii_base_url: str = "https://api.ng.termii.com"
-    termii_timeout_seconds: float = 3.0
+    # Twilio (SCRUM-175, replaced Termii) — the fake adapter is the default so
+    # local + CI runs work without real credentials. Production sets
+    # twilio_use_fake=false and provides the real Account SID + Auth Token.
+    #
+    # NOTE (SCRUM-175 deliverability): twilio_from_number is a US long code
+    # while every recipient is a Nigerian mobile. Nigerian carriers filter A2P
+    # long-code traffic; a registered alphanumeric sender ID is the fix. Twilio
+    # accepting a message is not evidence it was delivered.
+    twilio_use_fake: bool = True
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    twilio_base_url: str = "https://api.twilio.com"
+    twilio_timeout_seconds: float = 3.0
 
     # Email verification (SCRUM-152). Account verification is an email magic
     # link, not phone OTP. The in-memory fake sender is the default so local +

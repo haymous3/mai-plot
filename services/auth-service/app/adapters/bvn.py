@@ -1,6 +1,6 @@
 """BVN verification adapter — calls the identity bureau (NIBSS/partner).
 
-Mirrors the Termii adapter shape:
+Mirrors the Twilio adapter shape:
   * BvnVerifier — Protocol every call site depends on.
   * HttpBvnVerifier — real adapter, calls the bureau REST API.
   * InMemoryBvnVerifier — in-process fake for local + CI.
