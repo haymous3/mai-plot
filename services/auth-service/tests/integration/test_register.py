@@ -36,7 +36,8 @@ async def test_register_buyer_happy_path(
     assert "user_id" in body
     # Now the OTP TTL (5 min), not the magic-link TTL (30 min).
     assert body["verification_expires_in_seconds"] == 5 * 60
-    assert "08012345678" in body["message"]
+    # The message echoes the NORMALISED E.164 phone, not the raw input.
+    assert "+2348012345678" in body["message"]
 
     # X-Trace-ID middleware echoes the generated value back.
     assert response.headers.get("X-Trace-ID")

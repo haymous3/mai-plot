@@ -53,9 +53,34 @@ def clean_auth_tables(db_engine: Engine) -> Generator[None, None, None]:
     yield
 
 
+# Outbound adapters that must never dial out from a test, with the setting
+# that forces each to its in-memory fake. Settings read maiplot/.env, and a
+# developer running a real e2e check will have flipped some of these to
+# false there (see otp-e2e-test-plan.md) — without this pin those creds leak
+# into the test run and it makes real API calls. That is not hypothetical:
+# it sent live Twilio requests during SCRUM-175 until this was added.
+_FORCED_FAKE_SETTINGS = (
+    "TWILIO_USE_FAKE",
+    "EMAIL_VERIFICATION_USE_FAKE",
+    "BVN_USE_FAKE",
+    "NIN_USE_FAKE",
+    "POA_STORAGE_USE_FAKE",
+)
+
+
+def _reset_adapter_singletons() -> None:
+    """Clear dependencies.py's memoised adapter clients."""
+    from app import dependencies
+
+    for attr in ("_sms_client", "_email_sender", "_bvn_verifier", "_nin_verifier"):
+        if hasattr(dependencies, attr):
+            setattr(dependencies, attr, None)
+
+
 @pytest.fixture(autouse=True)
 def _force_async_database_url() -> Generator[None, None, None]:
-    """Pin the app's async engine to the same DB the test session uses.
+    """Pin the app's async engine to the same DB the test session uses, and
+    force every outbound adapter to its fake.
 
     tests/conftest.py builds the sync URL from POSTGRES_HOST_PORT (so
     localhost works) but the app's Settings reads DATABASE_URL which
@@ -67,14 +92,28 @@ def _force_async_database_url() -> Generator[None, None, None]:
     password = os.environ.get("POSTGRES_PASSWORD", "change-me-local")
     db = os.environ.get("POSTGRES_DB", "maiplot")
     async_url = f"postgresql+asyncpg://{user}:{password}@localhost:{port}/{db}"
+
+    originals = {key: os.environ.get(key) for key in _FORCED_FAKE_SETTINGS}
     original = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = async_url
+    for key in _FORCED_FAKE_SETTINGS:
+        os.environ[key] = "true"
     get_settings.cache_clear()
+    # dependencies.py memoises each adapter in a module-level global, so a
+    # client built before the pin (or by an earlier test) would survive the
+    # settings cache_clear. Drop them so the next get_* rebuilds from the
+    # pinned env.
+    _reset_adapter_singletons()
     yield
     if original is None:
         os.environ.pop("DATABASE_URL", None)
     else:
         os.environ["DATABASE_URL"] = original
+    for key, value in originals.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
     get_settings.cache_clear()
 
 

@@ -162,4 +162,7 @@ async def test_bvn_not_verified_result_keeps_status_unchanged(
         assert row is not None
         # A failed verification stores nothing and does not advance status.
         assert row.bvn_hash is None
-        assert row.verified_status == "email_verified"
+        # phone_verified since SCRUM-175 — the helper verifies by OTP now, not
+        # by magic link. The point of the assertion is unchanged: a failed BVN
+        # check must leave whatever status the user arrived with.
+        assert row.verified_status == "phone_verified"
