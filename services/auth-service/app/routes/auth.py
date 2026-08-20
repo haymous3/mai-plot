@@ -98,9 +98,9 @@ from app.services.poa_upload import (
 from app.services.profile import EmailAlreadyInUse, InvalidFullName, ProfileService
 from app.services.registration import (
     EmailAlreadyRegistered,
+    OtpDispatchFailed,
     PhoneAlreadyRegistered,
     RegistrationService,
-    VerificationEmailFailed,
     VerificationRateLimited,
 )
 from app.services.resend_verification import ResendVerificationService
@@ -155,18 +155,18 @@ async def register(
         return _error(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "VERIFICATION_RATE_LIMITED",
-            "Too many verification emails for this address. Try again later.",
+            "Too many verification codes for this number. Try again later.",
         )
-    except VerificationEmailFailed:
+    except OtpDispatchFailed:
         return _error(
             status.HTTP_502_BAD_GATEWAY,
-            "VERIFICATION_EMAIL_FAILED",
-            "Could not send the verification email. Please retry.",
+            "OTP_DISPATCH_FAILED",
+            "Could not send the verification code. Please retry.",
         )
 
     return RegisterResponse(
         user_id=result.user_id,
-        message=f"Verification email sent to {body.email}",
+        message=f"Verification code sent to {body.phone}",
         verification_expires_in_seconds=result.verification_expires_in_seconds,
     )
 

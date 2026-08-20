@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 
@@ -17,10 +17,10 @@ def _auth(token: object) -> dict[str, str]:
 async def test_logout_revokes_refresh_token(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
 
     response = await http_client.post(
         "/auth/logout",
@@ -42,10 +42,10 @@ async def test_logout_revokes_refresh_token(
 async def test_logout_requires_authentication(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
 
     # No Authorization header -> 401, and the token stays usable.
     response = await http_client.post(
@@ -64,10 +64,10 @@ async def test_logout_requires_authentication(
 async def test_logout_rejects_garbage_access_token(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
     response = await http_client.post(
         "/auth/logout",
         json={"refresh_token": tokens["refresh_token"]},
@@ -81,10 +81,10 @@ async def test_logout_rejects_garbage_access_token(
 async def test_logout_is_idempotent(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
     headers = _auth(tokens["access_token"])
     body = {"refresh_token": tokens["refresh_token"]}
 

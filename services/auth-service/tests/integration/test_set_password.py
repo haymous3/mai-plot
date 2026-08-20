@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 # Throwaway test values, referenced by variable so secret scanners don't flag a
@@ -16,11 +16,9 @@ _WEAK = "alllowercase"
 
 
 async def _register_verify_token(
-    http_client: AsyncClient, email_fake: InMemoryEmailClient, *, phone: str, email: str
+    http_client: AsyncClient, sms: InMemoryTwilioClient, *, phone: str, email: str
 ) -> str:
-    body = await register_and_verify(
-        http_client, email_fake, phone=phone, role="buyer", email=email
-    )
+    body = await register_and_verify(http_client, sms, phone=phone, role="buyer", email=email)
     token: str = body["access_token"]
     return token
 
@@ -33,13 +31,11 @@ def _auth(token: str) -> dict[str, str]:
 async def test_set_password_then_login(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     email = "buyer@maiplot.ng"
-    token = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", email=email
-    )
+    token = await _register_verify_token(http_client, sms_fake, phone="08012345678", email=email)
 
     resp = await http_client.post(
         "/auth/set-password", json={"password": _STRONG}, headers=_auth(token)
@@ -56,11 +52,11 @@ async def test_set_password_then_login(
 async def test_set_password_rejects_weak_password(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     token = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", email="b@maiplot.ng"
+        http_client, sms_fake, phone="08012345678", email="b@maiplot.ng"
     )
     # ≥8 chars but no uppercase/digit → the service's policy (envelope), not
     # Pydantic's length floor.

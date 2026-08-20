@@ -1,8 +1,15 @@
 """POST /auth/otp/verify integration tests.
 
-The phone-OTP verify path stays live (SCRUM-152 only swapped the *delivery*
-channel at registration to email). Registration no longer emits an OTP, so
-these tests seed an otp_codes row directly and register with an email.
+SCRUM-175 pointed registration back at phone OTP, so these tests now drive
+the real production path: register, read the code out of the captured SMS,
+and verify it. They previously seeded an otp_codes row directly because
+registration (on the SCRUM-152 email flow) emitted no OTP at all.
+
+That matters for single-use in particular: with a seeded row *plus* the
+registration row, a second verify would fall through to the registration
+OTP and fail on a wrong code rather than on already-used — the assertion
+would still pass while testing nothing. One row per phone keeps
+`test_verify_already_used_returns_401` honest (CLAUDE.md §4).
 """
 
 from __future__ import annotations
@@ -13,39 +20,34 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
-from app.services.otp import hash_code
-from tests.integration.conftest import assert_error_envelope
+from tests.integration.conftest import assert_error_envelope, extract_otp_code, register_only
 
 _PHONE = "+2348012345678"
-_CODE = "123456"
 
 
 async def _register(
-    http_client: AsyncClient, email: str = "buyer@example.com", phone: str = "08012345678"
-) -> str:
-    """Register a user (email flow) and return its id."""
-    response = await http_client.post(
-        "/auth/register", json={"phone": phone, "role": "buyer", "email": email}
-    )
-    assert response.status_code == 201, response.text
-    user_id: str = response.json()["user_id"]
-    return user_id
+    http_client: AsyncClient,
+    sms: InMemoryTwilioClient,
+    email: str = "buyer@example.com",
+    phone: str = "08012345678",
+) -> tuple[str, str]:
+    """Register a user; return (user_id, the OTP from the sent SMS)."""
+    body = await register_only(http_client, phone=phone, role="buyer", email=email)
+    user_id: str = body["user_id"]
+    return user_id, extract_otp_code(sms.sent[-1].message)
 
 
-def _seed_otp(
-    db_engine: Engine, *, phone: str = _PHONE, code: str = _CODE, expired: bool = False
-) -> None:
-    """Insert a live (or expired) registration OTP for `phone`."""
-    interval = "- INTERVAL '1 minute'" if expired else "+ INTERVAL '5 minutes'"
+def _expire_otp(db_engine: Engine, *, phone: str = _PHONE) -> None:
+    """Backdate the live OTP for `phone` so the verify path sees it expired."""
     with db_engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO otp_codes (phone, code_hash, purpose, expires_at) "
-                f"VALUES (:phone, :code_hash, 'registration', NOW() {interval})"
+                "UPDATE otp_codes SET expires_at = NOW() - INTERVAL '1 minute' "
+                "WHERE phone = :phone AND used_at IS NULL"
             ),
-            {"phone": phone, "code_hash": hash_code(code)},
+            {"phone": phone},
         )
 
 
@@ -53,16 +55,15 @@ def _seed_otp(
 async def test_verify_happy_path_issues_tokens(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id = await _register(http_client)
-    _seed_otp(db_engine)
+    user_id, code = await _register(http_client, sms_fake)
 
     response = await http_client.post(
         "/auth/otp/verify",
-        json={"phone": _PHONE, "otp": _CODE, "purpose": "registration"},
+        json={"phone": _PHONE, "otp": code, "purpose": "registration"},
     )
 
     assert response.status_code == 200, response.text
@@ -81,7 +82,8 @@ async def test_verify_happy_path_issues_tokens(
 
     with db_engine.connect() as conn:
         used = conn.execute(
-            text(f"SELECT count(*) FROM otp_codes WHERE phone = '{_PHONE}' AND used_at IS NOT NULL")
+            text("SELECT count(*) FROM otp_codes WHERE phone = :phone AND used_at IS NOT NULL"),
+            {"phone": _PHONE},
         ).scalar_one()
         assert used == 1
 
@@ -99,19 +101,39 @@ async def test_verify_happy_path_issues_tokens(
 
 
 @pytest.mark.asyncio
-async def test_verify_wrong_code_returns_401(
+async def test_registration_persists_only_the_hash(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    await _register(http_client)
-    _seed_otp(db_engine)
+    """The plaintext code must never reach the database (CLAUDE.md §4)."""
+    _, code = await _register(http_client, sms_fake)
+
+    with db_engine.connect() as conn:
+        stored = conn.execute(
+            text("SELECT code_hash FROM otp_codes WHERE phone = :phone"),
+            {"phone": _PHONE},
+        ).scalar_one()
+    assert stored != code
+    assert stored.startswith("$2")
+
+
+@pytest.mark.asyncio
+async def test_verify_wrong_code_returns_401(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    _, code = await _register(http_client, sms_fake)
+    wrong = "000000" if code != "000000" else "111111"
 
     response = await http_client.post(
         "/auth/otp/verify",
-        json={"phone": _PHONE, "otp": "000000", "purpose": "registration"},
+        json={"phone": _PHONE, "otp": wrong, "purpose": "registration"},
     )
     assert response.status_code == 401
     assert_error_envelope(response.json(), "OTP_INVALID")
@@ -121,7 +143,7 @@ async def test_verify_wrong_code_returns_401(
 async def test_verify_unknown_phone_returns_401(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     response = await http_client.post(
@@ -136,22 +158,30 @@ async def test_verify_unknown_phone_returns_401(
 async def test_verify_already_used_returns_401(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    await _register(http_client)
-    _seed_otp(db_engine)
+    """Single-use enforcement. Exactly one OTP exists for this phone, so a
+    second verify with the SAME correct code can only fail on used_at."""
+    _, code = await _register(http_client, sms_fake)
+
+    with db_engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT count(*) FROM otp_codes WHERE phone = :phone"),
+            {"phone": _PHONE},
+        ).scalar_one()
+    assert rows == 1, "test is only meaningful with a single OTP row"
 
     first = await http_client.post(
         "/auth/otp/verify",
-        json={"phone": _PHONE, "otp": _CODE, "purpose": "registration"},
+        json={"phone": _PHONE, "otp": code, "purpose": "registration"},
     )
     assert first.status_code == 200
 
     second = await http_client.post(
         "/auth/otp/verify",
-        json={"phone": _PHONE, "otp": _CODE, "purpose": "registration"},
+        json={"phone": _PHONE, "otp": code, "purpose": "registration"},
     )
     assert second.status_code == 401
     assert_error_envelope(second.json(), "OTP_INVALID")
@@ -161,16 +191,16 @@ async def test_verify_already_used_returns_401(
 async def test_verify_expired_returns_401(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    await _register(http_client)
-    _seed_otp(db_engine, expired=True)
+    _, code = await _register(http_client, sms_fake)
+    _expire_otp(db_engine)
 
     response = await http_client.post(
         "/auth/otp/verify",
-        json={"phone": _PHONE, "otp": _CODE, "purpose": "registration"},
+        json={"phone": _PHONE, "otp": code, "purpose": "registration"},
     )
     assert response.status_code == 401
     assert_error_envelope(response.json(), "OTP_EXPIRED")

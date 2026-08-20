@@ -1,4 +1,9 @@
-"""POST /auth/verify/email/resend integration tests (SCRUM-154)."""
+"""POST /auth/verify/email/resend integration tests (SCRUM-154).
+
+SCRUM-175 moved registration to phone OTP, so there is no longer a
+"registration email" for resend to follow — the first resend IS the first
+email. Counts here shifted down by one accordingly.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +42,12 @@ async def test_resend_sends_a_fresh_link_and_supersedes_the_old(
     db_engine: Engine,
 ) -> None:
     user_id = await _register(http_client)
-    assert len(email_verification_fake.sent) == 1  # the registration email
+    # Registration sends an OTP SMS, not a link, so nothing is captured yet.
+    assert email_verification_fake.sent == []
+
+    first = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
+    assert first.status_code == 202, first.text
+    assert len(email_verification_fake.sent) == 1
 
     resp = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
     assert resp.status_code == 202, resp.text
@@ -85,7 +95,9 @@ async def test_resend_already_verified_is_generic_202_and_sends_nothing(
     http_client: AsyncClient,
 ) -> None:
     await _register(http_client)
-    token = extract_email_token(email_verification_fake.sent[0].verify_url)
+    issued = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
+    assert issued.status_code == 202
+    token = extract_email_token(email_verification_fake.sent[-1].verify_url)
     verify = await http_client.post(
         "/auth/verify/email", json={"token": token, "purpose": "registration"}
     )
@@ -93,7 +105,7 @@ async def test_resend_already_verified_is_generic_202_and_sends_nothing(
 
     resp = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
     assert resp.status_code == 202, resp.text
-    # Already verified -> no new email beyond the original registration one.
+    # Already verified -> no new email beyond the one that verified them.
     assert len(email_verification_fake.sent) == 1
 
 

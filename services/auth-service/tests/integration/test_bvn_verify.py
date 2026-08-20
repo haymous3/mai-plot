@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.bvn import BvnVerificationOutcome, InMemoryBvnVerifier
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 _BVN = "12345678901"
@@ -16,14 +16,12 @@ _BVN = "12345678901"
 
 async def _register_verify_token(
     http_client: AsyncClient,
-    email_fake: InMemoryEmailClient,
+    sms: InMemoryTwilioClient,
     phone: str,
     email: str = "buyer@example.com",
 ) -> tuple[str, str]:
     """Register + email-verify a user; return (user_id, access_token)."""
-    body = await register_and_verify(
-        http_client, email_fake, phone=phone, role="buyer", email=email
-    )
+    body = await register_and_verify(http_client, sms, phone=phone, role="buyer", email=email)
     return body["user"]["id"], body["access_token"]
 
 
@@ -35,14 +33,12 @@ def _auth(token: str) -> dict[str, str]:
 async def test_bvn_verify_happy_path(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     bvn_fake: InMemoryBvnVerifier,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, token = await _register_verify_token(
-        http_client, email_verification_fake, "08012345678"
-    )
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
 
     response = await http_client.post("/auth/verify/bvn", json={"bvn": _BVN}, headers=_auth(token))
 
@@ -75,11 +71,11 @@ async def test_bvn_verify_happy_path(
 async def test_bvn_verify_same_user_twice_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     bvn_fake: InMemoryBvnVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     first = await http_client.post("/auth/verify/bvn", json={"bvn": _BVN}, headers=_auth(token))
     assert first.status_code == 202
 
@@ -92,13 +88,13 @@ async def test_bvn_verify_same_user_twice_conflicts(
 async def test_bvn_already_owned_by_another_account_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     bvn_fake: InMemoryBvnVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token_a = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token_a = await _register_verify_token(http_client, sms_fake, "08012345678")
     _, token_b = await _register_verify_token(
-        http_client, email_verification_fake, "08087654321", "second@example.com"
+        http_client, sms_fake, "08087654321", "second@example.com"
     )
 
     first = await http_client.post("/auth/verify/bvn", json={"bvn": _BVN}, headers=_auth(token_a))
@@ -114,11 +110,11 @@ async def test_bvn_already_owned_by_another_account_conflicts(
 async def test_bvn_invalid_format_returns_422_without_echoing_value(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     bvn_fake: InMemoryBvnVerifier,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     bad = "123abc"
     response = await http_client.post("/auth/verify/bvn", json={"bvn": bad}, headers=_auth(token))
     assert response.status_code == 422
@@ -143,14 +139,12 @@ async def test_bvn_verify_requires_authentication(
 async def test_bvn_not_verified_result_keeps_status_unchanged(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     bvn_fake: InMemoryBvnVerifier,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, token = await _register_verify_token(
-        http_client, email_verification_fake, "08012345678"
-    )
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     bvn_fake.outcome = BvnVerificationOutcome(status="failed")
 
     response = await http_client.post("/auth/verify/bvn", json={"bvn": _BVN}, headers=_auth(token))
@@ -168,4 +162,7 @@ async def test_bvn_not_verified_result_keeps_status_unchanged(
         assert row is not None
         # A failed verification stores nothing and does not advance status.
         assert row.bvn_hash is None
-        assert row.verified_status == "email_verified"
+        # phone_verified since SCRUM-175 — the helper verifies by OTP now, not
+        # by magic link. The point of the assertion is unchanged: a failed BVN
+        # check must leave whatever status the user arrived with.
+        assert row.verified_status == "phone_verified"

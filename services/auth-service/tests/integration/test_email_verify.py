@@ -1,4 +1,12 @@
-"""POST /auth/verify/email integration tests (SCRUM-152)."""
+"""POST /auth/verify/email integration tests (SCRUM-152).
+
+The endpoint is unchanged, but SCRUM-175 moved registration back to phone
+OTP, so registering no longer mints a magic link. These tests now obtain one
+the way a real user would once SMS fails them: register, then ask for a link
+via POST /auth/verify/email/resend. That path is deliberately still live —
+see app/services/registration.py — because SMS delivery to Nigerian numbers
+from a US long code is unreliable.
+"""
 
 from __future__ import annotations
 
@@ -18,11 +26,16 @@ _EMAIL = "buyer@example.com"
 async def _register(
     http_client: AsyncClient, email: str = _EMAIL, phone: str = "08012345678"
 ) -> dict[str, object]:
+    """Register, then request a verification link so the email fake captures
+    one. Registration itself now sends an OTP SMS, not a link (SCRUM-175)."""
     response = await http_client.post(
         "/auth/register", json={"phone": phone, "role": "buyer", "email": email}
     )
     assert response.status_code == 201, response.text
     body: dict[str, object] = response.json()
+
+    resend = await http_client.post("/auth/verify/email/resend", json={"email": email})
+    assert resend.status_code == 202, resend.text
     return body
 
 
@@ -35,7 +48,7 @@ async def test_verify_happy_path_issues_tokens(
     db_engine: Engine,
 ) -> None:
     register_body = await _register(http_client)
-    token = extract_email_token(email_verification_fake.sent[0].verify_url)
+    token = extract_email_token(email_verification_fake.sent[-1].verify_url)
 
     response = await http_client.post(
         "/auth/verify/email", json={"token": token, "purpose": "registration"}
@@ -102,7 +115,7 @@ async def test_verify_already_used_returns_401(
     http_client: AsyncClient,
 ) -> None:
     await _register(http_client)
-    token = extract_email_token(email_verification_fake.sent[0].verify_url)
+    token = extract_email_token(email_verification_fake.sent[-1].verify_url)
 
     first = await http_client.post(
         "/auth/verify/email", json={"token": token, "purpose": "registration"}
@@ -125,7 +138,7 @@ async def test_verify_wrong_purpose_returns_401(
 ) -> None:
     # A token minted for 'registration' must not satisfy a 'reset' verify.
     await _register(http_client)
-    token = extract_email_token(email_verification_fake.sent[0].verify_url)
+    token = extract_email_token(email_verification_fake.sent[-1].verify_url)
 
     response = await http_client.post(
         "/auth/verify/email", json={"token": token, "purpose": "reset"}
@@ -143,7 +156,7 @@ async def test_verify_expired_returns_401(
     db_engine: Engine,
 ) -> None:
     await _register(http_client)
-    token = extract_email_token(email_verification_fake.sent[0].verify_url)
+    token = extract_email_token(email_verification_fake.sent[-1].verify_url)
 
     # Force expiry by reaching into the row directly (simpler than freezegun
     # across async + asyncpg + the sync test session).

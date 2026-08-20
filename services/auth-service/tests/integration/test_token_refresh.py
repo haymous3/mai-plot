@@ -8,7 +8,7 @@ import jwt
 import pytest
 from httpx import AsyncClient
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
@@ -17,10 +17,10 @@ from tests.integration.conftest import assert_error_envelope, register_and_verif
 async def test_refresh_rotates_and_issues_new_pair(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
     old_refresh = tokens["refresh_token"]
 
     response = await http_client.post("/auth/token/refresh", json={"refresh_token": old_refresh})
@@ -41,10 +41,10 @@ async def test_refresh_rotates_and_issues_new_pair(
 async def test_old_refresh_token_rejected_after_rotation(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
     old_refresh = tokens["refresh_token"]
 
     first = await http_client.post("/auth/token/refresh", json={"refresh_token": old_refresh})
@@ -65,7 +65,7 @@ async def test_old_refresh_token_rejected_after_rotation(
 async def test_refresh_unknown_token_returns_invalid(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     response = await http_client.post(
@@ -79,7 +79,7 @@ async def test_refresh_unknown_token_returns_invalid(
 async def test_refresh_expired_token_returns_expired(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     # Forge a correctly-signed but expired refresh token with the app's
@@ -105,10 +105,10 @@ async def test_refresh_expired_token_returns_expired(
 async def test_access_token_cannot_be_used_as_refresh(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    tokens = await register_and_verify(http_client, email_verification_fake)
+    tokens = await register_and_verify(http_client, sms_fake)
     # The access token is validly signed but has type=access; the refresh
     # path must reject it as invalid (type confusion guard).
     response = await http_client.post(

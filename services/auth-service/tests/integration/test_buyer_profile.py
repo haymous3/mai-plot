@@ -7,20 +7,20 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 
 async def _register_verify_token(
     http_client: AsyncClient,
-    email_fake: InMemoryEmailClient,
+    sms: InMemoryTwilioClient,
     *,
     phone: str,
     role: str,
 ) -> tuple[str, str]:
     """Register + email-verify a user; return (access_token, user_id)."""
     body = await register_and_verify(
-        http_client, email_fake, phone=phone, role=role, email=f"user{phone[-4:]}@maiplot.ng"
+        http_client, sms, phone=phone, role=role, email=f"user{phone[-4:]}@maiplot.ng"
     )
     return body["access_token"], body["user"]["id"]
 
@@ -33,12 +33,12 @@ def _auth(token: str) -> dict[str, str]:
 async def test_buyer_profile_persisted(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
     token, user_id = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", role="buyer"
+        http_client, sms_fake, phone="08012345678", role="buyer"
     )
     resp = await http_client.post(
         "/auth/buyer/profile",
@@ -69,12 +69,12 @@ async def test_buyer_profile_persisted(
 async def test_buyer_profile_partial_upsert_keeps_other_fields(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
     token, user_id = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", role="buyer"
+        http_client, sms_fake, phone="08012345678", role="buyer"
     )
     first = await http_client.post(
         "/auth/buyer/profile",
@@ -106,11 +106,11 @@ async def test_buyer_profile_partial_upsert_keeps_other_fields(
 async def test_non_buyer_forbidden(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     token, _ = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", role="seller"
+        http_client, sms_fake, phone="08012345678", role="seller"
     )
     resp = await http_client.post(
         "/auth/buyer/profile", json={"employment_status": "employed"}, headers=_auth(token)
@@ -123,11 +123,11 @@ async def test_non_buyer_forbidden(
 async def test_invalid_employment_status_is_422(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
     token, _ = await _register_verify_token(
-        http_client, email_verification_fake, phone="08012345678", role="buyer"
+        http_client, sms_fake, phone="08012345678", role="buyer"
     )
     resp = await http_client.post(
         "/auth/buyer/profile", json={"employment_status": "astronaut"}, headers=_auth(token)

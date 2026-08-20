@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.document_storage import InMemoryDocumentStorage
-from app.adapters.email_verification import InMemoryEmailClient
+from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
 _PDF = b"%PDF-1.4\n1 0 obj fake power of attorney document\nendobj"
@@ -17,7 +17,7 @@ _JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01 scanned poa"
 
 async def _register_verify_token(
     http_client: AsyncClient,
-    email_fake: InMemoryEmailClient,
+    sms: InMemoryTwilioClient,
     phone: str,
     *,
     role: str = "seller",
@@ -26,7 +26,7 @@ async def _register_verify_token(
     """Register + email-verify a user; return (user_id, access_token)."""
     body = await register_and_verify(
         http_client,
-        email_fake,
+        sms,
         phone=phone,
         role=role,
         email=f"user{phone[-4:]}@maiplot.ng",
@@ -43,14 +43,12 @@ def _auth(token: str) -> dict[str, str]:
 async def test_poa_upload_happy_path_for_power_of_attorney_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
     db_engine: Engine,
 ) -> None:
-    user_id, token = await _register_verify_token(
-        http_client, email_verification_fake, "08012345678"
-    )
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
 
     response = await http_client.post(
         "/auth/poa/upload",
@@ -96,11 +94,11 @@ async def test_poa_upload_happy_path_for_power_of_attorney_seller(
 async def test_poa_upload_accepts_jpeg(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     response = await http_client.post(
         "/auth/poa/upload",
         files={"file": ("poa.jpg", _JPEG, "image/jpeg")},
@@ -114,12 +112,12 @@ async def test_poa_upload_accepts_jpeg(
 async def test_poa_upload_rejects_owner_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
-        http_client, email_verification_fake, "08012345678", seller_authority_type="owner"
+        http_client, sms_fake, "08012345678", seller_authority_type="owner"
     )
     response = await http_client.post(
         "/auth/poa/upload",
@@ -135,13 +133,13 @@ async def test_poa_upload_rejects_owner_seller(
 async def test_poa_upload_rejects_buyer(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
     _, token = await _register_verify_token(
         http_client,
-        email_verification_fake,
+        sms_fake,
         "08012345678",
         role="buyer",
         seller_authority_type=None,
@@ -159,11 +157,11 @@ async def test_poa_upload_rejects_buyer(
 async def test_poa_upload_rejects_non_pdf_jpeg(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     bad = b"GIF89a not an allowed legal document format"
     response = await http_client.post(
         "/auth/poa/upload",
@@ -180,11 +178,11 @@ async def test_poa_upload_rejects_non_pdf_jpeg(
 async def test_poa_upload_twice_conflicts(
     clean_auth_tables: None,
     disable_rate_limit: None,
-    email_verification_fake: InMemoryEmailClient,
+    sms_fake: InMemoryTwilioClient,
     storage_fake: InMemoryDocumentStorage,
     http_client: AsyncClient,
 ) -> None:
-    _, token = await _register_verify_token(http_client, email_verification_fake, "08012345678")
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
     first = await http_client.post(
         "/auth/poa/upload",
         files={"file": ("poa.pdf", _PDF, "application/pdf")},
