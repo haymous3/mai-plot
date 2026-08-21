@@ -8,7 +8,6 @@ in the database rather than merely refusing the request.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from uuid import UUID
 
 import pytest
 import pytest_asyncio
@@ -17,7 +16,6 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.twilio import InMemoryTwilioClient
-from app.services.otp_attempts import AttemptResult
 from app.services.rate_limit import RateLimitResult
 from tests.integration.conftest import assert_error_envelope, extract_otp_code, register_only
 
@@ -172,37 +170,9 @@ async def test_resend_rate_limited_returns_429(
 
 # --- attempt cap -----------------------------------------------------------
 #
-# The cap counts in Redis and FAILS OPEN, so with no Redis these tests would
-# not fail loudly — they would see no cap at all and misreport why. Bind a
-# deterministic in-process counter instead, exactly as `disable_rate_limit`
-# does for the rate limiter. The Redis semantics themselves (INCR, TTL,
-# fail-open, per-OTP keying) are covered in tests/unit/test_otp_attempts.py.
-
-
-class _InMemoryAttemptLimiter:
-    def __init__(self, max_attempts: int = 3) -> None:
-        self._max = max_attempts
-        self._counts: dict[UUID, int] = {}
-
-    async def record_failure(self, otp_id: UUID, *, ttl_seconds: int) -> AttemptResult:
-        used = self._counts.get(otp_id, 0) + 1
-        self._counts[otp_id] = used
-        return AttemptResult(exhausted=used >= self._max, remaining=max(self._max - used, 0))
-
-    async def clear(self, otp_id: UUID) -> None:
-        self._counts.pop(otp_id, None)
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def deterministic_attempts() -> AsyncIterator[None]:
-    """Cap counting that does not depend on a running Redis."""
-    from app.dependencies import _otp_attempts
-    from app.main import app
-
-    limiter = _InMemoryAttemptLimiter()
-    app.dependency_overrides[_otp_attempts] = lambda: limiter
-    yield
-    app.dependency_overrides.pop(_otp_attempts, None)
+# The limiter is bound deterministically for every integration test in
+# conftest (`deterministic_otp_attempts`) — see the note there for why it must
+# not touch Redis.
 
 
 @pytest.mark.asyncio
