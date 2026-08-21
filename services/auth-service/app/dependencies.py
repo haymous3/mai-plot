@@ -39,6 +39,8 @@ from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
 from app.services.nin_verification import NinVerificationService
+from app.services.otp_attempts import OtpAttemptLimiter
+from app.services.otp_resend import OtpResendService
 from app.services.otp_verification import OtpVerificationService
 from app.services.poa_document import PoaDocumentService
 from app.services.poa_notifier import PoaNotifier, build_poa_notifier
@@ -202,6 +204,10 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
     return OtpRateLimiter(redis, max_per_hour=settings.otp_rate_limit_per_hour)
 
 
+def _otp_attempts(redis: RedisDep, settings: SettingsDep) -> OtpAttemptLimiter:
+    return OtpAttemptLimiter(redis, max_attempts=settings.otp_max_attempts)
+
+
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     otps: Annotated[OtpRepository, Depends(_otp_repo)],
@@ -301,12 +307,16 @@ def get_otp_verification_service(
     otps: Annotated[OtpRepository, Depends(_otp_repo)],
     refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
     jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+    attempts: Annotated[OtpAttemptLimiter, Depends(_otp_attempts)],
+    settings: SettingsDep,
 ) -> OtpVerificationService:
     return OtpVerificationService(
         users=users,
         otps=otps,
         refresh_tokens=refresh_tokens,
         jwt=jwt_service,
+        attempts=attempts,
+        otp_expire_minutes=settings.otp_expire_minutes,
     )
 
 
@@ -442,3 +452,19 @@ async def require_legal_team(
                 "LEGAL_TEAM_IP_FORBIDDEN", "Your IP is not permitted for legal-team access."
             )
     return caller
+
+
+def get_otp_resend_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    otps: Annotated[OtpRepository, Depends(_otp_repo)],
+    rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
+    sms: SmsClientDep,
+    settings: SettingsDep,
+) -> OtpResendService:
+    return OtpResendService(
+        users=users,
+        otps=otps,
+        sms=sms,
+        rate_limiter=rate_limiter,
+        otp_expire_minutes=settings.otp_expire_minutes,
+    )

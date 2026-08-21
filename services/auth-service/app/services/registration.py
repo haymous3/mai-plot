@@ -140,9 +140,19 @@ class RegistrationService:
                 ),
             )
         except SmsError as exc:
-            # The surrounding request session rolls back on this exception (see
-            # db.get_session), so the half-registered user + OTP row are undone
-            # and the client can safely retry.
+            # NOTE: this does NOT roll back, despite what the SCRUM-152 version
+            # of this comment claimed. db.get_session only rolls back when an
+            # exception escapes the ROUTE, and the route catches this one to
+            # return a 502 — so the session commits at teardown and the user +
+            # OTP rows persist.
+            #
+            # That is the behaviour we want now: the account is real, and the
+            # caller recovers with POST /auth/otp/resend (SCRUM-176) rather than
+            # re-entering the whole form. Before that endpoint existed this was
+            # a genuine trap — a failed send left an account that could never be
+            # verified and whose phone would then 400 as already registered.
+            # Relevant in practice, not theory: a US long code to a Nigerian
+            # number is exactly the send that fails.
             logger.error(
                 "registration.otp_dispatch_failed",
                 extra={"phone_suffix": phone[-4:], "error": str(exc)},

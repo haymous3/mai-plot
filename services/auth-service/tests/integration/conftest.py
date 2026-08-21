@@ -17,6 +17,7 @@ import re
 from collections.abc import AsyncIterator, Generator
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
@@ -31,6 +32,7 @@ from app.adapters.nin import InMemoryNinVerifier
 from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
 from app.db import dispose_engine
+from app.services.otp_attempts import AttemptResult
 
 # Match the auth tables the migrations create, in FK-safe order.
 _TABLES = (
@@ -115,6 +117,50 @@ def _force_async_database_url() -> Generator[None, None, None]:
         else:
             os.environ[key] = value
     get_settings.cache_clear()
+
+
+class _InMemoryAttemptLimiter:
+    """Deterministic stand-in for OtpAttemptLimiter, with no Redis behind it.
+
+    Two reasons this is bound for EVERY integration test, not just the ones
+    asserting on the cap:
+
+    1. `_otp_attempts` resolves RedisDep. Before SCRUM-176, `_rate_limiter`
+       was Redis's only consumer and every test overrides it via
+       `disable_rate_limit` — so `get_redis()` never ran. Letting it run
+       caches an async Redis client in a dependencies.py module global and
+       then reuses it across per-test event loops, which fails the whole
+       suite with `RuntimeError: Event loop is closed`.
+    2. The real limiter FAILS OPEN, so without Redis the cap would silently
+       not apply and cap assertions would misreport why they failed.
+
+    The Redis semantics themselves (INCR, TTL, fail-open, per-OTP keying) are
+    covered in tests/unit/test_otp_attempts.py.
+    """
+
+    def __init__(self, max_attempts: int = 3) -> None:
+        self._max = max_attempts
+        self._counts: dict[UUID, int] = {}
+
+    async def record_failure(self, otp_id: UUID, *, ttl_seconds: int) -> AttemptResult:
+        used = self._counts.get(otp_id, 0) + 1
+        self._counts[otp_id] = used
+        return AttemptResult(exhausted=used >= self._max, remaining=max(self._max - used, 0))
+
+    async def clear(self, otp_id: UUID) -> None:
+        self._counts.pop(otp_id, None)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def deterministic_otp_attempts() -> AsyncIterator[None]:
+    """Keep Redis out of the DI graph and the cap deterministic."""
+    from app.dependencies import _otp_attempts
+    from app.main import app
+
+    limiter = _InMemoryAttemptLimiter()
+    app.dependency_overrides[_otp_attempts] = lambda: limiter
+    yield
+    app.dependency_overrides.pop(_otp_attempts, None)
 
 
 @pytest_asyncio.fixture

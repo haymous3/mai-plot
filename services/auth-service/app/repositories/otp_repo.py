@@ -40,3 +40,22 @@ class OtpRepository:
     async def mark_used(self, otp_id: UUID) -> None:
         stmt = update(OtpCode).where(OtpCode.id == otp_id).values(used_at=datetime.now(UTC))
         await self._session.execute(stmt)
+
+    async def invalidate_active(self, *, phone: str, purpose: str) -> None:
+        """Burn every still-unused code for this (phone, purpose) — used on
+        resend so a freshly-minted code supersedes any earlier ones (a user
+        should never have two simultaneously-valid codes, and `get_active`
+        returns only the newest, which would strand the others as live rows).
+
+        Mirrors EmailVerificationRepository.invalidate_active (SCRUM-154).
+        """
+        stmt = (
+            update(OtpCode)
+            .where(
+                OtpCode.phone == phone,
+                OtpCode.purpose == purpose,
+                OtpCode.used_at.is_(None),
+            )
+            .values(used_at=datetime.now(UTC))
+        )
+        await self._session.execute(stmt)
