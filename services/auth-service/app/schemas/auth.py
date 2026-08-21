@@ -133,6 +133,29 @@ class EmailVerifyResponse(BaseModel):
     user: UserPublic
 
 
+class OtpResendRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Public endpoint (the caller isn't verified/logged in yet). Only the phone
+    # is needed to re-send the code; normalised exactly as registration
+    # normalises it, so the lookup matches the stored E.164 value.
+    phone: str
+
+    @model_validator(mode="after")
+    def _normalise(self) -> OtpResendRequest:
+        try:
+            object.__setattr__(self, "phone", normalise_nigerian_phone(self.phone))
+        except InvalidPhoneError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+
+class OtpResendResponse(BaseModel):
+    # Deliberately generic — identical whether or not the number has an
+    # unverified account, so it can't be used to enumerate Maiplot users.
+    message: str = "If that number needs verification, we've sent a new code."
+
+
 class EmailResendRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

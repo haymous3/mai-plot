@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 
     otp_expire_minutes: int = 5
     otp_rate_limit_per_hour: int = 5
+    # Failed guesses allowed per code before it is burnt (SCRUM-176). A 6-digit
+    # code is brute forceable inside its 5-minute window if guesses are free.
+    # The counter lives in Redis and fails open, so this degrades to the old
+    # uncapped behaviour rather than locking users out during an outage.
+    otp_max_attempts: int = 3
 
     # Twilio (SCRUM-175, replaced Termii) — the fake adapter is the default so
     # local + CI runs work without real credentials. Production sets

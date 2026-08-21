@@ -20,6 +20,7 @@ from app.dependencies import (
     get_login_service,
     get_logout_service,
     get_nin_verification_service,
+    get_otp_resend_service,
     get_otp_verification_service,
     get_poa_upload_service,
     get_profile_service,
@@ -45,6 +46,8 @@ from app.schemas.auth import (
     LogoutResponse,
     NinVerifyRequest,
     NinVerifyResponse,
+    OtpResendRequest,
+    OtpResendResponse,
     OtpVerifyRequest,
     OtpVerifyResponse,
     PoaUploadResponse,
@@ -83,9 +86,12 @@ from app.services.nin_verification import (
     NinVerificationService,
     NinVerificationUnavailable,
 )
+from app.services.otp_resend import OtpResendService
 from app.services.otp_verification import (
     OtpExpired,
     OtpInvalid,
+    OtpInvalidWithAttempts,
+    OtpTooManyAttempts,
     OtpVerificationService,
 )
 from app.services.poa import InvalidPoaDocument
@@ -118,10 +124,12 @@ from app.services.token_refresh import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _error(status_code: int, code: str, message: str) -> JSONResponse:
+def _error(
+    status_code: int, code: str, message: str, details: dict[str, object] | None = None
+) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content={"error_code": code, "message": message, "details": {}},
+        content={"error_code": code, "message": message, "details": details or {}},
     )
 
 
@@ -268,6 +276,21 @@ async def otp_verify(
             "OTP_EXPIRED",
             "The OTP has expired. Request a new code.",
         )
+    except OtpTooManyAttempts:
+        return _error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "OTP_TOO_MANY_ATTEMPTS",
+            "Too many incorrect codes. Request a new one.",
+        )
+    # MUST precede the OtpInvalid arm below — OtpInvalidWithAttempts subclasses
+    # it, so the broader handler would swallow it and drop the counter.
+    except OtpInvalidWithAttempts as exc:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "OTP_INVALID",
+            "The OTP is invalid or has already been used.",
+            {"attempts_remaining": exc.remaining},
+        )
     except OtpInvalid:
         return _error(
             status.HTTP_401_UNAUTHORIZED,
@@ -287,6 +310,33 @@ async def otp_verify(
             {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
         ),
     )
+
+
+@router.post(
+    "/otp/resend",
+    response_model=OtpResendResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def otp_resend(
+    body: OtpResendRequest,
+    service: Annotated[OtpResendService, Depends(get_otp_resend_service)],
+) -> OtpResendResponse | JSONResponse:
+    """Send a fresh registration OTP (SCRUM-176).
+
+    Answers a generic 202 whether or not the number has an unverified
+    account — a caller must not be able to probe which Nigerian numbers hold
+    Maiplot accounts. Only the rate limit surfaces a different status, and it
+    is checked before the lookup so even that leaks nothing.
+    """
+    try:
+        await service.resend(phone=body.phone)
+    except VerificationRateLimited:
+        return _error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "VERIFICATION_RATE_LIMITED",
+            "Too many verification codes for this number. Try again later.",
+        )
+    return OtpResendResponse()
 
 
 @router.post("/set-password", response_model=SetPasswordResponse)
