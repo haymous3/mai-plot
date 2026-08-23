@@ -1,17 +1,31 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-// Onboarding (SCRUM-132 → reworked SCRUM-155 for email verification):
+import {
+  OTP_TTL_SECONDS,
+  VERIFY_EMAIL_KEY,
+  VERIFY_EXPIRES_KEY,
+  VERIFY_PHONE_KEY,
+} from '@/lib/verify-handoff';
+
+// Onboarding (SCRUM-132 → SCRUM-155 → re-pointed at phone OTP by SCRUM-175):
 // intro carousel → role select → account details (name/email/phone/password)
-// → [seller: selling authority] → register → "check your email".
+// → [seller: selling authority] → register → /verify-otp.
 //
-// Verification is now an email magic link (SCRUM-152): registration no longer
-// establishes a session, so the old post-OTP steps (set-password, personal
-// details, KYC) are gone. KYC moves to point-of-need (buyer BVN at loan-apply,
-// seller NIN/PoA at listing creation — both already gate there). The session is
-// established when the user clicks the email link and lands on /verify-email.
+// Verification is a 6-digit SMS code again (SCRUM-175 moved it back from the
+// SCRUM-152 email magic link). Registration still does NOT establish a session,
+// so the old post-OTP steps (set-password, personal details, KYC) stay gone —
+// KYC remains at point-of-need (buyer BVN at loan-apply, seller NIN/PoA at
+// listing creation, both already gating there). The session is established when
+// the code is verified on /verify-otp.
+//
+// Email is still collected and still required: it is the login identifier
+// (SCRUM-45), and it backs the "Email me a link instead" fallback on the verify
+// screen — which matters because SMS to Nigerian numbers is not reliable from
+// the current sender (see services/auth-service/app/adapters/twilio.py).
 
 const SLIDES = [
   {
@@ -44,10 +58,11 @@ const REGISTER_ERRORS: Record<string, string> = {
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step = 'intro' | 'role' | 'account' | 'seller-authority' | 'check-email';
+type Step = 'intro' | 'role' | 'account' | 'seller-authority';
 type SellerAuthority = 'owner' | 'power_of_attorney';
 
 export function RegisterFlow() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
   const [role, setRole] = useState('');
   const [fullName, setFullName] = useState('');
@@ -77,7 +92,18 @@ export function RegisterFlow() {
         }),
       });
       if (resp.ok) {
-        setStep('check-email');
+        const b = (await resp.json().catch(() => ({}))) as {
+          verification_expires_in_seconds?: number;
+        };
+        // Hand off to /verify-otp. sessionStorage, not a query param: an MSISDN
+        // in the URL would sit in browser history and server access logs.
+        sessionStorage.setItem(VERIFY_PHONE_KEY, `+234${local}`);
+        sessionStorage.setItem(VERIFY_EMAIL_KEY, email.trim());
+        sessionStorage.setItem(
+          VERIFY_EXPIRES_KEY,
+          String(Date.now() + (b.verification_expires_in_seconds ?? OTP_TTL_SECONDS) * 1000),
+        );
+        router.push('/verify-otp');
         return;
       }
       const b = (await resp.json()) as { error_code?: string };
@@ -146,16 +172,12 @@ export function RegisterFlow() {
           />
         )}
 
-        {step === 'check-email' && <CheckEmailStep email={email.trim()} />}
-
-        {step !== 'check-email' && (
-          <p className="mt-8 text-center text-sm text-ink-500">
-            Already have an account?{' '}
-            <Link href="/login" className="font-medium text-emerald-deep hover:underline">
-              Sign in
-            </Link>
-          </p>
-        )}
+        <p className="mt-8 text-center text-sm text-ink-500">
+          Already have an account?{' '}
+          <Link href="/login" className="font-medium text-emerald-deep hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </main>
   );
@@ -487,40 +509,6 @@ function SellerAuthorityStep({
       >
         {busy ? 'Creating account…' : 'Create account'}
       </button>
-    </div>
-  );
-}
-
-function CheckEmailStep({ email }: { email: string }) {
-  return (
-    <div className="text-center">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-bone">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-deep/10 text-3xl text-emerald-deep">
-          ✉
-        </span>
-      </div>
-      <h1 className="mt-6 font-display text-3xl text-ink-900">Check your email</h1>
-      <p className="mx-auto mt-3 max-w-sm text-sm text-ink-500">
-        We&rsquo;ve sent a verification link to{' '}
-        <span className="font-medium text-ink-900">{email || 'your email address'}</span>. Open it to
-        activate your account and sign in.
-      </p>
-
-      <div className="mx-auto mt-8 max-w-sm rounded-2xl bg-bone px-5 py-4 text-left text-sm text-ink-500">
-        <p className="flex items-start gap-2">
-          <span aria-hidden>⏱</span> The link expires in 30 minutes and can only be used once.
-        </p>
-        <p className="mt-2 flex items-start gap-2">
-          <span aria-hidden>📁</span> Not there? Check your spam or promotions folder.
-        </p>
-      </div>
-
-      <p className="mt-8 text-sm text-ink-500">
-        Already verified?{' '}
-        <Link href="/login" className="font-medium text-emerald-deep hover:underline">
-          Sign in
-        </Link>
-      </p>
     </div>
   );
 }
