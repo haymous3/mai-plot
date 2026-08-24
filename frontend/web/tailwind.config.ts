@@ -85,6 +85,20 @@ const config: Config = {
           warm: '#f5f1e8', // insight / tip rails — seller 3.21%, realtor 1.47%
           muted: '#f3f4f6', // inactive pill and chip fill
           tint: '#ebefee', // muted green icon chips
+
+          /**
+           * Landing-page alternating bands (SCRUM-178). Measured by column
+           * scanline down the 1577×7215 export: `paper` at y1248-2407 (featured),
+           * y5357-6070 (financing); `linen` at y4459-5113 (testimonials).
+           *
+           * These are WARM neutrals and `surface-page` is COOL (#f9fafb is
+           * blue-tinted). Reusing `surface-page` here reads visibly grey-blue
+           * against `emerald-deep`. Adding rather than remapping because
+           * `surface-page` is the measured value for the seller and realtor
+           * app surfaces and must not move.
+           */
+          paper: '#f7f7f5',
+          linen: '#f9f7f3',
         },
 
         line: {
