@@ -1,5 +1,14 @@
 import Link from 'next/link';
 
+import {
+  FacebookIcon,
+  HouseIcon,
+  InstagramIcon,
+  LinkedInIcon,
+  MailIcon,
+  PhoneIcon,
+  TwitterIcon,
+} from './icons';
 import { Shell } from './sections';
 
 /**
@@ -61,9 +70,9 @@ export function Footer() {
             <div className="flex items-center gap-2.5">
               <span
                 aria-hidden
-                className="flex h-9 w-9 flex-none items-center justify-center rounded-card-sm bg-white/10 text-sm font-bold text-white"
+                className="flex h-9 w-9 flex-none items-center justify-center rounded-card-sm bg-white/10 text-white"
               >
-                M
+                <HouseIcon className="h-5 w-5" strokeWidth={2} />
               </span>
               <span className="font-display text-xl font-bold leading-7 tracking-[-0.5px] text-white">
                 Maihomme
@@ -81,14 +90,22 @@ export function Footer() {
               Maihomme is the consumer brand of Maiplot Technologies Ltd.
             </p>
 
+            {/* Not links: no social accounts exist to point at yet, and a
+                footer icon that navigates nowhere is worse than one that does
+                not invite the click. Same rule as the text links above. */}
             <ul className="mt-6 flex gap-4">
-              {['𝕏', 'in', 'f', 'ig'].map((s) => (
-                <li key={s}>
+              {[
+                { label: 'Instagram', Icon: InstagramIcon },
+                { label: 'Twitter', Icon: TwitterIcon },
+                { label: 'Facebook', Icon: FacebookIcon },
+                { label: 'LinkedIn', Icon: LinkedInIcon },
+              ].map(({ label, Icon }) => (
+                <li key={label}>
                   <span
-                    aria-hidden
-                    className="flex h-9 w-9 items-center justify-center rounded-card-sm bg-white/10 text-xs text-white/80"
+                    title={label}
+                    className="flex h-9 w-9 items-center justify-center rounded-card-sm bg-white/10 text-white/80"
                   >
-                    {s}
+                    <Icon className="h-[18px] w-[18px]" />
                   </span>
                 </li>
               ))}
@@ -133,15 +150,17 @@ export function Footer() {
             <div className="mt-8 flex flex-col gap-3">
               <a
                 href="tel:+2349012345678"
-                className="flex items-center gap-2 text-sm leading-5 text-white/60 transition hover:text-white"
+                className="flex items-center gap-2.5 text-sm leading-5 text-white/60 transition hover:text-white"
               >
-                ☏ +234 901 234 5678
+                <PhoneIcon className="h-4 w-4 flex-none" />
+                +234 901 234 5678
               </a>
               <a
                 href="mailto:hello@maihome.ng"
-                className="flex items-center gap-2 text-sm leading-5 text-white/60 transition hover:text-white"
+                className="flex items-center gap-2.5 text-sm leading-5 text-white/60 transition hover:text-white"
               >
-                ✉ hello@maihome.ng
+                <MailIcon className="h-4 w-4 flex-none" />
+                hello@maihome.ng
               </a>
             </div>
           </div>

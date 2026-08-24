@@ -94,7 +94,12 @@ export default async function HomePage() {
       <Categories />
       <Testimonials />
       <Stats />
-      <Financing />
+      {/* A different listing from the hero's, so the page does not show the
+          same photograph twice; falls back to the first if the feed is short. */}
+      <Financing
+        photo={(featured[3] ?? featured[0])?.thumbnail_url}
+        alt={(featured[3] ?? featured[0])?.title}
+      />
       <FinalCta />
       <Footer />
     </main>
