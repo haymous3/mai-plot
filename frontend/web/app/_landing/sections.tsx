@@ -3,12 +3,21 @@ import Link from 'next/link';
 import {
   ArrowRightIcon,
   BanknoteIcon,
+  BuildingIcon,
+  CheckCircleIcon,
   ChevronRightIcon,
   EyeIcon,
   FileTextIcon,
+  HouseIcon,
   LockIcon,
+  SearchIcon,
   ShieldIcon,
+  TreeIcon,
+  TrendingUpIcon,
+  UsersIcon,
+  WarehouseIcon,
 } from './icons';
+import { TestimonialCarousel } from './testimonials';
 
 /**
  * Static sections of the public landing page — Figma nodes 627:9 through
@@ -312,89 +321,66 @@ export function Process() {
 }
 
 /**
- * Browse By Category — node 627:646. Six 189×154 tiles at a 16px gap.
- * Counts are marketing figures from the design; there is no metrics endpoint
- * (analytics-service exposes only the audit log), so they are static.
+ * Browse By Category — node 627:646, re-measured.
  *
- * PR 3 of SCRUM-178 rebuilds this against the new export.
+ * Six 189×150 tiles at a 16px gutter (6×189 + 5×16 = 1214, i.e. the 1216px
+ * container), each centred with a 48px `surface-warm` icon chip. Tile fill is
+ * `surface-paper` with a `border-line/50` hairline. SCRUM-174's tiles were
+ * left-aligned with emoji and a different set of categories.
+ *
+ * ⚠️ THREE OF THE SIX HAVE NO FILTER BEHIND THEM. listing-service accepts
+ * `property_type` of land | residential | commercial only (routes/listings.py
+ * pattern), so Industrial, Off-Plan and Shortlet cannot be filtered for. Per
+ * product decision they render as non-interactive tiles rather than linking
+ * somewhere that silently ignores the category — the same rule the footer uses
+ * for routes that do not exist.
+ *
+ * Counts are marketing figures from the design. There is no metrics endpoint
+ * to source them from (analytics-service exposes only the audit log).
  */
 export function Categories() {
-  const cats = [
-    { label: 'Residential', count: '2,400+ listings', icon: '🏠', q: 'residential' },
-    { label: 'Commercial', count: '1,100+ listings', icon: '🏢', q: 'commercial' },
-    { label: 'Land', count: '3,800+ listings', icon: '🌍', q: 'land' },
-    { label: 'Duplexes', count: '900+ listings', icon: '🏘', q: 'residential' },
-    { label: 'Apartments', count: '1,600+ listings', icon: '🏬', q: 'residential' },
-    { label: 'Distress Sales', count: '450+ listings', icon: '🔥', q: '' },
+  const cats: { label: string; count: string; Icon: typeof HouseIcon; q?: string }[] = [
+    { label: 'Residential', count: '2,400+ listings', Icon: HouseIcon, q: 'residential' },
+    { label: 'Commercial', count: '840+ listings', Icon: BuildingIcon, q: 'commercial' },
+    { label: 'Land & Plots', count: '1,120+ listings', Icon: TreeIcon, q: 'land' },
+    { label: 'Industrial', count: '310+ listings', Icon: WarehouseIcon },
+    { label: 'Off-Plan', count: '680+ listings', Icon: TrendingUpIcon },
+    { label: 'Shortlet', count: '920+ listings', Icon: UsersIcon },
   ];
+
   return (
-    <section className="py-24">
+    <section className="bg-surface-card pb-24 pt-[104px]">
       <Shell>
         <SectionHead eyebrow="Browse By Category" title="Find Your Property Type" />
         <div className="mt-14 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {cats.map((c) => (
-            <Link
-              key={c.label}
-              href={c.q ? `/dashboard?property_type=${c.q}` : '/dashboard?sale_type=distress'}
-              className="flex h-[154px] flex-col justify-center rounded-2xl border border-line bg-surface-card p-5 transition hover:border-emerald-deep/40"
-            >
-              <span aria-hidden className="text-2xl">
-                {c.icon}
-              </span>
-              <span className="mt-3 text-sm font-semibold text-ink-buyer">{c.label}</span>
-              <span className="mt-1 text-xs text-ink-500">{c.count}</span>
-            </Link>
-          ))}
-        </div>
-      </Shell>
-    </section>
-  );
-}
-
-/** Testimonials — node 627:746. PR 3 of SCRUM-178 rebuilds this as a carousel. */
-export function Testimonials() {
-  const quotes = [
-    {
-      initials: 'CO',
-      name: 'Chidinma Okafor',
-      role: 'Bought in Lekki',
-      quote: 'Maihomme made buying my Lekki duplex feel effortless. Every document was verified before I ever saw the property.',
-    },
-    {
-      initials: 'AB',
-      name: 'Adebayo Bello',
-      role: 'Sold in Ikeja',
-      quote: 'I listed a distress sale on a Monday and had three serious offers by Friday. The escrow gave both sides confidence.',
-    },
-    {
-      initials: 'FI',
-      name: 'Fatima Ibrahim',
-      role: 'Financed through a partner bank',
-      quote: 'The 50% financing was the difference between waiting two more years and moving in this year.',
-    },
-  ];
-  return (
-    <section className="bg-surface-page py-24">
-      <Shell>
-        <SectionHead eyebrow="Testimonials" title="Stories From Happy Homeowners" />
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {quotes.map((q) => (
-            <figure key={q.name} className="rounded-2xl border border-line bg-surface-card p-8">
-              <blockquote className="text-base leading-7 text-ink-700">“{q.quote}”</blockquote>
-              <figcaption className="mt-6 flex items-center gap-3">
-                <span
-                  aria-hidden
-                  className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-emerald-deep text-sm font-semibold text-white"
-                >
-                  {q.initials}
+          {cats.map(({ label, count, Icon, q }) => {
+            const inner = (
+              <>
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-emerald-deep">
+                  <Icon className="h-6 w-6" />
                 </span>
-                <span>
-                  <span className="block text-sm font-semibold text-ink-buyer">{q.name}</span>
-                  <span className="block text-xs text-ink-500">{q.role}</span>
+                <span className="mt-4 text-[15px] font-semibold leading-5 text-ink-buyer">
+                  {label}
                 </span>
-              </figcaption>
-            </figure>
-          ))}
+                <span className="mt-1 text-[13px] leading-5 text-ink-500">{count}</span>
+              </>
+            );
+            const shell =
+              'flex h-[150px] flex-col items-center justify-center rounded-2xl border border-line/50 bg-surface-paper p-4 text-center';
+            return q ? (
+              <Link
+                key={label}
+                href={`/dashboard?property_type=${q}`}
+                className={`${shell} transition hover:border-emerald-deep/40`}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <div key={label} className={shell}>
+                {inner}
+              </div>
+            );
+          })}
         </div>
       </Shell>
     </section>
@@ -402,7 +388,30 @@ export function Testimonials() {
 }
 
 /**
- * Stats bar — node 627:832. PR 3 of SCRUM-178 re-measures this.
+ * Testimonials — node 627:746. The carousel itself is a client component
+ * (`testimonials.tsx`); this wrapper keeps the section chrome on the server.
+ */
+export function Testimonials() {
+  return (
+    <section className="bg-surface-linen pb-24 pt-[104px]">
+      <Shell>
+        <SectionHead eyebrow="Testimonials" title="Stories From Happy Homeowners" />
+        <TestimonialCarousel />
+      </Shell>
+    </section>
+  );
+}
+
+/**
+ * Stats bar — node 627:832, re-measured.
+ *
+ * A plain white band, not the rule-bounded one SCRUM-174 shipped, with the
+ * four figures centred rather than left-aligned. Values measured at 48px
+ * (digit height 35px / 0.727) in `emerald-deep`, labels 16px `ink-500`.
+ *
+ * The fourth figure is "14 / Partner Banks" in the export, not the
+ * "₦48B+ / Transacted Value" previously shipped, and the third reads "Happy
+ * Homeowners" rather than "Happy Nigerians".
  *
  * These are marketing figures taken from the design. There is no metrics
  * endpoint to source them from — analytics-service exposes only the admin
@@ -412,22 +421,19 @@ export function Stats() {
   const stats = [
     { value: '4,200+', label: 'Properties Sold' },
     { value: '12,800+', label: 'Verified Listings' },
-    { value: '9,600+', label: 'Happy Nigerians' },
-    { value: '₦48B+', label: 'Transacted Value' },
+    { value: '9,600+', label: 'Happy Homeowners' },
+    { value: '14', label: 'Partner Banks' },
   ];
   return (
-    <section className="border-y border-line py-20">
+    <section className="bg-surface-card py-20">
       <Shell>
-        <dl className="grid grid-cols-2 gap-12 lg:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-10 lg:grid-cols-4">
           {stats.map((s) => (
-            <div key={s.label}>
-              <dt className="sr-only">{s.label}</dt>
-              <dd>
-                <span className="block font-display text-4xl font-bold text-emerald-deep">
-                  {s.value}
-                </span>
-                <span className="mt-1 block text-sm text-ink-500">{s.label}</span>
+            <div key={s.label} className="text-center">
+              <dd className="text-[40px] font-bold leading-none text-emerald-deep sm:text-5xl">
+                {s.value}
               </dd>
+              <dt className="mt-5 text-base leading-6 text-ink-500">{s.label}</dt>
             </div>
           ))}
         </dl>
@@ -436,69 +442,141 @@ export function Stats() {
   );
 }
 
-/** Property Financing — node 627:868. PR 3 of SCRUM-178 rebuilds this. */
-export function Financing() {
+/**
+ * Property Financing — node 627:868, rebuilt.
+ *
+ * Image left, copy right — not the filled emerald card SCRUM-174 shipped. The
+ * split is exact: 576 + 64 + 576 = 1216, so it is a plain two-column grid at a
+ * 64px gutter rather than a fractional split.
+ *
+ * The 50% badge overhangs the photo's bottom-right corner by 24px on both
+ * axes, mirroring the hero's overlay composition.
+ *
+ * ⚠️ NO IMAGE ASSET EXISTS. Like the hero, this renders a real listing photo
+ * from the feed rather than a stock file; with no feed it degrades to a flat
+ * tint. The badge is static because 50% is a business rule (CLAUDE.md §8.5).
+ */
+export function Financing({ photo, alt }: { photo?: string | null; alt?: string }) {
+  const points = [
+    'Up to 50% of purchase price financed',
+    'Competitive mortgage rates from partner banks',
+    'Apply in minutes, decision in 72 hours',
+    'No hidden charges or processing surprises',
+  ];
   return (
-    <section id="financing" className="py-24">
-      <Shell>
-        <div className="grid items-center gap-12 rounded-2xl bg-emerald-deep p-12 text-white lg:grid-cols-[1fr_320px]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-white/70">
-              Property Financing
-            </p>
-            <h2 className="mt-3 font-display text-3xl font-bold leading-10 sm:text-4xl">
-              Your Home, Our Financing. Up to 50% Through Partner Banks.
-            </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-white/80">
-              Don&apos;t let capital stop your property dream. Maihomme works with CBN-licensed
-              partner banks to finance up to half your purchase, with the title held as collateral
-              until repayment completes.
-            </p>
-            <Link
-              href="/dashboard"
-              className="mt-8 inline-flex h-12 items-center rounded-xl bg-white px-6 text-sm font-semibold text-emerald-deep transition hover:bg-bone"
-            >
-              Explore Financing
-            </Link>
+    <section id="financing" className="bg-surface-paper pb-24 pt-[104px]">
+      <Shell className="grid items-center gap-y-16 lg:grid-cols-2 lg:gap-x-16">
+        <div className="relative">
+          <div className="h-[416px] w-full overflow-hidden rounded-2xl bg-emerald-deep/10 shadow-lg">
+            {photo && (
+              // eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL
+              <img src={photo} alt={alt ?? ''} className="h-full w-full object-cover" />
+            )}
           </div>
-          <div className="rounded-2xl bg-white/10 p-8 text-center">
-            <span className="block font-display text-6xl font-bold">50%</span>
-            <span className="mt-2 block text-sm text-white/80">Financing Available</span>
+          <div className="absolute bottom-4 right-4 w-[130px] rounded-2xl bg-emerald-deep px-5 py-5 text-white shadow-xl lg:-bottom-6 lg:-right-6">
+            <p className="text-[28px] font-bold leading-9">50%</p>
+            <p className="mt-1 text-sm leading-5 text-white/75">Financing Available</p>
+            <span aria-hidden className="mt-3 block h-1 w-7 rounded-full bg-status-gold" />
           </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
+            Property Financing
+          </p>
+          {/*
+            34px here, not the 36px the other section headings use. This is the
+            page's longest heading and the design fits it on two lines in a
+            576px column — but the design is set in Inter and the app renders
+            Fraunces, which is wider, so at 36px "Banks." falls to a third line
+            and the two-line composition is lost. 2px is imperceptible; the
+            wrap is not.
+          */}
+          <h2 className="mt-4 font-display text-[30px] font-bold leading-[1.22] text-ink-buyer sm:text-[34px]">
+            Your Home, Our Financing.
+            <span className="block">Up to 50% Through Partner Banks.</span>
+          </h2>
+          <p className="mt-5 text-lg leading-7 text-ink-500">
+            Don&apos;t let capital stop your property dream. Maihomme partners with 14 CBN-licensed
+            banks to give you access to competitive mortgage financing — applied directly from your
+            dashboard, with decisions in as little as 72 hours.
+          </p>
+          <ul className="mt-8 flex flex-col gap-4">
+            {points.map((p) => (
+              <li key={p} className="flex items-center gap-3 text-[15px] leading-5 text-ink-700">
+                <CheckCircleIcon className="h-5 w-5 flex-none text-emerald-deep" />
+                {p}
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/dashboard"
+            className="mt-10 inline-flex h-[52px] items-center gap-2.5 rounded-xl bg-emerald-deep px-7 text-base font-semibold text-white transition hover:brightness-110"
+          >
+            Check Financing Eligibility
+            <ArrowRightIcon className="h-5 w-5" />
+          </Link>
         </div>
       </Shell>
     </section>
   );
 }
 
-/** Final CTA — node 627:941. PR 3 of SCRUM-178 rebuilds this. */
+/**
+ * Final CTA — node 627:941, rebuilt.
+ *
+ * An inset 960×460 `emerald-deep` card on a white section, not the flat
+ * full-width band SCRUM-174 shipped.
+ *
+ * The two decorative circles are measured, not eyeballed. Fitting three
+ * boundary samples of the top-right one gives centre (1205, 6167) radius 128 —
+ * i.e. a 256px circle whose centre sits on the card's top edge, 63px in from
+ * the right corner, which is what the offsets below encode. The fill is
+ * `white/10` (measured #275439 over #0f3d2e).
+ */
 export function FinalCta() {
   return (
-    <section className="bg-surface-page py-24">
-      <Shell className="text-center">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-deep">
-          Start Today
-        </p>
-        <h2 className="mt-3 font-display text-3xl font-bold leading-10 text-ink-buyer sm:text-4xl">
-          Your Property Journey Starts Here
-        </h2>
-        <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-ink-500">
-          Join over 9,600 Nigerians who have found, financed and closed on property through
-          Maihomme.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex h-12 items-center rounded-xl bg-emerald-deep px-6 text-sm font-semibold text-white transition hover:brightness-95"
-          >
-            Explore Properties
-          </Link>
-          <Link
-            href="/register"
-            className="inline-flex h-12 items-center rounded-xl border border-line-strong px-6 text-sm font-semibold text-ink-700 transition hover:border-emerald-deep"
-          >
-            List Your Property
-          </Link>
+    <section className="bg-surface-card pb-24 pt-[104px]">
+      <Shell>
+        <div className="relative mx-auto max-w-[960px] overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-deep to-[#154937] px-8 py-20 text-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-16 -top-32 h-64 w-64 rounded-full bg-white/10"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -bottom-32 -left-20 h-60 w-60 rounded-full bg-white/10"
+          />
+
+          <div className="relative">
+            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
+              Start Today
+            </p>
+            <h2 className="mt-4 font-display text-[32px] font-bold leading-[1.22] text-white sm:text-[40px]">
+              Your Property Journey
+              <span className="block">Starts Here</span>
+            </h2>
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-7 text-white/75">
+              Join over 9,600 Nigerians who have found, financed, and secured their dream properties
+              through Maihomme.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
+              >
+                <SearchIcon className="h-5 w-5" />
+                Explore Properties
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
+              >
+                <HouseIcon className="h-5 w-5" />
+                List Your Property
+              </Link>
+            </div>
+          </div>
         </div>
       </Shell>
     </section>
