@@ -37,7 +37,10 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
 export function TrustBar() {
   const banks = ['Access Bank', 'GTBank', 'Zenith Bank', 'First Bank'];
   return (
-    <section className="border-y border-line bg-surface-page py-12">
+    // White, and no top rule: the hero's curved edge (HeroWave) is a white
+    // shape, so anything but white here would show as a band under the curve.
+    // The pill treatment lands in PR 2 of SCRUM-178.
+    <section className="bg-surface-card py-12">
       <Shell>
         <p className="text-center text-sm text-ink-500">
           Trusted by leading Nigerian banks &amp; institutions
