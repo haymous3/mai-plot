@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FeaturedCard } from './_landing/featured-card';
 import { Footer } from './_landing/footer';
 import { Hero } from './_landing/hero';
+import { ArrowRightIcon } from './_landing/icons';
 import {
   Categories,
   Financing,
@@ -53,28 +54,33 @@ export default async function HomePage() {
 
       <TrustBar />
 
-      {/* Featured Listings — node 627:49. Live data from the public feed;
-          3-up grid of 389x383 cards at a 24px gap. */}
+      {/* Featured Listings — node 627:49, re-measured for SCRUM-178.
+          Live data from the public feed; 389px columns at a 24px gutter.
+          The eyebrow is gold (#c9a646), not emerald, and the heading breaks
+          across two lines with the "View All" link baseline-aligned to the
+          second one — hence `items-end`. */}
       {featured.length > 0 && (
-        <section className="py-24">
+        <section className="bg-surface-paper pb-24 pt-[104px]">
           <Shell>
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-emerald-deep">
+                <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
                   Featured Listings
                 </p>
-                <h2 className="mt-3 font-display text-3xl font-bold leading-10 text-ink-buyer sm:text-4xl">
-                  Curated Properties You&apos;ll Love
+                <h2 className="mt-4 font-display text-[32px] font-bold leading-[1.22] text-ink-buyer sm:text-[36px]">
+                  Curated Properties
+                  <span className="block">You&apos;ll Love</span>
                 </h2>
               </div>
               <Link
                 href="/dashboard"
-                className="text-sm font-semibold text-emerald-deep hover:underline"
+                className="inline-flex items-center gap-2 text-[15px] font-semibold text-emerald-deep hover:underline"
               >
-                View All Properties →
+                View All Properties
+                <ArrowRightIcon className="h-4 w-4" />
               </Link>
             </div>
-            <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featured.map((item) => (
                 <FeaturedCard key={item.id} item={item} />
               ))}

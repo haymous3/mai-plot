@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { AreaIcon, CheckCircleIcon, ChevronRightIcon, MapPinIcon } from './icons';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
 
@@ -18,11 +19,17 @@ import { formatNaira } from '@/lib/format';
  * Titles use #1a1a1a (`ink-buyer`), matching the buyer surface rather than the
  * #101828 of seller and realtor.
  *
- * TWO DESIGN ELEMENTS HAVE NO DATA BEHIND THEM and are deliberately omitted:
+ * TWO DESIGN ELEMENTS HAVE NO DATA BEHIND THEM and are deliberately omitted
+ * (re-confirmed with the product owner in SCRUM-178):
  *   - "5 Beds / 6 Baths" — the listing feed exposes property_type and size_sqm
  *     only; there are no bedroom or bathroom fields on FeedItem.
- *   - the "Premium" tag — no corresponding field exists.
+ *   - the gold "Premium" tag — no corresponding field exists.
  * Inventing either would mean showing buyers numbers we do not have.
+ *
+ * The design's OTHER two overlays do have data behind them and are built:
+ * the red "Distress" tag is `sale_type`, and the white "Verified" pill is
+ * `doc_verification_status`. Badge colours measured off the export —
+ * #fef2f2 fill (stock `red-50`) with #e7000b text (`status-danger`).
  */
 export function FeaturedCard({ item }: { item: FeedItem }) {
   const verified = item.doc_verification_status === 'verified';
@@ -45,14 +52,22 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
+        {item.sale_type === 'distress' && (
+          <span className="absolute left-3 top-3 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold leading-none text-status-danger">
+            Distress
+          </span>
+        )}
+
         {verified && (
           <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold leading-none text-emerald-deep">
-            ✓ Verified
+            <CheckCircleIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Verified
           </span>
         )}
 
         <span className="absolute bottom-3 left-3 flex items-center gap-1 text-xs leading-4 text-white">
-          📍 {item.lga}, {item.state}
+          <MapPinIcon className="h-4 w-4" />
+          {item.lga}, {item.state}
         </span>
       </div>
 
@@ -62,7 +77,8 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
 
         {item.size_sqm && (
           <p className="flex items-center gap-1.5 pt-3 text-sm leading-5 text-ink-500">
-            ⤢ {Number(item.size_sqm).toLocaleString()}sqm
+            <AreaIcon className="h-4 w-4" strokeWidth={1.6} />
+            {Number(item.size_sqm).toLocaleString()}sqm
           </p>
         )}
 
@@ -71,7 +87,8 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
             {formatNaira(item.asking_price_kobo)}
           </p>
           <span className="flex items-center gap-1 text-sm font-semibold leading-5 text-emerald-deep">
-            View →
+            View
+            <ChevronRightIcon className="h-4 w-4" />
           </span>
         </div>
       </div>
