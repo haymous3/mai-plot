@@ -56,7 +56,9 @@ def upgrade() -> None:
     # DEFAULT 'email' matches the API default (SCRUM-180), so a row inserted by
     # an older code path lands in the non-unique set rather than silently
     # claiming a phone.
-    op.execute("ALTER TABLE user_pii ADD COLUMN verification_channel VARCHAR(10) NOT NULL DEFAULT 'email'")
+    op.execute(
+        "ALTER TABLE user_pii ADD COLUMN verification_channel VARCHAR(10) NOT NULL DEFAULT 'email'"
+    )
     op.execute(
         "ALTER TABLE user_pii ADD CONSTRAINT user_pii_verification_channel_check "
         "CHECK (verification_channel IN ('email','phone'))"
