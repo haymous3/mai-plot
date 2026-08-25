@@ -233,6 +233,19 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      # Email verification via Resend (SCRUM-152/180). Fake by default so a
+      # bare `docker compose up` never sends mail; real creds come from .env.
+      #
+      # These MUST be listed here: the container has no .env file of its own —
+      # pydantic-settings reads `.env` relative to the process CWD, which inside
+      # the image is /app. Only what compose forwards actually reaches Settings.
+      EMAIL_VERIFICATION_USE_FAKE: ${EMAIL_VERIFICATION_USE_FAKE:-true}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-Maihomme <noreply@maihomme.com>}
+      # Must reach the frontend wired to THIS auth-service — a token minted here
+      # does not exist in another environment's database.
+      EMAIL_VERIFICATION_BASE_URL: ${EMAIL_VERIFICATION_BASE_URL:-http://localhost:3000/verify-email}
 
   listing-service:
     <<: *fastapi-defaults

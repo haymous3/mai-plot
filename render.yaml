@@ -397,9 +397,14 @@ projects:
                 value: "5"
               - key: EMAIL_VERIFICATION_EXPIRE_MINUTES
                 value: "30"
-              # ⚠️ MANUAL — set to the Vercel PREVIEW/staging URL once it exists, e.g.
-              # https://maiplot-git-main-<team>.vercel.app/verify-email
-              # Wrong value = every verification link 404s.
+              # ⚠️ MANUAL — the frontend URL this environment's users will click.
+              # Production is https://www.maihomme.com/verify-email (verified
+              # 2026-08-25: the apex 308s to www, and /verify-email returns 200).
+              # There is no `app` subdomain — an earlier note assumed one.
+              # For staging use that environment's own Vercel preview URL: the
+              # link must reach the frontend wired to THIS auth-service, since a
+              # token minted here does not exist in another environment's DB.
+              # Wrong value = every verification link fails.
               - key: EMAIL_VERIFICATION_BASE_URL
                 sync: false
 
