@@ -12,11 +12,38 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
+
+    # Deployment environment: local | staging | production. Set by
+    # docker-compose (local) and by the maiplot-shared env group (staging).
+    # Load-bearing for security, not just logging: app/routes/dev.py is only
+    # mounted when this is exactly "local", so the dev-only OTP reader cannot
+    # exist anywhere else. Do not default this to anything but "local" — a
+    # permissive default would be safe here (it only ever ENABLES a dev tool on
+    # a developer's own machine) but any other value would silently disable it.
+    env: str = "local"
+
+    @field_validator("env", mode="after")
+    @classmethod
+    def _strip_dotenv_comment(cls, value: str) -> str:
+        """Strip an inline `# comment` and surrounding whitespace.
+
+        pydantic-settings does NOT strip inline comments from string values, so
+        `.env`'s `ENV=local   # local | staging | production` arrives as the
+        whole 60-character line. That silently broke the `env == "local"` gate
+        in app/routes/dev.py — the dev routes never registered.
+
+        Stripping here rather than only fixing `.env` because `.env.example`
+        ships the same comment style and every developer copies it. Note this
+        only ever NARROWS a value ("staging  # x" -> "staging"); it can never
+        turn a non-local value into "local", so it cannot widen the gate.
+        """
+        return value.split("#", 1)[0].strip()
 
     database_url: str = "postgresql+asyncpg://maiplot:change-me-local@localhost:5432/maiplot"
     redis_url: str = "redis://localhost:6379/0"
