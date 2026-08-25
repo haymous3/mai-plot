@@ -13,7 +13,7 @@ from app.services.email_send import EmailOutcome, EmailSendService
 
 pytestmark = pytest.mark.asyncio
 
-_UNSUB_BASE = "https://maiplot.ng/notifications/unsubscribe"
+_UNSUB_BASE = "https://maihomme.com/notifications/unsubscribe"
 
 
 def _row(*, channel: str = "email", sent_at: datetime | None = None) -> NotificationRow:

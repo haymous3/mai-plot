@@ -15,7 +15,7 @@ from app.adapters.email_verification import (
     build_email_verification_client,
 )
 
-_URL = "https://app.maiplot.ng/verify-email?token=abc123"
+_URL = "https://app.maihomme.com/verify-email?token=abc123"
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_resend_client_success_posts_expected_payload() -> None:
         captured["json"] = json.loads(request.content)
         return httpx.Response(200, json={"id": "email_1"})
 
-    client = ResendClient(api_key="re_key", from_address="Maiplot <no@maiplot.ng>")
+    client = ResendClient(api_key="re_key", from_address="Maihomme <no@maihomme.com>")
     client._client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler),
         base_url="https://api.resend.com",
@@ -63,7 +63,7 @@ async def test_resend_client_success_posts_expected_payload() -> None:
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["to"] == ["buyer@example.com"]
-    assert payload["from"] == "Maiplot <no@maiplot.ng>"
+    assert payload["from"] == "Maihomme <no@maihomme.com>"
     # The magic link is embedded in both the html and text bodies.
     assert _URL in payload["html"]
     assert _URL in payload["text"]
@@ -74,7 +74,7 @@ async def test_resend_client_raises_on_4xx() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(422, json={"message": "invalid"})
 
-    client = ResendClient(api_key="re_key", from_address="no@maiplot.ng")
+    client = ResendClient(api_key="re_key", from_address="no@maihomme.com")
     client._client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://api.resend.com"
     )
@@ -92,7 +92,7 @@ async def test_resend_client_wraps_transport_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom")
 
-    client = ResendClient(api_key="re_key", from_address="no@maiplot.ng")
+    client = ResendClient(api_key="re_key", from_address="no@maihomme.com")
     client._client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://api.resend.com"
     )
@@ -110,7 +110,7 @@ def test_factory_picks_fake() -> None:
         provider="resend",
         use_fake=True,
         api_key="",
-        from_address="no@maiplot.ng",
+        from_address="no@maihomme.com",
         timeout_seconds=1.0,
     )
     assert isinstance(client, InMemoryEmailClient)
@@ -121,7 +121,7 @@ def test_factory_picks_resend() -> None:
         provider="resend",
         use_fake=False,
         api_key="k",
-        from_address="no@maiplot.ng",
+        from_address="no@maihomme.com",
         timeout_seconds=1.0,
     )
     assert isinstance(client, ResendClient)
@@ -133,6 +133,6 @@ def test_factory_rejects_unknown_provider() -> None:
             provider="mailgun",
             use_fake=False,
             api_key="k",
-            from_address="no@maiplot.ng",
+            from_address="no@maihomme.com",
             timeout_seconds=1.0,
         )

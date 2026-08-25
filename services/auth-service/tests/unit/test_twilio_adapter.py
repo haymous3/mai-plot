@@ -106,12 +106,12 @@ async def test_http_client_error_does_not_leak_otp() -> None:
     the message Body in its payload, which carries the plaintext OTP."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, json={"body": "Your Maiplot verification code is 424242"})
+        return httpx.Response(400, json={"body": "Your Maihomme verification code is 424242"})
 
     real = _stub_client(httpx.MockTransport(handler))
     try:
         with pytest.raises(SmsError) as exc:
-            await real.send_sms("+2348012345678", "Your Maiplot verification code is 424242")
+            await real.send_sms("+2348012345678", "Your Maihomme verification code is 424242")
     finally:
         await real.aclose()
     assert "424242" not in str(exc.value)

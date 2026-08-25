@@ -20,7 +20,7 @@ async def _register_verify_token(
 ) -> tuple[str, str]:
     """Register + email-verify a user; return (access_token, user_id)."""
     body = await register_and_verify(
-        http_client, sms, phone=phone, role=role, email=f"user{phone[-4:]}@maiplot.ng"
+        http_client, sms, phone=phone, role=role, email=f"user{phone[-4:]}@maihomme.com"
     )
     return body["access_token"], body["user"]["id"]
 

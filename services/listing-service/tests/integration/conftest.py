@@ -253,7 +253,7 @@ def seed_media(db_engine: Engine) -> Callable[..., None]:
         *,
         listing_id: UUID,
         media_type: str = "photo",
-        cdn_url: str = "https://cdn.maiplot.ng/x.jpg",
+        cdn_url: str = "https://cdn.maihomme.com/x.jpg",
         sort_order: int = 0,
     ) -> None:
         with db_engine.begin() as conn:

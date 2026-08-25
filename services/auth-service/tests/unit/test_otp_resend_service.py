@@ -3,7 +3,7 @@
 The properties under test are mostly NEGATIVE — what the service must not
 reveal. Resend answers identically for an unknown number, an already
 verified account and a failed send, so none of them can be used to probe
-which Nigerian numbers hold Maiplot accounts.
+which Nigerian numbers hold Maihomme accounts.
 """
 
 from __future__ import annotations

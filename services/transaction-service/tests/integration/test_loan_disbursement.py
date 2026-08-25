@@ -40,7 +40,7 @@ def _seed_actor(db_engine: Engine) -> None:
         )
 
 
-def _seed_buyer(db_engine: Engine, *, email: str | None = "buyer@maiplot.ng") -> UUID:
+def _seed_buyer(db_engine: Engine, *, email: str | None = "buyer@maihomme.com") -> UUID:
     uid = uuid4()
     with db_engine.begin() as conn:
         conn.execute(

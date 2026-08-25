@@ -42,7 +42,7 @@ def _property() -> PropertySummary:
         state="Lagos",
         sale_type="normal",
         asking_price_kobo=60_000_000,
-        primary_image_url="https://cdn.maiplot.ng/x.jpg",
+        primary_image_url="https://cdn.maihomme.com/x.jpg",
     )
 
 

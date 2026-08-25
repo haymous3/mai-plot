@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.services.email_templates import render_email
 
-_UNSUB = "https://maiplot.ng/notifications/unsubscribe?uid=abc"
+_UNSUB = "https://maihomme.com/notifications/unsubscribe?uid=abc"
 
 
 def test_uses_title_as_subject_when_present() -> None:

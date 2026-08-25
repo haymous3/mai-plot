@@ -34,7 +34,7 @@ async def test_set_password_then_login(
     sms_fake: InMemoryTwilioClient,
     http_client: AsyncClient,
 ) -> None:
-    email = "buyer@maiplot.ng"
+    email = "buyer@maihomme.com"
     token = await _register_verify_token(http_client, sms_fake, phone="08012345678", email=email)
 
     resp = await http_client.post(
@@ -56,7 +56,7 @@ async def test_set_password_rejects_weak_password(
     http_client: AsyncClient,
 ) -> None:
     token = await _register_verify_token(
-        http_client, sms_fake, phone="08012345678", email="b@maiplot.ng"
+        http_client, sms_fake, phone="08012345678", email="b@maihomme.com"
     )
     # ≥8 chars but no uppercase/digit → the service's policy (envelope), not
     # Pydantic's length floor.

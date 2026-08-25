@@ -14,7 +14,7 @@ from app.services.registration import VerificationRateLimited
 from app.services.resend_verification import ResendVerificationService
 
 _EMAIL = "buyer@example.com"
-_BASE_URL = "https://app.maiplot.ng/verify-email"
+_BASE_URL = "https://app.maihomme.com/verify-email"
 
 
 class _StubUserRepo:

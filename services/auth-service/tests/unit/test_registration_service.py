@@ -32,7 +32,7 @@ from app.services.registration import (
 
 _OTP_EXPIRE_MINUTES = 5
 _EMAIL_EXPIRE_MINUTES = 30
-_VERIFY_BASE_URL = "https://app.maiplot.ng/verify-email"
+_VERIFY_BASE_URL = "https://app.maihomme.com/verify-email"
 
 
 class _StubUserRepo:

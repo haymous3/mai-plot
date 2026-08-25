@@ -729,9 +729,9 @@ projects:
               - key: EMAIL_VIA_CELERY
                 value: "true"
               - key: SES_FROM_EMAIL
-                value: noreply@maiplot.ng
+                value: noreply@maihomme.com
               - key: VAPID_SUBJECT
-                value: mailto:ops@maiplot.ng
+                value: mailto:ops@maihomme.com
 
           - name: realtor-celery-worker
             type: worker

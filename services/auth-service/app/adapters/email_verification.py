@@ -31,27 +31,27 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_SUBJECT = "Verify your Maiplot email address"
+_SUBJECT = "Verify your Maihomme email address"
 
 
 def _render_bodies(verify_url: str) -> tuple[str, str]:
     """Return (html_body, text_body) for a verification email."""
     text_body = (
-        "Welcome to Maiplot.\n\n"
+        "Welcome to Maihomme.\n\n"
         "Confirm your email address by opening this link:\n"
         f"{verify_url}\n\n"
         "The link expires shortly and can only be used once. "
-        "If you did not create a Maiplot account, you can ignore this email."
+        "If you did not create a Maihomme account, you can ignore this email."
     )
     html_body = (
-        "<p>Welcome to Maiplot.</p>"
+        "<p>Welcome to Maihomme.</p>"
         "<p>Confirm your email address by clicking the button below:</p>"
         f'<p><a href="{verify_url}" '
         'style="background:#0b7a4b;color:#fff;padding:12px 20px;'
         'border-radius:6px;text-decoration:none">Verify email</a></p>'
         f'<p>Or paste this link into your browser:<br><a href="{verify_url}">{verify_url}</a></p>'
         "<p>The link expires shortly and can only be used once. "
-        "If you did not create a Maiplot account, you can ignore this email.</p>"
+        "If you did not create a Maihomme account, you can ignore this email.</p>"
     )
     return html_body, text_body
 

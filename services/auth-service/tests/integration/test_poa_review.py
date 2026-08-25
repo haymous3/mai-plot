@@ -54,7 +54,7 @@ async def _seed_pending_poa_seller(
         sms,
         phone=phone,
         role="seller",
-        email=f"user{phone[-4:]}@maiplot.ng",
+        email=f"user{phone[-4:]}@maihomme.com",
         seller_authority_type="power_of_attorney",
     )
     user_id = body["user"]["id"]
