@@ -22,7 +22,17 @@ class UserPii(Base):
     user_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    # NOT globally unique since SCRUM-183 (migration 0008): uniqueness is a
+    # PARTIAL index scoped to verification_channel = 'phone', so a phone may
+    # repeat among email-verified accounts. `unique=True` here would misdescribe
+    # the schema and make SQLAlchemy emit the wrong DDL for a fresh create_all.
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Which channel this account verifies with. Lives here rather than on
+    # `users` because a Postgres partial index can only reference its own
+    # table's columns, and the predicate must sit alongside `phone`.
+    verification_channel: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="email"
+    )
     # full_name is NOT NULL in the DDL but the phone+OTP register flow does not
     # collect a name. Default to empty string; the profile-update flow (M1+)
     # will populate it. Avoids a schema migration on this PII table.

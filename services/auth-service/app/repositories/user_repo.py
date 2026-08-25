@@ -121,10 +121,23 @@ class UserRepository:
         return UserCore(id=row.id, role=row.role, verified_status=row.verified_status)
 
     async def get_by_phone(self, phone: str) -> UserWithPhone | None:
+        """The account that owns this phone FOR PHONE VERIFICATION.
+
+        Filtered to verification_channel = 'phone' (SCRUM-183). That predicate
+        matches the partial unique index in migration 0008, so at most one row
+        can ever match — which is what makes it safe for otp_verification to
+        issue tokens off this lookup. Without the filter a phone shared with an
+        email-verified account would be ambiguous and could verify the wrong
+        person.
+        """
         stmt = (
             select(User.id, User.role, UserPii.phone, User.verified_status)
             .join(UserPii, UserPii.user_id == User.id)
-            .where(UserPii.phone == phone, User.deleted_at.is_(None))
+            .where(
+                UserPii.phone == phone,
+                UserPii.verification_channel == "phone",
+                User.deleted_at.is_(None),
+            )
         )
         row = (await self._session.execute(stmt)).first()
         if row is None:
@@ -141,6 +154,7 @@ class UserRepository:
         email: str | None,
         seller_authority_type: str | None,
         full_name: str = "",
+        verification_channel: str = "email",
     ) -> UUID:
         """Insert a users row and its user_pii row in the same DB transaction.
 
@@ -156,7 +170,12 @@ class UserRepository:
         )
         self._session.add(user)
         await self._session.flush()
-        pii = UserPii(user_id=user.id, phone=phone, full_name=full_name)
+        pii = UserPii(
+            user_id=user.id,
+            phone=phone,
+            full_name=full_name,
+            verification_channel=verification_channel,
+        )
         self._session.add(pii)
         await self._session.flush()
         return user.id
