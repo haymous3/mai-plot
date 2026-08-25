@@ -59,6 +59,7 @@ const REGISTER_ERRORS: Record<string, string> = {
 };
 
 type Step = 'intro' | 'role' | 'account' | 'seller-authority';
+type VerificationChannel = 'email' | 'phone';
 type SellerAuthority = 'owner' | 'power_of_attorney';
 
 export function RegisterFlow() {
@@ -69,8 +70,14 @@ export function RegisterFlow() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  // Mirrors the backend default (SCRUM-180). Email is the only enabled option
+  // until SMS can reach Nigerian networks.
+  const [channel, setChannel] = useState<VerificationChannel>('email');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set once the verification email is away — this is a terminal state for the
+  // funnel, since the user continues by clicking the link, not by typing here.
+  const [sentToEmail, setSentToEmail] = useState<string | null>(null);
 
   async function submitRegister(sellerAuthority?: SellerAuthority) {
     setError(null);
@@ -86,6 +93,7 @@ export function RegisterFlow() {
           email: email.trim(),
           password,
           full_name: fullName.trim(),
+          verification_channel: channel,
           ...(role === 'seller' && sellerAuthority
             ? { seller_authority_type: sellerAuthority }
             : {}),
@@ -94,16 +102,29 @@ export function RegisterFlow() {
       if (resp.ok) {
         const b = (await resp.json().catch(() => ({}))) as {
           verification_expires_in_seconds?: number;
+          verification_channel?: VerificationChannel;
         };
-        // Hand off to /verify-otp. sessionStorage, not a query param: an MSISDN
-        // in the URL would sit in browser history and server access logs.
-        sessionStorage.setItem(VERIFY_PHONE_KEY, `+234${local}`);
-        sessionStorage.setItem(VERIFY_EMAIL_KEY, email.trim());
-        sessionStorage.setItem(
-          VERIFY_EXPIRES_KEY,
-          String(Date.now() + (b.verification_expires_in_seconds ?? OTP_TTL_SECONDS) * 1000),
-        );
-        router.push('/verify-otp');
+        // Trust the server's answer over our own request: it is authoritative
+        // about which channel actually ran, so a future server-side fallback
+        // would route correctly without a frontend change.
+        const used = b.verification_channel ?? channel;
+
+        if (used === 'phone') {
+          // sessionStorage, not a query param: an MSISDN in the URL would sit
+          // in browser history and server access logs.
+          sessionStorage.setItem(VERIFY_PHONE_KEY, `+234${local}`);
+          sessionStorage.setItem(VERIFY_EMAIL_KEY, email.trim());
+          sessionStorage.setItem(
+            VERIFY_EXPIRES_KEY,
+            String(Date.now() + (b.verification_expires_in_seconds ?? OTP_TTL_SECONDS) * 1000),
+          );
+          router.push('/verify-otp');
+          return;
+        }
+
+        // Email: the link is in their inbox, so there is nothing to type here.
+        // Stay put and tell them to go and check it.
+        setSentToEmail(email.trim());
         return;
       }
       const b = (await resp.json()) as { error_code?: string };
@@ -118,6 +139,10 @@ export function RegisterFlow() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
+        {sentToEmail !== null ? (
+          <CheckEmailStep email={sentToEmail} />
+        ) : (
+          <>
         {step === 'intro' && <Intro onDone={() => setStep('role')} />}
 
         {step === 'role' && (
@@ -141,6 +166,8 @@ export function RegisterFlow() {
             setPhone={setPhone}
             password={password}
             setPassword={setPassword}
+            channel={channel}
+            setChannel={setChannel}
             busy={busy}
             error={error}
             onBack={() => {
@@ -178,6 +205,8 @@ export function RegisterFlow() {
             Sign in
           </Link>
         </p>
+          </>
+        )}
       </div>
     </main>
   );
@@ -291,6 +320,8 @@ function AccountStep({
   setPhone,
   password,
   setPassword,
+  channel,
+  setChannel,
   busy,
   error,
   onBack,
@@ -304,6 +335,8 @@ function AccountStep({
   setPhone: (v: string) => void;
   password: string;
   setPassword: (v: string) => void;
+  channel: VerificationChannel;
+  setChannel: (v: VerificationChannel) => void;
   busy: boolean;
   error: string | null;
   onBack: () => void;
@@ -416,6 +449,8 @@ function AccountStep({
         <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
       )}
 
+      <VerificationChannelChoice value={channel} onChange={setChannel} />
+
       <div className="mt-5 space-y-1.5 rounded-lg bg-bone px-4 py-3 text-xs">
         <p className="font-medium text-ink-700">Password must contain:</p>
         <Requirement ok={checks.length}>At least 8 characters</Requirement>
@@ -439,6 +474,190 @@ function AccountStep({
     </div>
   );
 }
+
+/**
+ * How the account proves ownership of an identifier (SCRUM-181; backend
+ * SCRUM-180). Email is the default and the only enabled option.
+ *
+ * Phone is shown DISABLED rather than hidden: the backend path is complete and
+ * tested (SCRUM-175/176), so this is a real product option that is temporarily
+ * undeliverable — SMS from the current sender does not reach Nigerian networks
+ * (see ng-sender-id-registration.md). Showing it sets the expectation that it
+ * is coming; hiding it would make its later appearance look like a new feature.
+ *
+ * To enable it once a sender ID is registered: delete `disabled` here. The
+ * backend, the /verify-otp screen and the routing below already work.
+ */
+/**
+ * Terminal state of the funnel on the email channel: the user continues by
+ * clicking the link, not by typing anything here.
+ *
+ * Restored from the version deleted in SCRUM-175 (when registration stopped
+ * sending links), with a resend control the original lacked — /auth/verify/
+ * email/resend has existed since SCRUM-154 and a dead end here was the most
+ * common reason to abandon signup.
+ */
+function CheckEmailStep({ email }: { email: string }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  async function resend() {
+    if (state === 'sending') return;
+    setState('sending');
+    setError(null);
+    try {
+      const resp = await fetch('/api/auth/verify-email/resend', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (resp.status === 202) {
+        setState('sent');
+        return;
+      }
+      const b = (await resp.json().catch(() => ({}))) as { error?: string };
+      setState('idle');
+      setError(
+        b.error === 'VERIFICATION_RATE_LIMITED'
+          ? 'Too many requests. Please wait a little and try again.'
+          : 'Could not send another link just now. Please try again.',
+      );
+    } catch {
+      setState('idle');
+      setError('Could not reach the server. Please try again.');
+    }
+  }
+
+  return (
+    <div className="text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-deep/12 text-emerald-deep">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-[26px] w-[26px]"
+          aria-hidden
+        >
+          <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+      </div>
+
+      <h1 className="mt-6 font-display text-2xl text-ink-900">Check your email</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-500">
+        We&rsquo;ve sent a verification link to{' '}
+        <span className="font-medium text-ink-900">{email || 'your email address'}</span>. Open it
+        to activate your account and sign in.
+      </p>
+
+      <div className="mx-auto mt-7 max-w-sm space-y-2 rounded-xl bg-surface-warm px-4 py-3.5 text-left text-sm text-ink-500">
+        <p>The link expires in 30 minutes and can only be used once.</p>
+        <p>Not there? Check your spam or promotions folder.</p>
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {state === 'sent' ? (
+        <p className="mt-6 rounded-md bg-emerald-deep/10 px-3.5 py-3 text-sm text-emerald-deep">
+          If that email needs verification, we&rsquo;ve sent a new link.
+        </p>
+      ) : (
+        <p className="mt-6 text-sm text-ink-500">
+          Didn&rsquo;t get it?{' '}
+          <button
+            type="button"
+            onClick={() => void resend()}
+            disabled={state === 'sending'}
+            className="font-medium text-emerald-deep hover:underline disabled:opacity-60"
+          >
+            {state === 'sending' ? 'Sending…' : 'Resend link'}
+          </button>
+        </p>
+      )}
+
+      <p className="mt-6 text-sm text-ink-500">
+        Already verified?{' '}
+        <Link href="/login" className="font-medium text-emerald-deep hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+
+function VerificationChannelChoice({
+  value,
+  onChange,
+}: {
+  value: VerificationChannel;
+  onChange: (v: VerificationChannel) => void;
+}) {
+  const options: {
+    value: VerificationChannel;
+    label: string;
+    desc: string;
+    disabled?: boolean;
+  }[] = [
+    {
+      value: 'email',
+      label: 'Email',
+      desc: 'We send a secure link to your inbox',
+    },
+    {
+      value: 'phone',
+      label: 'Phone (SMS)',
+      desc: 'A 6-digit code by text message',
+      disabled: true,
+    },
+  ];
+
+  return (
+    <fieldset className="mt-5">
+      <legend className="block text-sm font-medium text-ink-700">How should we verify you?</legend>
+      <div className="mt-1.5 grid grid-cols-2 gap-2.5">
+        {options.map((o) => {
+          const active = o.value === value && !o.disabled;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-disabled={o.disabled || undefined}
+              disabled={o.disabled}
+              onClick={() => onChange(o.value)}
+              className={`relative flex flex-col rounded-xl border px-4 py-3.5 text-left transition ${
+                active
+                  ? 'border-emerald-deep bg-emerald-deep/5'
+                  : o.disabled
+                    ? 'cursor-not-allowed border-ink-300/40 bg-surface-muted'
+                    : 'border-ink-300/40 hover:border-ink-500'
+              }`}
+            >
+              <span
+                className={`text-sm font-medium ${o.disabled ? 'text-ink-400' : 'text-ink-900'}`}
+              >
+                {o.label}
+              </span>
+              <span className={`mt-0.5 text-xs ${o.disabled ? 'text-ink-400' : 'text-ink-500'}`}>
+                {o.disabled ? 'Coming soon' : o.desc}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 
 function Requirement({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
