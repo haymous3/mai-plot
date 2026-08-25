@@ -27,6 +27,12 @@ Role = Literal["seller", "buyer", "realtor"]
 AccountRole = Literal["seller", "buyer", "realtor", "bank_partner", "admin", "legal_team"]
 SellerAuthorityType = Literal["owner", "power_of_attorney"]
 OtpPurpose = Literal["registration", "login"]
+# How the account proves it owns an identifier at registration (SCRUM-180).
+# Both are implemented; the UI currently offers only email because phone OTP
+# cannot be DELIVERED to Nigerian numbers from the present sender — see
+# ng-sender-id-registration.md. Defaulting here (not just in the UI) means an
+# older client that omits the field gets the channel that actually works.
+VerificationChannel = Literal["email", "phone"]
 # Purposes an email magic link may serve (mirrors the email_verification_tokens
 # purpose CHECK). Only 'registration' is issued today; login/reset are reserved.
 EmailVerifyPurpose = Literal["registration", "login", "reset"]
@@ -49,6 +55,8 @@ class RegisterRequest(BaseModel):
     # to user_pii via create_with_pii; blank-after-strip is treated as absent.
     full_name: str | None = Field(default=None, max_length=120)
     seller_authority_type: SellerAuthorityType | None = None
+    # Defaults to email: it is the channel that can actually reach users today.
+    verification_channel: VerificationChannel = "email"
 
     @model_validator(mode="after")
     def _normalise_and_check_seller(self) -> RegisterRequest:
@@ -79,9 +87,11 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     user_id: UUID
     message: str
-    # Seconds until the emailed magic link expires (SCRUM-152). Renamed from
-    # otp_expires_in_seconds when verification moved from SMS OTP to email.
+    # Seconds until the verification expires. Channel-dependent: 30 minutes for
+    # an email link, 5 for an OTP — which is why the channel is echoed back
+    # rather than left for the client to remember.
     verification_expires_in_seconds: int
+    verification_channel: VerificationChannel
 
 
 class OtpVerifyRequest(BaseModel):

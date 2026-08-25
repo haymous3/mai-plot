@@ -107,6 +107,7 @@ from app.services.registration import (
     OtpDispatchFailed,
     PhoneAlreadyRegistered,
     RegistrationService,
+    VerificationEmailFailed,
     VerificationRateLimited,
 )
 from app.services.resend_verification import ResendVerificationService
@@ -146,6 +147,7 @@ async def register(
             password=body.password,
             seller_authority_type=body.seller_authority_type,
             full_name=body.full_name,
+            verification_channel=body.verification_channel,
         )
     except EmailAlreadyRegistered:
         return _error(
@@ -163,7 +165,7 @@ async def register(
         return _error(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "VERIFICATION_RATE_LIMITED",
-            "Too many verification codes for this number. Try again later.",
+            "Too many verification requests. Try again later.",
         )
     except OtpDispatchFailed:
         return _error(
@@ -171,11 +173,25 @@ async def register(
             "OTP_DISPATCH_FAILED",
             "Could not send the verification code. Please retry.",
         )
+    except VerificationEmailFailed:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "VERIFICATION_EMAIL_FAILED",
+            "Could not send the verification email. Please retry.",
+        )
 
+    # `body.verification_channel` rather than `result.verification_channel`:
+    # both hold the same value, but the request's is already narrowed to the
+    # Literal by Pydantic. The service returns a plain str so the service layer
+    # need not import API schema types; asserting they agree is the tests' job.
+    channel = body.verification_channel
+    sent_to = body.email if channel == "email" else body.phone
+    noun = "link" if channel == "email" else "code"
     return RegisterResponse(
         user_id=result.user_id,
-        message=f"Verification code sent to {body.phone}",
+        message=f"Verification {noun} sent to {sent_to}",
         verification_expires_in_seconds=result.verification_expires_in_seconds,
+        verification_channel=channel,
     )
 
 
