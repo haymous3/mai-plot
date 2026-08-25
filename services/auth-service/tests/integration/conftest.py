@@ -214,12 +214,25 @@ async def register_only(
     email: str = "user@example.com",
     password: str | None = None,
     seller_authority_type: str | None = None,
+    verification_channel: str = "phone",
 ) -> dict[str, Any]:
     """POST /auth/register and assert a 201; return the response body.
 
     Split out of register_and_verify for tests that need an account left in
-    the `unverified` state (the email-resend path, for instance)."""
-    payload: dict[str, Any] = {"phone": phone, "role": role, "email": email}
+    the `unverified` state (the email-resend path, for instance).
+
+    NOTE the default is "phone", which is NOT the API's default of "email"
+    (SCRUM-180). Most callers here exercise the OTP path and want a code sent,
+    so being explicit keeps them working without each passing the channel. The
+    API's own default is pinned separately in test_register.py — do not infer
+    it from this helper.
+    """
+    payload: dict[str, Any] = {
+        "phone": phone,
+        "role": role,
+        "email": email,
+        "verification_channel": verification_channel,
+    }
     if password is not None:
         payload["password"] = password
     if seller_authority_type is not None:
@@ -252,6 +265,9 @@ async def register_and_verify(
         email=email,
         password=password,
         seller_authority_type=seller_authority_type,
+        # This helper completes verification by OTP, so it must request the
+        # phone channel explicitly now that email is the API default.
+        verification_channel="phone",
     )
 
     code = extract_otp_code(sms.sent[-1].message)

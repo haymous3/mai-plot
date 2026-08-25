@@ -2,22 +2,25 @@
 
 The route handler stays slim — it builds the service, calls one method,
 and translates errors to HTTP status codes. All the side effects
-(insert user, persist the verification token, dispatch the email, hit the
+(insert user, persist the verification token, dispatch the message, hit the
 rate limiter) live here so they can be unit tested with mocked collaborators.
 
-SCRUM-175: account verification is phone OTP over SMS again, now dispatched
-via Twilio. This reverses the channel SCRUM-152 chose (an email magic link)
-while leaving that machinery intact and live — email_verification.py,
-email_token.py, resend_verification.py, POST /auth/verify/email and the
-email_verification_tokens table are all untouched; registration simply no
-longer mints a link. That is the exact mirror of what SCRUM-152 did to the
-OTP path, so the channel can be flipped back without archaeology.
+SCRUM-180: the caller CHOOSES the verification channel. Both were already
+built — email magic link (SCRUM-152) and phone OTP (SCRUM-175/176) — and each
+kept working while the other was the default. This makes the choice explicit
+rather than a redeploy, so neither has to be torn out again.
 
-Note the consequence: because `resend_verification` mints a link for any
-account still `unverified`, POST /auth/verify/email/resend remains a
-reachable second route to verification. That is deliberate — SMS delivery
-to Nigerian numbers from a US long code is unreliable (see adapters/twilio.py),
-so an email fallback is worth keeping until a NG sender ID is registered.
+`email` is the default and the only channel the UI currently offers: phone OTP
+is code-complete but cannot be DELIVERED to Nigerian numbers from the present
+sender (see adapters/twilio.py and ng-sender-id-registration.md), so the
+frontend shows it as "coming soon". Nothing here is gated on that — pass
+channel="phone" and the OTP path runs exactly as before, which is what makes
+re-enabling it a UI change rather than a backend one.
+
+Both channels share the rate limiter, but key it differently: email links are
+limited per email address, OTP sends per phone (CLAUDE.md §4 caps OTP at
+5/hour/phone). Keying each on the identifier it actually spends is the point —
+a shared key would let one channel exhaust the other's budget.
 """
 
 from __future__ import annotations
@@ -27,10 +30,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from app.adapters.email_verification import (
+    EmailDeliveryError,
+    EmailVerificationSender,
+    VerificationEmail,
+)
 from app.adapters.twilio import SmsClient, SmsError
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
+from app.repositories.email_verification_repo import EmailVerificationRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.user_repo import UserRepository
+from app.services.email_token import build_verify_url, generate_token, hash_token
 from app.services.otp import generate_code, hash_code
 from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
@@ -58,10 +68,24 @@ class OtpDispatchFailed(RegistrationError):
     pass
 
 
+class VerificationEmailFailed(RegistrationError):
+    pass
+
+
 @dataclass(frozen=True)
 class RegistrationResult:
     user_id: UUID
     verification_expires_in_seconds: int
+    # Echoed back so the client routes to the right verify screen and shows the
+    # right TTL, without having to remember what it asked for. The TTLs differ
+    # materially — 30 minutes for a link, 5 for a code.
+    verification_channel: str
+
+
+def _email_domain(address: str) -> str:
+    """Domain part only, for safe logging — never the full address."""
+    _, _, domain = address.rpartition("@")
+    return domain or "?"
 
 
 class RegistrationService:
@@ -70,17 +94,25 @@ class RegistrationService:
         *,
         users: UserRepository,
         otps: OtpRepository,
+        email_tokens: EmailVerificationRepository,
         credentials: AuthCredentialsRepository,
         rate_limiter: OtpRateLimiter,
         sms: SmsClient,
+        email_sender: EmailVerificationSender,
         otp_expire_minutes: int,
+        email_expire_minutes: int,
+        verify_base_url: str,
     ) -> None:
         self._users = users
         self._otps = otps
+        self._email_tokens = email_tokens
         self._credentials = credentials
         self._rate_limiter = rate_limiter
         self._sms = sms
+        self._email_sender = email_sender
         self._otp_expire_minutes = otp_expire_minutes
+        self._email_expire_minutes = email_expire_minutes
+        self._verify_base_url = verify_base_url
 
     async def register(
         self,
@@ -91,25 +123,27 @@ class RegistrationService:
         password: str | None,
         seller_authority_type: str | None,
         full_name: str | None = None,
+        verification_channel: str = "email",
     ) -> RegistrationResult:
-        # Email is still collected and still unique-checked — it is the login
-        # identifier (SCRUM-45) even though it is no longer the verification
-        # channel, so a duplicate must fail here rather than at the DB.
+        by_email = verification_channel == "email"
+
+        # Both identifiers are unique-checked regardless of channel: email is
+        # the login identifier (SCRUM-45) and phone is unique in user_pii, so a
+        # duplicate on either must fail here rather than at the DB.
         if await self._users.get_active_by_email(email) is not None:
             raise EmailAlreadyRegistered()
         if await self._users.get_by_phone(phone) is not None:
             raise PhoneAlreadyRegistered()
 
-        # Rate-limit OTP sends per PHONE (CLAUDE.md §4: 5/hour) — the limiter
-        # was keyed on email while the magic link was the channel. Fails open
-        # on a Redis outage by design (review.md R5).
-        limit = await self._rate_limiter.check_and_record(phone)
+        # Keyed on whichever identifier this send actually spends, so the two
+        # channels cannot exhaust each other's budget. Fails open on a Redis
+        # outage by design (review.md R5).
+        limit = await self._rate_limiter.check_and_record(email if by_email else phone)
         if not limit.allowed:
             raise VerificationRateLimited()
 
-        code = generate_code()
-        code_hash = hash_code(code)
-        expires_at = datetime.now(UTC) + timedelta(minutes=self._otp_expire_minutes)
+        expire_minutes = self._email_expire_minutes if by_email else self._otp_expire_minutes
+        expires_at = datetime.now(UTC) + timedelta(minutes=expire_minutes)
 
         user_id = await self._users.create_with_pii(
             phone=phone,
@@ -122,15 +156,74 @@ class RegistrationService:
         # log in via email/password (SCRUM-45).
         if password is not None:
             await self._credentials.upsert(user_id=user_id, password_hash=hash_password(password))
-        # Only the bcrypt hash is persisted; the plaintext code exists solely
-        # in the SMS body below and is never logged or returned.
-        await self._otps.create(
-            phone=phone,
-            code_hash=code_hash,
+
+        if by_email:
+            await self._send_verification_email(user_id=user_id, email=email, expires_at=expires_at)
+        else:
+            await self._send_otp(phone=phone, expires_at=expires_at)
+
+        logger.info(
+            "registration.ok",
+            extra={
+                "user_id": str(user_id),
+                "role": role,
+                "channel": verification_channel,
+                # Only ever the non-identifying part of whichever identifier
+                # this channel used.
+                "email_domain": _email_domain(email) if by_email else None,
+                "phone_suffix": None if by_email else phone[-4:],
+            },
+        )
+        return RegistrationResult(
+            user_id=user_id,
+            verification_expires_in_seconds=expire_minutes * 60,
+            verification_channel=verification_channel,
+        )
+
+    async def _send_verification_email(
+        self, *, user_id: UUID, email: str, expires_at: datetime
+    ) -> None:
+        """Mint a single-use magic link and send it (SCRUM-152).
+
+        Only the SHA-256 hash is persisted; the raw token exists solely in the
+        emailed URL.
+        """
+        token = generate_token()
+        await self._email_tokens.create(
+            user_id=user_id,
+            email=email,
+            token_hash=hash_token(token),
             purpose="registration",
             expires_at=expires_at,
         )
+        try:
+            verify_url = build_verify_url(self._verify_base_url, token)
+            await self._email_sender.send_verification(
+                VerificationEmail(to=email, verify_url=verify_url)
+            )
+        except EmailDeliveryError as exc:
+            # Same non-rollback behaviour as the OTP path below — the route
+            # catches this to return a 502, so the session still commits and
+            # the account persists. Recovery is POST /auth/verify/email/resend.
+            logger.error(
+                "registration.verification_email_failed",
+                extra={"email_domain": _email_domain(email), "error": str(exc)},
+            )
+            raise VerificationEmailFailed() from exc
 
+    async def _send_otp(self, *, phone: str, expires_at: datetime) -> None:
+        """Mint a 6-digit code and text it (SCRUM-175).
+
+        Only the bcrypt hash is persisted; the plaintext exists solely in the
+        SMS body and is never logged or returned.
+        """
+        code = generate_code()
+        await self._otps.create(
+            phone=phone,
+            code_hash=hash_code(code),
+            purpose="registration",
+            expires_at=expires_at,
+        )
         try:
             await self._sms.send_sms(
                 phone=phone,
@@ -140,34 +233,13 @@ class RegistrationService:
                 ),
             )
         except SmsError as exc:
-            # NOTE: this does NOT roll back, despite what the SCRUM-152 version
-            # of this comment claimed. db.get_session only rolls back when an
-            # exception escapes the ROUTE, and the route catches this one to
-            # return a 502 — so the session commits at teardown and the user +
-            # OTP rows persist.
-            #
-            # That is the behaviour we want now: the account is real, and the
-            # caller recovers with POST /auth/otp/resend (SCRUM-176) rather than
-            # re-entering the whole form. Before that endpoint existed this was
-            # a genuine trap — a failed send left an account that could never be
-            # verified and whose phone would then 400 as already registered.
-            # Relevant in practice, not theory: a US long code to a Nigerian
-            # number is exactly the send that fails.
+            # This does NOT roll back: db.get_session only rolls back when an
+            # exception escapes the ROUTE, and the route catches this to return
+            # a 502 — so the session commits and the user + OTP rows persist.
+            # That is what we want, because the caller recovers with
+            # POST /auth/otp/resend (SCRUM-176) instead of re-entering the form.
             logger.error(
                 "registration.otp_dispatch_failed",
                 extra={"phone_suffix": phone[-4:], "error": str(exc)},
             )
             raise OtpDispatchFailed() from exc
-
-        logger.info(
-            "registration.ok",
-            extra={
-                "user_id": str(user_id),
-                "role": role,
-                "phone_suffix": phone[-4:],
-            },
-        )
-        return RegistrationResult(
-            user_id=user_id,
-            verification_expires_in_seconds=self._otp_expire_minutes * 60,
-        )

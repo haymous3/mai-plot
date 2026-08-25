@@ -1,8 +1,9 @@
 """POST /auth/verify/email/resend integration tests (SCRUM-154).
 
-SCRUM-175 moved registration to phone OTP, so there is no longer a
-"registration email" for resend to follow — the first resend IS the first
-email. Counts here shifted down by one accordingly.
+SCRUM-180 made the channel a per-request choice, and these tests register on
+the email channel — so registration sends the first link and a resend is the
+SECOND email. (Under SCRUM-175, when registration sent an OTP instead, the
+first resend was the first email; the counts here moved back.)
 """
 
 from __future__ import annotations
@@ -26,7 +27,13 @@ async def _register(
     http_client: AsyncClient, email: str = _EMAIL, phone: str = "08012345678"
 ) -> str:
     resp = await http_client.post(
-        "/auth/register", json={"phone": phone, "role": "buyer", "email": email}
+        "/auth/register",
+        json={
+            "phone": phone,
+            "role": "buyer",
+            "email": email,
+            "verification_channel": "email",
+        },
     )
     assert resp.status_code == 201, resp.text
     user_id: str = resp.json()["user_id"]
@@ -42,11 +49,7 @@ async def test_resend_sends_a_fresh_link_and_supersedes_the_old(
     db_engine: Engine,
 ) -> None:
     user_id = await _register(http_client)
-    # Registration sends an OTP SMS, not a link, so nothing is captured yet.
-    assert email_verification_fake.sent == []
-
-    first = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
-    assert first.status_code == 202, first.text
+    # Registration on the email channel sends the first link itself (SCRUM-180).
     assert len(email_verification_fake.sent) == 1
 
     resp = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
@@ -95,8 +98,7 @@ async def test_resend_already_verified_is_generic_202_and_sends_nothing(
     http_client: AsyncClient,
 ) -> None:
     await _register(http_client)
-    issued = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
-    assert issued.status_code == 202
+    # The registration email carries a usable link — no resend needed to get one.
     token = extract_email_token(email_verification_fake.sent[-1].verify_url)
     verify = await http_client.post(
         "/auth/verify/email", json={"token": token, "purpose": "registration"}
@@ -105,7 +107,7 @@ async def test_resend_already_verified_is_generic_202_and_sends_nothing(
 
     resp = await http_client.post("/auth/verify/email/resend", json={"email": _EMAIL})
     assert resp.status_code == 202, resp.text
-    # Already verified -> no new email beyond the one that verified them.
+    # Already verified -> no new email beyond the registration one.
     assert len(email_verification_fake.sent) == 1
 
 

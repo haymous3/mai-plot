@@ -211,18 +211,26 @@ def _otp_attempts(redis: RedisDep, settings: SettingsDep) -> OtpAttemptLimiter:
 def get_registration_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     otps: Annotated[OtpRepository, Depends(_otp_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     rate_limiter: Annotated[OtpRateLimiter, Depends(_rate_limiter)],
     sms: SmsClientDep,
+    email_sender: EmailSenderDep,
     settings: SettingsDep,
 ) -> RegistrationService:
+    # Both channels are wired unconditionally — which one runs is the caller's
+    # choice per request (SCRUM-180), not a deploy-time switch.
     return RegistrationService(
         users=users,
         otps=otps,
+        email_tokens=email_tokens,
         credentials=credentials,
         rate_limiter=rate_limiter,
         sms=sms,
+        email_sender=email_sender,
         otp_expire_minutes=settings.otp_expire_minutes,
+        email_expire_minutes=settings.email_verification_expire_minutes,
+        verify_base_url=settings.email_verification_base_url,
     )
 
 

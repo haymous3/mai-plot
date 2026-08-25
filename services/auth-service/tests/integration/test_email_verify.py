@@ -26,16 +26,22 @@ _EMAIL = "buyer@example.com"
 async def _register(
     http_client: AsyncClient, email: str = _EMAIL, phone: str = "08012345678"
 ) -> dict[str, object]:
-    """Register, then request a verification link so the email fake captures
-    one. Registration itself now sends an OTP SMS, not a link (SCRUM-175)."""
+    """Register on the email channel, which sends the link directly.
+
+    SCRUM-180 made the channel explicit; before that this helper had to call
+    the resend endpoint to obtain a link, because registration was sending an
+    OTP instead. That workaround is gone."""
     response = await http_client.post(
-        "/auth/register", json={"phone": phone, "role": "buyer", "email": email}
+        "/auth/register",
+        json={
+            "phone": phone,
+            "role": "buyer",
+            "email": email,
+            "verification_channel": "email",
+        },
     )
     assert response.status_code == 201, response.text
     body: dict[str, object] = response.json()
-
-    resend = await http_client.post("/auth/verify/email/resend", json={"email": email})
-    assert resend.status_code == 202, resend.text
     return body
 
 
