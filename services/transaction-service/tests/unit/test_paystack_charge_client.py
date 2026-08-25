@@ -51,7 +51,7 @@ async def test_initialize_returns_checkout_url() -> None:
         )
 
     result = await _client(handler).initialize(
-        reference="pe-ref-1", amount_kobo=5_000_00, email="buyer@maiplot.ng", callback_url=None
+        reference="pe-ref-1", amount_kobo=5_000_00, email="buyer@maihomme.com", callback_url=None
     )
 
     assert result == CheckoutInit(
@@ -63,7 +63,7 @@ async def test_initialize_returns_checkout_url() -> None:
     assert captured["body"] == {
         "reference": "pe-ref-1",
         "amount": 5_000_00,
-        "email": "buyer@maiplot.ng",
+        "email": "buyer@maihomme.com",
     }
 
 
@@ -78,11 +78,11 @@ async def test_callback_url_included_when_supplied() -> None:
         )
 
     await _client(handler).initialize(
-        reference="r", amount_kobo=100, email="b@x.ng", callback_url="https://maiplot.ng/return"
+        reference="r", amount_kobo=100, email="b@x.ng", callback_url="https://maihomme.com/return"
     )
     body = captured["body"]
     assert isinstance(body, dict)
-    assert body["callback_url"] == "https://maiplot.ng/return"
+    assert body["callback_url"] == "https://maihomme.com/return"
 
 
 async def test_reference_falls_back_to_request_when_absent() -> None:

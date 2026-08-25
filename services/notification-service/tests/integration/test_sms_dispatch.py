@@ -46,7 +46,7 @@ def _service(
         notifications=notifications,
         users=users,
         email_client=InMemorySesClient(),
-        unsubscribe_base_url="https://maiplot.ng/notifications/unsubscribe",
+        unsubscribe_base_url="https://maihomme.com/notifications/unsubscribe",
         unsubscribe_secret="test-secret",
     )
     service = NotificationDispatchService(

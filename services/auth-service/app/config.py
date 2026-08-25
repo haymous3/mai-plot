@@ -88,12 +88,21 @@ class Settings(BaseSettings):
     email_verification_use_fake: bool = True
     email_provider: str = "resend"
     resend_api_key: str = ""
-    email_from_address: str = "Maiplot <noreply@maiplot.ng>"
+    # The brand is Maihomme; maihomme.com is the domain verified in Resend
+    # (2026-08-25, eu-west-1). "maiplot" was never a registered domain — it was
+    # an aspirational placeholder that survived in config, and sending from it
+    # fails outright because Resend only accepts verified domains.
+    email_from_address: str = "Maihomme <noreply@maihomme.com>"
     email_timeout_seconds: float = 5.0
     email_verification_expire_minutes: int = 30
     # Base URL of the frontend landing page the magic link points at; the token
     # is appended as ?token=... and the page POSTs it to /auth/verify/email.
-    email_verification_base_url: str = "https://app.maiplot.ng/verify-email"
+    # ⚠️ app.maihomme.com does NOT resolve yet — the apex is a GoDaddy site
+    # builder and there is no `app` record. Point it at the deployed frontend
+    # (Vercel) before relying on this in staging or production, or every
+    # verification link 404s. Overridden per environment; this default exists so
+    # local runs have something coherent.
+    email_verification_base_url: str = "https://app.maihomme.com/verify-email"
 
     # BVN verification (SCRUM-46). The fake verifier is default for local +
     # CI. bvn_pepper is the HMAC key for the deterministic bvn_lookup column

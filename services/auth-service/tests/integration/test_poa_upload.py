@@ -29,7 +29,7 @@ async def _register_verify_token(
         sms,
         phone=phone,
         role=role,
-        email=f"user{phone[-4:]}@maiplot.ng",
+        email=f"user{phone[-4:]}@maihomme.com",
         seller_authority_type=seller_authority_type,
     )
     return body["user"]["id"], body["access_token"]

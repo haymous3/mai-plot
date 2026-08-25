@@ -36,7 +36,7 @@ export function BuyerNav() {
             confirmed verbatim.
 
             BUYER ONLY. Seller, realtor and admin sidebars and every page title
-            still read "Maiplot", as do CLAUDE.md, the repo and the maiplot.ng
+            still read "Maiplot", as do CLAUDE.md, the repo and the maihomme.com
             domain. That inconsistency is deliberate and accepted; a full
             rebrand would be its own ticket outside this epic. */}
         <span className="font-display text-lg tracking-tight text-bone">Maihomme</span>

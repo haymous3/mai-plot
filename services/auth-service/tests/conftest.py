@@ -1,4 +1,4 @@
-"""Per-service pytest fixtures shared across every Maiplot service.
+"""Per-service pytest fixtures shared across every Maihomme service.
 
 Same file copied verbatim into each service. Promote to a `_shared`
 workspace member when the duplication actually hurts; for now CLAUDE.md

@@ -24,7 +24,7 @@ async def _register_verify_token(
     REGISTRATION email (now required); when omitted a unique placeholder is
     derived from the phone so callers can register several accounts per test.
     The profile screen can then set/replace the email."""
-    reg_email = email or f"user{phone[-4:]}@maiplot.ng"
+    reg_email = email or f"user{phone[-4:]}@maihomme.com"
     body = await register_and_verify(http_client, sms, phone=phone, role="buyer", email=reg_email)
     token: str = body["access_token"]
     return token
@@ -45,7 +45,7 @@ async def test_profile_persists_name_and_email(
 
     resp = await http_client.post(
         "/auth/profile",
-        json={"full_name": "Ada Obi", "email": "ada@maiplot.ng"},
+        json={"full_name": "Ada Obi", "email": "ada@maihomme.com"},
         headers=_auth(token),
     )
     assert resp.status_code == 200, resp.text
@@ -56,7 +56,7 @@ async def test_profile_persists_name_and_email(
     )
     assert pw_resp.status_code == 200
     login = await http_client.post(
-        "/auth/login", json={"email": "ada@maiplot.ng", "password": _STRONG}
+        "/auth/login", json={"email": "ada@maihomme.com", "password": _STRONG}
     )
     assert login.status_code == 200, login.text
 
@@ -96,12 +96,14 @@ async def test_profile_email_collision_rejected(
     http_client: AsyncClient,
 ) -> None:
     # First account already owns the email (set at registration).
-    await _register_verify_token(http_client, sms_fake, phone="08010000001", email="dup@maiplot.ng")
+    await _register_verify_token(
+        http_client, sms_fake, phone="08010000001", email="dup@maihomme.com"
+    )
     # Second account tries to claim the same email via the profile screen.
     token_b = await _register_verify_token(http_client, sms_fake, phone="08010000002")
     resp = await http_client.post(
         "/auth/profile",
-        json={"full_name": "Bola", "email": "dup@maiplot.ng"},
+        json={"full_name": "Bola", "email": "dup@maihomme.com"},
         headers=_auth(token_b),
     )
     assert resp.status_code == 409

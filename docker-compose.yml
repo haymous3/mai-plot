@@ -446,12 +446,12 @@ services:
       WEB_PUSH_USE_FAKE: ${WEB_PUSH_USE_FAKE:-false}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:ops@maiplot.ng}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:ops@maihomme.com}
       EMAIL_VIA_CELERY: ${EMAIL_VIA_CELERY:-true}
       SES_USE_FAKE: ${SES_USE_FAKE:-false}
-      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@maiplot.ng}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@maihomme.com}
       SES_REGION: ${SES_REGION:-af-south-1}
-      UNSUBSCRIBE_BASE_URL: ${UNSUBSCRIBE_BASE_URL:-https://maiplot.ng/notifications/unsubscribe}
+      UNSUBSCRIBE_BASE_URL: ${UNSUBSCRIBE_BASE_URL:-https://maihomme.com/notifications/unsubscribe}
       # Must match the API's value (SCRUM-122) so the email's signed unsubscribe
       # token verifies.
       UNSUBSCRIBE_SECRET: ${UNSUBSCRIBE_SECRET:-change-me-to-a-long-random-unsubscribe-secret}
