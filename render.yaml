@@ -403,6 +403,43 @@ projects:
               - key: EMAIL_VERIFICATION_BASE_URL
                 sync: false
 
+              # ── Twilio: STAYS FAKE on staging (SCRUM-177) ──────────────────
+              # A real-SMS exception was briefly enabled here on 2026-08-23 and
+              # REVERTED on 2026-08-25. Reverted because real sends cannot work
+              # at all while the Twilio account is on the free trial:
+              #   * trial only delivers to VERIFIED numbers (error 21608), and
+              #   * a Nigerian number CANNOT be verified on trial — SMS
+              #     verification is blocked (NG is a restricted country) and
+              #     call verification is blocked (error 10002).
+              # So the exception bought nothing and left staging returning
+              # 502 OTP_DISPATCH_FAILED on every /auth/register.
+              #
+              # TWILIO_USE_FAKE is pinned true here at SERVICE level as well as
+              # in maiplot-staging-fakes — belt and braces, since a stray group
+              # edit would otherwise silently re-enable real sends.
+              - key: TWILIO_USE_FAKE
+                value: "true"
+              - key: TWILIO_BASE_URL
+                value: https://api.twilio.com
+              # ⚠️ ALL THREE ARE DASHBOARD-SET, never literals here. This repo is
+              # PUBLIC (see deployment.md), and while an Account SID is not a
+              # credential on its own it identifies the Twilio account, so it
+              # stays out of source control along with the token.
+              # (`sync: false` only prompts on INITIAL blueprint create; on an
+              # update these must be entered by hand.)
+              #
+              # ⚠️ TWILIO_ACCOUNT_SID must be the **live** SID, not the Test
+              # Credentials SID — the console shows both and they are easy to
+              # confuse. Test credentials reject every real `From` with error
+              # 21606 and never reach a handset; they only accept the magic
+              # number +15005550006, which simulates.
+              - key: TWILIO_ACCOUNT_SID
+                sync: false
+              - key: TWILIO_FROM_NUMBER
+                sync: false
+              - key: TWILIO_AUTH_TOKEN
+                sync: false
+
           - name: listing-service
             type: pserv
             runtime: docker

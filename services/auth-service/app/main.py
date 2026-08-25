@@ -6,10 +6,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.config import get_settings
 from app.middleware.trace_id import HEADER as TRACE_HEADER
 from app.middleware.trace_id import TraceIdMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
+from app.routes.dev import dev_routes_enabled
+from app.routes.dev import router as dev_router
 from app.security import AuthenticationError, AuthorizationError
 from app.telemetry import setup_telemetry
 
@@ -26,6 +29,14 @@ setup_telemetry(SERVICE_NAME, app)
 app.add_middleware(TraceIdMiddleware)
 app.include_router(auth_router)
 app.include_router(admin_router)
+
+# Local-only helpers (app/routes/dev.py) — the /dev/otp/latest reader that lets
+# a developer complete /auth/otp/verify while the fake SMS adapter is bound.
+# This is the PRIMARY security gate: outside ENV=local the routes are never
+# registered, so they 404 exactly like any unknown path. See the module
+# docstring in app/routes/dev.py for the full set of gates and why each exists.
+if dev_routes_enabled(get_settings()):
+    app.include_router(dev_router)
 
 
 @app.exception_handler(RequestValidationError)
