@@ -127,12 +127,19 @@ class RegistrationService:
     ) -> RegistrationResult:
         by_email = verification_channel == "email"
 
-        # Both identifiers are unique-checked regardless of channel: email is
-        # the login identifier (SCRUM-45) and phone is unique in user_pii, so a
-        # duplicate on either must fail here rather than at the DB.
+        # Email is ALWAYS unique-checked: it is the login identifier (SCRUM-45)
+        # and users.email carries a DB unique constraint, so two accounts
+        # sharing one would break sign-in outright.
         if await self._users.get_active_by_email(email) is not None:
             raise EmailAlreadyRegistered()
-        if await self._users.get_by_phone(phone) is not None:
+
+        # Phone uniqueness applies only to the PHONE channel (SCRUM-183). A
+        # phone may be shared by accounts that verify by email — common where
+        # households share a handset — because nothing then looks an account up
+        # by phone. get_by_phone is itself filtered to the phone channel and
+        # backed by a matching partial unique index (migration 0008), so this
+        # check and the DB constraint cover exactly the same set.
+        if not by_email and await self._users.get_by_phone(phone) is not None:
             raise PhoneAlreadyRegistered()
 
         # Keyed on whichever identifier this send actually spends, so the two
@@ -151,6 +158,7 @@ class RegistrationService:
             email=email,
             seller_authority_type=seller_authority_type,
             full_name=full_name or "",
+            verification_channel=verification_channel,
         )
         # Store the password hash if one was supplied, so the user can later
         # log in via email/password (SCRUM-45).

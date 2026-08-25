@@ -97,12 +97,16 @@ class Settings(BaseSettings):
     email_verification_expire_minutes: int = 30
     # Base URL of the frontend landing page the magic link points at; the token
     # is appended as ?token=... and the page POSTs it to /auth/verify/email.
-    # ⚠️ app.maihomme.com does NOT resolve yet — the apex is a GoDaddy site
-    # builder and there is no `app` record. Point it at the deployed frontend
-    # (Vercel) before relying on this in staging or production, or every
-    # verification link 404s. Overridden per environment; this default exists so
-    # local runs have something coherent.
-    email_verification_base_url: str = "https://app.maihomme.com/verify-email"
+    # The deployed frontend is www.maihomme.com (Vercel), verified 2026-08-25:
+    # the apex 308-redirects to www, and /verify-email returns 200 there.
+    # There is no `app` subdomain — an earlier default assumed one and would
+    # have 404'd every verification link.
+    #
+    # A redirect would technically still work, but the link goes in an email:
+    # point it at the final URL so the address the user sees is the one that
+    # serves the page, with no hop for a mail client to mangle or a scanner to
+    # follow early.
+    email_verification_base_url: str = "https://www.maihomme.com/verify-email"
 
     # BVN verification (SCRUM-46). The fake verifier is default for local +
     # CI. bvn_pepper is the HMAC key for the deterministic bvn_lookup column

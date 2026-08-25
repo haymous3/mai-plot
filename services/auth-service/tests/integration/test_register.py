@@ -437,3 +437,199 @@ async def test_email_link_from_register_actually_verifies(
     body = verified.json()
     assert body["user"]["verified_status"] == "email_verified"
     assert body["access_token"] and body["refresh_token"]
+
+
+# --- phone reuse across channels (SCRUM-183) --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_email_channel_allows_a_phone_already_used_by_another_account(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+) -> None:
+    """Households share handsets. Two people may hold accounts on one phone as
+    long as each verifies by email and brings their own address."""
+    shared = "08012345678"
+    first = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "first@example.com",
+            "verification_channel": "email",
+        },
+    )
+    assert first.status_code == 201, first.text
+
+    second = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "second@example.com",
+            "verification_channel": "email",
+        },
+    )
+    assert second.status_code == 201, second.text
+    assert first.json()["user_id"] != second.json()["user_id"]
+    assert len(email_verification_fake.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_email_channel_still_rejects_a_duplicate_email(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+) -> None:
+    """Relaxing phone uniqueness must not relax email: it is the login
+    identifier and carries its own DB constraint."""
+    for _ in range(1):
+        first = await http_client.post(
+            "/auth/register",
+            json={
+                "phone": "08012345678",
+                "role": "buyer",
+                "email": _EMAIL,
+                "verification_channel": "email",
+            },
+        )
+        assert first.status_code == 201
+
+    second = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": "08087654321",
+            "role": "buyer",
+            "email": _EMAIL,
+            "verification_channel": "email",
+        },
+    )
+    assert second.status_code == 400
+    assert_error_envelope(second.json(), "EMAIL_ALREADY_REGISTERED")
+
+
+@pytest.mark.asyncio
+async def test_phone_channel_still_rejects_a_duplicate_phone(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    shared = "08012345678"
+    first = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "first@example.com",
+            "verification_channel": "phone",
+        },
+    )
+    assert first.status_code == 201
+
+    second = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "second@example.com",
+            "verification_channel": "phone",
+        },
+    )
+    assert second.status_code == 400
+    assert_error_envelope(second.json(), "PHONE_ALREADY_REGISTERED")
+
+
+@pytest.mark.asyncio
+async def test_phone_channel_may_claim_a_phone_held_by_an_email_account(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+) -> None:
+    """The email account does not reserve the phone, so the handset's actual
+    owner can still register with it — and only ONE such account can exist,
+    which is what keeps the OTP lookup unambiguous."""
+    shared = "08012345678"
+    assert (
+        await http_client.post(
+            "/auth/register",
+            json={
+                "phone": shared,
+                "role": "buyer",
+                "email": "byemail@example.com",
+                "verification_channel": "email",
+            },
+        )
+    ).status_code == 201
+
+    byphone = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "byphone@example.com",
+            "verification_channel": "phone",
+        },
+    )
+    assert byphone.status_code == 201, byphone.text
+
+    # A second phone-channel claim on the same handset is refused.
+    third = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "third@example.com",
+            "verification_channel": "phone",
+        },
+    )
+    assert third.status_code == 400
+    assert_error_envelope(third.json(), "PHONE_ALREADY_REGISTERED")
+
+
+@pytest.mark.asyncio
+async def test_otp_verifies_the_phone_account_not_the_email_one(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+) -> None:
+    """The security property behind the whole design: with a phone shared
+    between an email account and a phone account, verifying the OTP must issue
+    tokens for the PHONE account — never the other one."""
+    shared = "08012345678"
+    by_email = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "buyer",
+            "email": "byemail@example.com",
+            "verification_channel": "email",
+        },
+    )
+    by_phone = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": shared,
+            "role": "seller",
+            "email": "byphone@example.com",
+            "verification_channel": "phone",
+        },
+    )
+    assert by_email.status_code == 201 and by_phone.status_code == 201
+
+    code = extract_otp_code(sms_fake.sent[-1].message)
+    verified = await http_client.post(
+        "/auth/otp/verify",
+        json={"phone": shared, "otp": code, "purpose": "registration"},
+    )
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["user"]["id"] == by_phone.json()["user_id"]
+    assert verified.json()["user"]["id"] != by_email.json()["user_id"]
