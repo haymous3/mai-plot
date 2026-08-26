@@ -9,7 +9,7 @@ import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 
 export const metadata: Metadata = {
-  title: 'Property financing · Maiplot',
+  title: 'Property financing · Maihomme',
 };
 
 export default async function FinancingPage({

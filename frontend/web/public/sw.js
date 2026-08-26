@@ -1,5 +1,5 @@
 /*
- * Maiplot Web Push Service Worker (SCRUM-121).
+ * Maihomme Web Push Service Worker (SCRUM-121).
  *
  * Receives push messages from notification-service (payload shape:
  * {title, body, type, reference_type, reference_id}) and shows a notification;
@@ -29,7 +29,7 @@ self.addEventListener('push', (event) => {
     payload = {};
   }
 
-  const title = payload.title || 'Maiplot';
+  const title = payload.title || 'Maihomme';
   const options = {
     body: payload.body || '',
     icon: '/icon-192.png',
@@ -53,7 +53,7 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus an already-open Maiplot tab if there is one; otherwise open a tab.
+      // Focus an already-open Maihomme tab if there is one; otherwise open a tab.
       for (const client of clientList) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           client.navigate(target);

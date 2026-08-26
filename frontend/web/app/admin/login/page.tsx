@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = {
-  title: 'Admin sign in · Maiplot',
+  title: 'Admin sign in · Maihomme',
   robots: { index: false, follow: false },
 };
 
@@ -16,7 +16,7 @@ export default function AdminLoginPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-sm bg-bone/10 font-display text-lg text-bone ring-1 ring-bone/20">
             M
           </span>
-          <span className="font-display text-xl tracking-tight">Maiplot</span>
+          <span className="font-display text-xl tracking-tight">Maihomme</span>
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
       <section className="flex items-center justify-center px-6 py-16 sm:px-12">
         <div className="w-full max-w-sm animate-rise">
           <div className="mb-9 lg:hidden">
-            <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
+            <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
           </div>
 
           <p className="text-xs uppercase tracking-[0.2em] text-ink-300">Admin &amp; legal team</p>

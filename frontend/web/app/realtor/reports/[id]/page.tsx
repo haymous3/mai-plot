@@ -10,7 +10,7 @@ import { CONDITION_OPTIONS } from '@/lib/inspection-report';
 import { inspectionLocation } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Report · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Report · Maihomme Realtor' };
 
 function conditionLabel(value: string | null): string {
   if (!value) return '—';

@@ -14,7 +14,7 @@ import {
 } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Deal Progress · Maiplot' };
+export const metadata: Metadata = { title: 'Deal Progress · Maihomme' };
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -135,7 +135,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
             <div className="rounded-2xl bg-emerald-deep p-5 text-bone">
               <p className="font-semibold">Need financing?</p>
               <p className="mt-1 text-sm text-bone/80">
-                Cover up to {formatNaira(s.max_loan_kobo)} (50%) with a Maiplot loan.
+                Cover up to {formatNaira(s.max_loan_kobo)} (50%) with a Maihomme loan.
               </p>
               <Link
                 href={`/loans/apply/${s.transaction_id}`}

@@ -8,7 +8,7 @@ import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 
 export const metadata: Metadata = {
-  title: 'Loan application · Maiplot',
+  title: 'Loan application · Maihomme',
 };
 
 type SearchParams = { bank?: string; amount?: string; tenure?: string };

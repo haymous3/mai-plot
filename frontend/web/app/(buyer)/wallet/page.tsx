@@ -10,7 +10,7 @@ import { buyerBackendGet } from '@/lib/buyer-server-api';
 import { dealStageLabel } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'My Wallet · Maiplot' };
+export const metadata: Metadata = { title: 'My Wallet · Maihomme' };
 
 function Tile({
   label,

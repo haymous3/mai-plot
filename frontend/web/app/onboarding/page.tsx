@@ -7,7 +7,7 @@ import { SESSION_LOGIN } from '@/lib/session';
 import { sessionRole } from '@/lib/session-server';
 
 export const metadata: Metadata = {
-  title: 'Set up your account · Maiplot',
+  title: 'Set up your account · Maihomme',
 };
 
 /**

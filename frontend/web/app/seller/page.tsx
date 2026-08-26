@@ -14,7 +14,7 @@ import { formatNaira } from '@/lib/format';
 import { isSaleActive } from '@/lib/seller-deal-stage';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Dashboard · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Dashboard · Maihomme Seller' };
 
 const ACTIVE_LISTING_STATUSES = new Set(['active', 'under_offer', 'paused', 'pending_review']);
 

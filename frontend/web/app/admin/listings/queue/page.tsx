@@ -10,7 +10,7 @@ import { ADMIN_LOGIN } from '@/lib/auth';
 import { backendGet } from '@/lib/server-api';
 
 export const metadata: Metadata = {
-  title: 'Listing review queue · Maiplot',
+  title: 'Listing review queue · Maihomme',
   robots: { index: false, follow: false },
 };
 

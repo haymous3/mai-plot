@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { VerifyEmailClient } from './verify-email-client';
 
 export const metadata: Metadata = {
-  title: 'Verify your email · Maiplot',
+  title: 'Verify your email · Maihomme',
 };
 
 /**
@@ -22,7 +22,7 @@ export default function VerifyEmailPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-sm bg-bone/10 font-display text-lg text-bone ring-1 ring-bone/20">
             M
           </span>
-          <span className="font-display text-xl tracking-tight">Maiplot</span>
+          <span className="font-display text-xl tracking-tight">Maihomme</span>
         </div>
 
         <div className="relative z-10 max-w-md">

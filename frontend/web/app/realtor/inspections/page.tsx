@@ -7,7 +7,7 @@ import { realtorServiceUrl } from '@/lib/api';
 import { inspectionStatusMeta } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Assigned Inspections · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Assigned Inspections · Maihomme Realtor' };
 
 /** Assigned Inspections list (SCRUM-140, PR2). Groups the realtor's assignments
  * into Needs Response / Scheduled / Completed. Pending cards carry a live 2-hour

@@ -10,7 +10,7 @@ import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 import { isSaleActive, sellerStageLabel } from '@/lib/seller-deal-stage';
 
-export const metadata: Metadata = { title: 'Transactions · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Transactions · Maihomme Seller' };
 
 const RESPONSIBILITIES = [
   'Ensure all documents are verified',

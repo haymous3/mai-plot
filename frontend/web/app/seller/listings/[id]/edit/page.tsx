@@ -7,7 +7,7 @@ import { listingServiceUrl } from '@/lib/api';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Edit Listing · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Edit Listing · Maihomme Seller' };
 
 export default async function EditListingPage({ params }: { params: { id: string } }) {
   const result = await sessionBackendGet<ListingDetail>(

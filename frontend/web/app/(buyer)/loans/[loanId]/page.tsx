@@ -8,7 +8,7 @@ import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 
 export const metadata: Metadata = {
-  title: 'Loan status · Maiplot',
+  title: 'Loan status · Maihomme',
 };
 
 export default async function LoanStatusPage({ params }: { params: { loanId: string } }) {

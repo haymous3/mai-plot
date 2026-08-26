@@ -31,7 +31,7 @@ export function AdminNav({
           <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-emerald-deep font-display text-sm text-bone">
             M
           </span>
-          <span className="font-display text-lg tracking-tight text-ink-900">Maiplot</span>
+          <span className="font-display text-lg tracking-tight text-ink-900">Maihomme</span>
         </div>
         <nav className="flex items-center gap-1" aria-label="Admin queues">
           {TABS.map((t) => {

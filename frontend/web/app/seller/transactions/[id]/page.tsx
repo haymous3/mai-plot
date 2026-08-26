@@ -9,7 +9,7 @@ import { formatNaira } from '@/lib/format';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Transaction · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Transaction · Maihomme Seller' };
 
 export default async function SellerTransactionDetailPage({ params }: { params: { id: string } }) {
   const sales = await sessionBackendGet<SellerDealsResponse>(`${transactionServiceUrl()}/sales`);

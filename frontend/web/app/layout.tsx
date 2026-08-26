@@ -19,7 +19,7 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
-  title: 'Maiplot',
+  title: 'Maihomme',
   description: "Nigeria's distressed real estate marketplace",
 };
 

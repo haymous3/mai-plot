@@ -20,7 +20,7 @@ import {
 } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Dashboard · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Dashboard · Maihomme Realtor' };
 
 /** Realtor Dashboard Overview (SCRUM-140). Stats + upcoming inspections + recent
  * activity are all derived from the realtor's assigned inspections + commission

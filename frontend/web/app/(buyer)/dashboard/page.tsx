@@ -13,7 +13,7 @@ import { buyerBackendGet } from '@/lib/buyer-server-api';
 import { dealCompletedSteps, dealStageLabel, DEAL_TOTAL_STEPS, isDealActive } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Dashboard · Maiplot' };
+export const metadata: Metadata = { title: 'Dashboard · Maihomme' };
 
 // Verified % and avg deal time are platform aggregates owned by analytics-service
 // (not built yet — SCRUM-126 is audit-log only). Shown as placeholders until that

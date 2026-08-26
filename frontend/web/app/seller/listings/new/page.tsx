@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { CreateListingWizard } from './create-wizard';
 
-export const metadata: Metadata = { title: 'Create Listing · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Create Listing · Maihomme Seller' };
 
 export default function NewListingPage() {
   return (

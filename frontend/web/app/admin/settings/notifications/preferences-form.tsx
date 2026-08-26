@@ -20,7 +20,7 @@ const CHANNELS: { key: Channel; label: string; description: string }[] = [
   {
     key: 'push_enabled',
     label: 'Push',
-    description: 'In-browser push notifications when Maiplot is closed.',
+    description: 'In-browser push notifications when Maihomme is closed.',
   },
 ];
 

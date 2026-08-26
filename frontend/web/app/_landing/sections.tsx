@@ -29,9 +29,10 @@ import { TestimonialCarousel } from './testimonials';
  *
  * COPY: the Figma text reads "MaiHome" throughout. Per product decision the
  * landing page uses "Maihomme", matching the buyer sidebar shipped in
- * SCRUM-173 and re-confirmed in SCRUM-178. The copy below therefore diverges
- * from the Figma text by design. The legal entity ("Maiplot Technologies Ltd",
- * in the footer) is a separate name and is kept verbatim.
+ * SCRUM-173, re-confirmed in SCRUM-178 and swept product-wide in SCRUM-186.
+ * The copy below therefore diverges from the Figma text by design. The legal
+ * entity ("Maiplot Technologies Ltd", in the footer) is a separate name and is
+ * kept verbatim.
  */
 
 /** 1280px container with 32px inner padding — the landing page's own layout. */

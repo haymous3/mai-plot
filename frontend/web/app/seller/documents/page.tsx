@@ -8,7 +8,7 @@ import { authServiceUrl, documentServiceUrl } from '@/lib/api';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Documents · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Documents · Maihomme Seller' };
 
 const REQUIREMENTS = [
   'Certificate of Occupancy (C of O) — Required',

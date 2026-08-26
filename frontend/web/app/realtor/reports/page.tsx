@@ -6,7 +6,7 @@ import type { RealtorInspectionsResponse } from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Reports Submitted · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Reports Submitted · Maihomme Realtor' };
 
 /** Report History (SCRUM-140, PR4). Lists the realtor's submitted reports —
  * derived from their completed inspections (GET /inspections/mine) — with client
