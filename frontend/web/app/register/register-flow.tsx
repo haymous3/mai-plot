@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { PasswordField } from '../_components/password-field';
 import { IntroCarousel } from '../_onboarding/intro-carousel';
 import { RolePicker } from '../_onboarding/role-picker';
 import { OnboardingShell } from '../_onboarding/ui';
@@ -300,14 +301,14 @@ function AccountStep({
       </div>
 
       <label className="mt-5 block text-sm font-medium text-ink-700">Password</label>
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Enter password"
-        autoComplete="new-password"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
+      <div className="mt-1.5">
+        <PasswordField
+          value={password}
+          onChange={setPassword}
+          placeholder="Enter password"
+          autoComplete="new-password"
+        />
+      </div>
       {password && (
         <>
           <div className="mt-2 flex gap-1">
@@ -323,14 +324,14 @@ function AccountStep({
       )}
 
       <label className="mt-5 block text-sm font-medium text-ink-700">Confirm Password</label>
-      <input
-        type="password"
-        value={confirm}
-        onChange={(e) => setConfirm(e.target.value)}
-        placeholder="Re-enter password"
-        autoComplete="new-password"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
+      <div className="mt-1.5">
+        <PasswordField
+          value={confirm}
+          onChange={setConfirm}
+          placeholder="Re-enter password"
+          autoComplete="new-password"
+        />
+      </div>
       {confirm && confirm !== password && (
         <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
       )}
