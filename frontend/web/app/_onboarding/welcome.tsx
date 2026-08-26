@@ -83,7 +83,7 @@ export function Welcome({ role, firstName }: { role: string; firstName?: string 
           </span>
         </div>
 
-        <hr className="my-7 border-white/15" />
+        <hr className="my-9 border-white/15" />
 
         <p className="text-base leading-6 text-white/70">Account Status</p>
         {/*
@@ -111,7 +111,7 @@ export function Welcome({ role, firstName }: { role: string; firstName?: string 
 
       <dl className="mt-6 grid grid-cols-3 gap-6">
         {STATS.map((s) => (
-          <div key={s.label} className="rounded-2xl bg-surface-warm py-7">
+          <div key={s.label} className="flex h-28 flex-col items-center justify-center rounded-2xl bg-surface-warm">
             <dd className="text-xl font-bold leading-7 text-emerald-deep">{s.value}</dd>
             <dt className="mt-1 text-sm leading-5 text-ink-500">{s.label}</dt>
           </div>
