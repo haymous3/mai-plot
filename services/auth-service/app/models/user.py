@@ -24,7 +24,11 @@ class User(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(254), unique=True, default=None)
+    # NOT globally unique since SCRUM-185 (migration 0010): uniqueness is a
+    # PARTIAL index over live rows only (WHERE deleted_at IS NULL), so a
+    # soft-deleted account releases its address. `unique=True` here would
+    # misdescribe the schema and emit the wrong DDL for a fresh create_all.
+    email: Mapped[str | None] = mapped_column(String(254), default=None)
     verified_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unverified")
     seller_authority_type: Mapped[str | None] = mapped_column(String(30), default=None)
     poa_verified_status: Mapped[str] = mapped_column(
