@@ -9,6 +9,8 @@ service layer would prove something weaker.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -39,7 +41,7 @@ def _make_account(engine: Engine, email: str) -> str | None:
 
 
 @pytest.fixture
-def clean_phone(db_engine: Engine):
+def clean_phone(db_engine: Engine) -> Generator[None, None, None]:
     def _clear() -> None:
         with db_engine.begin() as conn:
             conn.execute(text("DELETE FROM user_pii WHERE phone = :p"), {"p": _PHONE})

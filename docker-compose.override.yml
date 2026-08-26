@@ -1,0 +1,43 @@
+# Local override — restores the shared infra env vars to the services that
+# declare their own `environment:` block on top of the *fastapi-defaults
+# anchor. A per-service `environment:` REPLACES the anchor's map (YAML merge
+# does not deep-merge), so auth/transaction/loan/notification/realtor were
+# left without DATABASE_URL / REDIS_URL / JWT_SECRET and fell back to the
+# localhost defaults in each service's config.py → DB connection refused.
+#
+# Override files DO deep-merge `environment`, so listing these keys here adds
+# them back without touching the base docker-compose.yml.
+
+name: maiplot
+
+x-shared-infra-env: &shared-infra-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://maiplot:change-me-local@postgres:5432/maiplot}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+  JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  ENV: ${ENV:-local}
+
+services:
+  auth-service:
+    environment:
+      # Shared infra (DATABASE_URL/REDIS_URL/JWT_SECRET/…) — see file header.
+      <<: *shared-infra-env
+      # Real Termii SMS for the OTP end-to-end test (../otp-e2e-test-plan.md).
+      # Defaults keep the in-memory fake so a normal local bring-up is UNCHANGED.
+      # Opt in to real SMS by setting TERMII_USE_FAKE=false + TERMII_API_KEY (and an
+      # approved TERMII_SENDER_ID) in maiplot/.env (git-ignored) or your shell.
+      # Never commit the real key.
+      TERMII_USE_FAKE: ${TERMII_USE_FAKE:-true}
+      TERMII_API_KEY: ${TERMII_API_KEY:-}
+      TERMII_SENDER_ID: ${TERMII_SENDER_ID:-Maiplot}
+      TERMII_BASE_URL: ${TERMII_BASE_URL:-https://api.ng.termii.com}
+      TERMII_TIMEOUT_SECONDS: ${TERMII_TIMEOUT_SECONDS:-5}
+  transaction-service:
+    environment: *shared-infra-env
+  loan-service:
+    environment: *shared-infra-env
+  notification-service:
+    environment: *shared-infra-env
+  realtor-service:
+    environment: *shared-infra-env
