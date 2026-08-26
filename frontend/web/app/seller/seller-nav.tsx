@@ -45,7 +45,7 @@ export function SellerNav() {
           <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-emerald-deep text-sm font-bold text-white">
             M
           </span>
-          <span className="font-display text-lg font-bold leading-7 text-emerald-deep">Maiplot</span>
+          <span className="font-display text-lg font-bold leading-7 text-emerald-deep">Maihomme</span>
         </div>
         <span className="text-xs leading-4 text-ink-500">Seller Dashboard</span>
       </div>

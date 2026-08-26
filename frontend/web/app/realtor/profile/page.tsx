@@ -6,7 +6,7 @@ import type { RealtorProfile } from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Profile · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Profile · Maihomme Realtor' };
 
 /** Realtor Profile (SCRUM-144). A read view of the realtor's own credentials +
  * coverage from the existing GET /realtors/me — ESVARBON licence, coverage

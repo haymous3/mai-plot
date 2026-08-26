@@ -9,7 +9,7 @@ import { ADMIN_LOGIN } from '@/lib/auth';
 import { backendGet } from '@/lib/server-api';
 
 export const metadata: Metadata = {
-  title: 'Notification settings · Maiplot',
+  title: 'Notification settings · Maihomme',
   robots: { index: false, follow: false },
 };
 

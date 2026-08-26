@@ -23,10 +23,17 @@ import { Shell } from './sections';
  *     "MaiHome is the consumer brand of Maiplot Technologies Ltd."
  * plus "© 2026 Maiplot Technologies Ltd." and hello@maihome.ng.
  *
- * So "Maiplot" appearing elsewhere in the product is NOT drift — it is the
- * legal entity, deliberately distinct from the consumer brand. Per SCRUM-174
- * the consumer brand here is rendered as "Maihomme"; the entity name is left
- * as "Maiplot Technologies Ltd" exactly as the design has it.
+ * ⚠️ THE DESIGN'S EMAIL DOMAIN DOES NOT EXIST. `maihome.ng` returns NXDOMAIN —
+ * the same never-registered placeholder `maiplot.ng` turned out to be
+ * (SCRUM-182). SCRUM-186 points this at `hello@maihomme.com`, the domain that
+ * actually resolves and is verified in Resend. Resend verification covers
+ * SENDING, not inbound, so whether a `hello@` mailbox receives anything is
+ * unconfirmed — flagged rather than assumed.
+ *
+ * So "Maiplot" surviving in the product is NOT drift — it is the legal entity,
+ * deliberately distinct from the consumer brand. The consumer brand renders as
+ * "Maihomme" (SCRUM-173, swept everywhere by SCRUM-186); the entity name is
+ * left as "Maiplot Technologies Ltd" exactly as the design has it.
  *
  * ⚠️ MOST FOOTER LINKS HAVE NO ROUTE. Rather than ship a footer full of 404s,
  * destinations that do not exist render as plain text. Only links with a real
@@ -156,11 +163,11 @@ export function Footer() {
                 +234 901 234 5678
               </a>
               <a
-                href="mailto:hello@maihome.ng"
+                href="mailto:hello@maihomme.com"
                 className="flex items-center gap-2.5 text-sm leading-5 text-white/60 transition hover:text-white"
               >
                 <MailIcon className="h-4 w-4 flex-none" />
-                hello@maihome.ng
+                hello@maihomme.com
               </a>
             </div>
           </div>

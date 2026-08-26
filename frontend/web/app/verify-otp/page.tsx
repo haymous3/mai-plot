@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { VerifyOtpClient } from './verify-otp-client';
 
 export const metadata: Metadata = {
-  title: 'Enter your code · Maiplot',
+  title: 'Enter your code · Maihomme',
 };
 
 /**
@@ -28,7 +28,7 @@ export default function VerifyOtpPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-sm bg-bone/10 font-display text-lg text-bone ring-1 ring-bone/20">
             M
           </span>
-          <span className="font-display text-xl tracking-tight">Maiplot</span>
+          <span className="font-display text-xl tracking-tight">Maihomme</span>
         </div>
 
         <div className="relative z-10 max-w-md">

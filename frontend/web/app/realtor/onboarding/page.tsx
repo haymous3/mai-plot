@@ -7,7 +7,7 @@ import type { RealtorProfile } from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Complete your profile · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Complete your profile · Maihomme Realtor' };
 
 /**
  * Realtor onboarding / credentials submission (SCRUM-156).

@@ -35,10 +35,11 @@ export function BuyerNav() {
             frames, "Maiplot" in 2. Product owner chose "Maihomme" (SCRUM-173),
             confirmed verbatim.
 
-            BUYER ONLY. Seller, realtor and admin sidebars and every page title
-            still read "Maiplot", as do CLAUDE.md, the repo and the maihomme.com
-            domain. That inconsistency is deliberate and accepted; a full
-            rebrand would be its own ticket outside this epic. */}
+            SCRUM-186 swept that name across every consumer-facing surface, so
+            this is no longer the odd one out. Only "Maiplot Technologies Ltd"
+            (the legal entity, in the landing footer) and internal identifiers
+            — the Postgres user/database, container and package names, the
+            `mai-plot` repo — deliberately keep the old name. */}
         <span className="font-display text-lg tracking-tight text-bone">Maihomme</span>
       </Link>
       <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">

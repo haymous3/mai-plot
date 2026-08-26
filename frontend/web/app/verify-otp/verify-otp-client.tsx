@@ -250,7 +250,7 @@ export function VerifyOtpClient() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
+        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
       </div>
 
       <Icon tone={expired || locked ? 'warn' : 'neutral'}>
@@ -476,7 +476,7 @@ function Success({ redirect }: { redirect: string | null }) {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
+        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
       </div>
       <Icon tone="success">
         <svg
@@ -514,7 +514,7 @@ function Missing() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
+        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
       </div>
       <Icon tone="error">
         <WarnGlyph />

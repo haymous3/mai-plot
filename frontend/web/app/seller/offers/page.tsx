@@ -7,7 +7,7 @@ import { transactionServiceUrl } from '@/lib/api';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Offers · Maiplot Seller' };
+export const metadata: Metadata = { title: 'Offers · Maihomme Seller' };
 
 const TIPS = [
   'Respond to offers within 24–48 hours for best results.',

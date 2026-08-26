@@ -80,7 +80,7 @@ export function VerifyEmailClient() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maiplot</span>
+        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
       </div>
 
       {phase === 'verifying' && <Verifying />}

@@ -11,7 +11,7 @@ import { reportSubmittable } from '@/lib/inspection-report';
 import { inspectionLocation } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Inspection Report · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Inspection Report · Maihomme Realtor' };
 
 /** Inspection report submission (SCRUM-140, PR3). Resolves the inspection from
  * the realtor's own assignments (there is no single-inspection GET), then either

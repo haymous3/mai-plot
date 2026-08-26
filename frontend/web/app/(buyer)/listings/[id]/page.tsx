@@ -17,7 +17,7 @@ import { buyerBackendGet } from '@/lib/buyer-server-api';
 import { isDealActive } from '@/lib/deal-stage';
 import { formatNaira } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Property · Maiplot' };
+export const metadata: Metadata = { title: 'Property · Maihomme' };
 
 const DOC_LABELS: Record<string, string> = {
   c_of_o: 'Certificate of Occupancy (C of O)',

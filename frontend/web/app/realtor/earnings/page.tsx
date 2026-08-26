@@ -6,7 +6,7 @@ import { realtorServiceUrl } from '@/lib/api';
 import { formatDate, formatNaira } from '@/lib/format';
 import { sessionBackendGet } from '@/lib/session-api';
 
-export const metadata: Metadata = { title: 'Earnings · Maiplot Realtor' };
+export const metadata: Metadata = { title: 'Earnings · Maihomme Realtor' };
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
   pending: { label: 'Pending', pill: 'bg-amber-100 text-amber-700' },

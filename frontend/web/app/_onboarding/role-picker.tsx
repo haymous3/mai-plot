@@ -19,12 +19,12 @@ import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
  * 80×80 `surface-warm` chip inverting to `emerald-deep` when selected; CTA
  * 768×68, disabled until a role is chosen.
  *
- * NOTE ON THE BRAND STRING: the export says "Maiplot", and every other auth
- * screen (login, verify-email, register) says Maiplot too, so this is
- * internally consistent. But SCRUM-182 has just rebranded the verification
- * EMAIL and SMS to "Maihomme" from maihomme.com — so a user now signs up under
- * one name and is emailed under another. That is a live inconsistency this
- * ticket did not introduce and is not fixing; flagged for a rebrand ticket.
+ * ⚠️ BRAND STRING DIVERGES FROM THE EXPORT. The export heading reads "Welcome
+ * to Maiplot", and this renders "Welcome to Maihomme". SCRUM-182 had already
+ * rebranded the verification email and SMS to Maihomme from maihomme.com, so
+ * the export's text left a user signing up under one name and being emailed
+ * under another. SCRUM-186 resolved that in favour of Maihomme everywhere a
+ * customer can see it; the export is simply older than that decision.
  */
 
 export const ROLES = [
@@ -59,7 +59,7 @@ export function RolePicker({
 }) {
   return (
     <div className="w-full">
-      <OnboardingHeading title="Welcome to Maiplot" subtitle="Tell us what brings you here today" />
+      <OnboardingHeading title="Welcome to Maihomme" subtitle="Tell us what brings you here today" />
 
       <div className="mt-14 flex flex-col gap-6">
         {ROLES.map((r) => (

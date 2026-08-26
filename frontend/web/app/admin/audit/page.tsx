@@ -11,7 +11,7 @@ import { formatDateTime } from '@/lib/format';
 import { backendGet } from '@/lib/server-api';
 
 export const metadata: Metadata = {
-  title: 'Audit log · Maiplot',
+  title: 'Audit log · Maihomme',
   robots: { index: false, follow: false },
 };
 

@@ -8,7 +8,7 @@ import { transactionServiceUrl } from '@/lib/api';
 import { BUYER_LOGIN } from '@/lib/buyer-auth';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 
-export const metadata: Metadata = { title: 'My Offers · Maiplot' };
+export const metadata: Metadata = { title: 'My Offers · Maihomme' };
 
 export default async function BuyerOffersPage() {
   const result = await buyerBackendGet<BuyerOffersResponse>(

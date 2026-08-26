@@ -9,7 +9,7 @@ import { ADMIN_LOGIN } from '@/lib/auth';
 import { backendGet } from '@/lib/server-api';
 
 export const metadata: Metadata = {
-  title: 'Active loans · Maiplot',
+  title: 'Active loans · Maihomme',
   robots: { index: false, follow: false },
 };
 

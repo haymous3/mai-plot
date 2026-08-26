@@ -10,7 +10,7 @@ import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 import { formatNaira } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'My Listings · Maiplot Seller' };
+export const metadata: Metadata = { title: 'My Listings · Maihomme Seller' };
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active: { label: 'live', cls: 'bg-emerald-deep/10 text-emerald-deep' },

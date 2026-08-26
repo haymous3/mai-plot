@@ -82,7 +82,7 @@ class OtpResendService:
             await self._sms.send_sms(
                 phone=phone,
                 message=(
-                    f"Your Maiplot verification code is {code}. "
+                    f"Your Maihomme verification code is {code}. "
                     f"It expires in {self._otp_expire_minutes} minutes."
                 ),
             )
