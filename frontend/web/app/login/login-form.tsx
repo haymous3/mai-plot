@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { PasswordField } from '../_components/password-field';
+
 const MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: 'Email or password is incorrect.',
   NOT_ALLOWED: 'Use the admin sign-in for admin accounts.',
@@ -75,15 +77,13 @@ export function LoginForm() {
         <label htmlFor="password" className="block text-sm font-medium text-ink-700">
           Password
         </label>
-        <input
+        <PasswordField
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+          onChange={setPassword}
           placeholder="••••••••"
         />
       </div>
