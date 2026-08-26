@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { authServiceUrl } from '@/lib/api';
+import { isOnboardingRole } from '@/lib/onboarding-steps';
 import { roleHome, SESSION_ACCESS_COOKIE, SESSION_REFRESH_COOKIE } from '@/lib/session';
 
 /**
@@ -55,7 +56,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const role = body.user?.role ?? 'buyer';
-  const response = NextResponse.json({ ok: true, role, redirect: roleHome(role) });
+  // SCRUM-185: verification now hands off to onboarding rather than straight to
+  // the dashboard. Roles that are provisioned rather than signed up (admin,
+  // legal_team, bank_partner) have no onboarding and still go to their own home.
+  const destination = isOnboardingRole(role) ? '/onboarding' : roleHome(role);
+  const response = NextResponse.json({ ok: true, role, redirect: destination });
   const secure = process.env.NODE_ENV === 'production';
   response.cookies.set(SESSION_ACCESS_COOKIE, body.access_token, {
     httpOnly: true,
