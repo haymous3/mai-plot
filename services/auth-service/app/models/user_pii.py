@@ -33,6 +33,11 @@ class UserPii(Base):
     verification_channel: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="email"
     )
+    # Mirrors users.deleted_at, kept in sync by a DB trigger (migration 0009).
+    # It exists so the phone-uniqueness index can exclude deleted accounts — a
+    # partial index may only reference its own table's columns, so it cannot
+    # read users.deleted_at directly.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # full_name is NOT NULL in the DDL but the phone+OTP register flow does not
     # collect a name. Default to empty string; the profile-update flow (M1+)
     # will populate it. Avoids a schema migration on this PII table.
