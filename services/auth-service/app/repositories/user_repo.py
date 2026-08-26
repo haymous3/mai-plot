@@ -136,6 +136,13 @@ class UserRepository:
             .where(
                 UserPii.phone == phone,
                 UserPii.verification_channel == "phone",
+                # Both deleted_at checks, matching the partial unique index in
+                # migration 0009 exactly. users.deleted_at is the source of
+                # truth; user_pii.deleted_at mirrors it via trigger and is what
+                # the index can actually see. Filtering on both keeps this
+                # query and the index describing the same set even if the two
+                # ever drift.
+                UserPii.deleted_at.is_(None),
                 User.deleted_at.is_(None),
             )
         )
