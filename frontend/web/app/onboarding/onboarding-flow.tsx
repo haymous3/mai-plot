@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { BuyerProfileStep, PersonalDetailsStep } from '../_onboarding/buyer-steps';
+import { RealtorProfileStep, SellerVerificationStep } from '../_onboarding/seller-realtor-steps';
 import { OnboardingShell } from '../_onboarding/ui';
 import { Welcome } from '../_onboarding/welcome';
 import {
@@ -25,30 +26,12 @@ import {
  * The first name is threaded through from the details step purely so the
  * welcome screen can greet by name — there is no GET /auth/me to read it back.
  */
-/**
- * Steps this PR can actually render. The step machine describes the whole
- * intended design, including the seller and realtor collection steps that land
- * in PR 3 — so the renderer skips anything it cannot draw yet rather than
- * showing a blank screen. Until then a seller or realtor goes straight to the
- * welcome screen, which is a real designed screen and not a dead end; their
- * authority is still collected at registration in the meantime.
- *
- * PR 3 deletes this set.
- */
-const RENDERABLE: readonly OnboardingStep[] = ['personal-details', 'buyer-profile', 'welcome'];
-
 export function OnboardingFlow({ role }: { role: OnboardingRole }) {
-  const [step, setStep] = useState<OnboardingStep>(() => {
-    let s = firstStep(role);
-    while (s && !RENDERABLE.includes(s)) s = nextStep(role, s);
-    return s ?? 'welcome';
-  });
+  const [step, setStep] = useState<OnboardingStep>(() => firstStep(role) ?? 'welcome');
   const [firstName, setFirstName] = useState<string | null>(null);
 
   function advance(from: OnboardingStep) {
-    let s = nextStep(role, from);
-    while (s && !RENDERABLE.includes(s)) s = nextStep(role, s);
-    setStep(s ?? 'welcome');
+    setStep(nextStep(role, from) ?? 'welcome');
   }
 
   return (
@@ -63,6 +46,14 @@ export function OnboardingFlow({ role }: { role: OnboardingRole }) {
       )}
 
       {step === 'buyer-profile' && <BuyerProfileStep onDone={() => advance('buyer-profile')} />}
+
+      {step === 'seller-verification' && (
+        <SellerVerificationStep onDone={() => advance('seller-verification')} />
+      )}
+
+      {step === 'realtor-profile' && (
+        <RealtorProfileStep onDone={() => advance('realtor-profile')} />
+      )}
 
       {step === 'welcome' && <Welcome role={role} firstName={firstName} />}
     </OnboardingShell>

@@ -40,9 +40,8 @@ const REGISTER_ERRORS: Record<string, string> = {
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
 };
 
-type Step = 'intro' | 'role' | 'account' | 'seller-authority';
+type Step = 'intro' | 'role' | 'account';
 type VerificationChannel = 'email' | 'phone';
-type SellerAuthority = 'owner' | 'power_of_attorney';
 
 export function RegisterFlow() {
   const router = useRouter();
@@ -60,7 +59,7 @@ export function RegisterFlow() {
   // funnel, since the user continues by clicking the link, not by typing here.
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
 
-  async function submitRegister(sellerAuthority?: SellerAuthority) {
+  async function submitRegister() {
     setError(null);
     setBusy(true);
     try {
@@ -74,9 +73,6 @@ export function RegisterFlow() {
           email: email.trim(),
           password,
           verification_channel: channel,
-          ...(role === 'seller' && sellerAuthority
-            ? { seller_authority_type: sellerAuthority }
-            : {}),
         }),
       });
       if (resp.ok) {
@@ -158,28 +154,13 @@ export function RegisterFlow() {
             }}
             onContinue={() => {
               setError(null);
-              // Sellers pick a selling authority before we create the account;
-              // everyone else registers straight away.
-              if (role === 'seller') {
-                setStep('seller-authority');
-              } else {
-                void submitRegister();
-              }
+              // Every role registers straight away now. Sellers declare their
+              // selling authority on the designed post-verification "Seller
+              // Verification" screen instead, which also collects the NIN and
+              // the PoA document that authority implies. RegisterRequest
+              // .seller_authority_type is Optional, so this needs no API change.
+              void submitRegister();
             }}
-          />
-          </FormColumn>
-        )}
-
-        {step === 'seller-authority' && (
-          <FormColumn>
-          <SellerAuthorityStep
-            busy={busy}
-            error={error}
-            onBack={() => {
-              setError(null);
-              setStep('account');
-            }}
-            onContinue={(authority) => void submitRegister(authority)}
           />
           </FormColumn>
         )}
@@ -187,7 +168,7 @@ export function RegisterFlow() {
         {/* The designed screens (carousel, role picker) show no sign-in
             footer, so it appears only on the undesigned account steps where
             it is genuinely useful. */}
-        {(step === 'account' || step === 'seller-authority') && (
+        {step === 'account' && (
           <p className="mt-8 text-center text-sm text-ink-500">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-emerald-deep hover:underline">
@@ -570,69 +551,5 @@ function Requirement({ ok, children }: { ok: boolean; children: React.ReactNode 
       <span aria-hidden>{ok ? '✓' : '○'}</span>
       {children}
     </p>
-  );
-}
-
-function SellerAuthorityStep({
-  busy,
-  error,
-  onBack,
-  onContinue,
-}: {
-  busy: boolean;
-  error: string | null;
-  onBack: () => void;
-  onContinue: (authority: SellerAuthority) => void;
-}) {
-  const [authority, setAuthority] = useState<SellerAuthority | ''>('');
-  const options: { value: SellerAuthority; title: string; desc: string }[] = [
-    { value: 'owner', title: 'Property Owner', desc: 'I own the property' },
-    { value: 'power_of_attorney', title: 'Power of Attorney', desc: 'Authorized to sell on the owner’s behalf' },
-  ];
-
-  return (
-    <div>
-      <button onClick={onBack} className="mb-6 text-sm text-ink-500 hover:text-ink-900">
-        ← Back
-      </button>
-      <h1 className="text-center font-display text-3xl text-ink-900">How do you sell?</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">
-        This sets up your listing authority. You&rsquo;ll verify the details (NIN or Power of
-        Attorney) when you create your first listing.
-      </p>
-
-      <div className="mt-8 grid grid-cols-2 gap-3">
-        {options.map((o) => {
-          const active = authority === o.value;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => setAuthority(o.value)}
-              className={`rounded-xl border px-4 py-4 text-left transition ${
-                active ? 'border-emerald-deep bg-emerald-deep/5' : 'border-ink-300/50 hover:border-ink-500'
-              }`}
-            >
-              <span className="block text-sm font-medium text-ink-900">{o.title}</span>
-              <span className="mt-0.5 block text-xs text-ink-500">{o.desc}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={busy || authority === ''}
-        onClick={() => authority && onContinue(authority)}
-        className="mt-6 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {busy ? 'Creating account…' : 'Create account'}
-      </button>
-    </div>
   );
 }
