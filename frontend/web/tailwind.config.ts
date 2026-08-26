@@ -99,6 +99,17 @@ const config: Config = {
            */
           paper: '#f7f7f5',
           linen: '#f9f7f3',
+
+          /**
+           * Gold-tinted icon chip on the onboarding financing slide (SCRUM-184,
+           * measured 2.29% of `onboarding-3.png`). The other two slides use
+           * `surface-tint`; this one is warmer to pair with the gold glyph.
+           *
+           * Distinct from `bone` (#f6f4ee) and `surface-warm` (#f5f1e8) — both
+           * are measurably darker, and swapping either in reads as a dirty
+           * cream against the gold rather than a tint of it.
+           */
+          gold: '#faf8f0',
         },
 
         line: {
