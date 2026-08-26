@@ -142,3 +142,57 @@ export function FieldError({ children }: { children: ReactNode }) {
     </p>
   );
 }
+
+/**
+ * Dashed upload target — 180px tall on both the seller PoA and realtor
+ * credentials exports, at the same 16px radius as every other control.
+ *
+ * A real <input type="file"> inside a <label>, not a div with a click handler,
+ * so it stays keyboard reachable and works with the OS file picker unaided.
+ * Once a file is chosen the zone shows its name, which is the only feedback
+ * available — there is no upload preview endpoint.
+ */
+export function UploadDropzone({
+  id,
+  file,
+  onFile,
+  title,
+  subtitle,
+  accept,
+  disabled,
+}: {
+  id: string;
+  file: File | null;
+  onFile: (f: File | null) => void;
+  title: string;
+  subtitle: string;
+  accept?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={`mt-3 flex h-[180px] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-6 text-center transition focus-within:border-emerald-deep focus-within:ring-2 focus-within:ring-emerald-deep/20 ${
+        file ? 'border-emerald-deep bg-emerald-deep/[0.04]' : 'border-line-strong hover:border-ink-400'
+      } ${disabled ? 'pointer-events-none opacity-60' : ''}`}
+    >
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        disabled={disabled}
+        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        className="sr-only"
+      />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 text-ink-500" aria-hidden>
+        <path d="M12 16V4" />
+        <path d="m7 9 5-5 5 5" />
+        <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+      </svg>
+      <span className="text-base font-bold leading-6 text-ink-buyer">{file ? file.name : title}</span>
+      <span className="text-[15px] font-semibold leading-5 text-ink-500">
+        {file ? 'Choose a different file' : subtitle}
+      </span>
+    </label>
+  );
+}
