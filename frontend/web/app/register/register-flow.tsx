@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { IntroCarousel } from '../_onboarding/intro-carousel';
+import { RolePicker } from '../_onboarding/role-picker';
+import { OnboardingShell } from '../_onboarding/ui';
 import {
   OTP_TTL_SECONDS,
   VERIFY_EMAIL_KEY,
@@ -26,27 +29,6 @@ import {
 // (SCRUM-45), and it backs the "Email me a link instead" fallback on the verify
 // screen — which matters because SMS to Nigerian numbers is not reliable from
 // the current sender (see services/auth-service/app/adapters/twilio.py).
-
-const SLIDES = [
-  {
-    title: 'Access Distress & Premium Property Deals',
-    body: 'From value deals to prime locations, buyers explore verified options, sellers connect with serious buyers.',
-  },
-  {
-    title: 'Verified Documents & Listings',
-    body: 'Every property is thoroughly vetted — transparency for buyers, credibility for sellers.',
-  },
-  {
-    title: 'Get Financing in Days',
-    body: 'Buyers access loans up to 50% of property value, sellers get paid faster with approved buyers.',
-  },
-];
-
-const ROLES = [
-  { value: 'buyer', label: 'Buyer / Investor', desc: 'Find verified properties and get financing to close deals fast' },
-  { value: 'seller', label: 'Property Seller', desc: 'List your property and connect with serious, pre-qualified buyers' },
-  { value: 'realtor', label: 'Realtor / Agent', desc: 'Grow your business with verified listings and commission tracking' },
-];
 
 const REGISTER_ERRORS: Record<string, string> = {
   EMAIL_ALREADY_REGISTERED: 'An account with this email already exists. Try signing in.',
@@ -137,16 +119,19 @@ export function RegisterFlow() {
   }
 
   return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-        {sentToEmail !== null ? (
+    // 768px column, measured on every screen in design/onboarding/ and the
+    // three post-verification flows. Was max-w-md (448px).
+    <OnboardingShell>
+      {sentToEmail !== null ? (
+        <FormColumn>
           <CheckEmailStep email={sentToEmail} />
-        ) : (
+        </FormColumn>
+      ) : (
           <>
-        {step === 'intro' && <Intro onDone={() => setStep('role')} />}
+        {step === 'intro' && <IntroCarousel onDone={() => setStep('role')} />}
 
         {step === 'role' && (
-          <RoleSelect
+          <RolePicker
             role={role}
             setRole={setRole}
             onContinue={() => {
@@ -157,6 +142,7 @@ export function RegisterFlow() {
         )}
 
         {step === 'account' && (
+          <FormColumn>
           <AccountStep
             fullName={fullName}
             setFullName={setFullName}
@@ -185,9 +171,11 @@ export function RegisterFlow() {
               }
             }}
           />
+          </FormColumn>
         )}
 
         {step === 'seller-authority' && (
+          <FormColumn>
           <SellerAuthorityStep
             busy={busy}
             error={error}
@@ -197,104 +185,35 @@ export function RegisterFlow() {
             }}
             onContinue={(authority) => void submitRegister(authority)}
           />
+          </FormColumn>
         )}
 
-        <p className="mt-8 text-center text-sm text-ink-500">
-          Already have an account?{' '}
-          <Link href="/login" className="font-medium text-emerald-deep hover:underline">
-            Sign in
-          </Link>
-        </p>
+        {/* The designed screens (carousel, role picker) show no sign-in
+            footer, so it appears only on the undesigned account steps where
+            it is genuinely useful. */}
+        {(step === 'account' || step === 'seller-authority') && (
+          <p className="mt-8 text-center text-sm text-ink-500">
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-emerald-deep hover:underline">
+              Sign in
+            </Link>
+          </p>
+        )}
           </>
         )}
-      </div>
-    </main>
+    </OnboardingShell>
   );
 }
 
-function Intro({ onDone }: { onDone: () => void }) {
-  const [i, setI] = useState(0);
-  const last = i === SLIDES.length - 1;
-  return (
-    <div className="text-center">
-      <div className="mb-8 flex items-center justify-between">
-        <span className="font-display text-lg tracking-tight text-emerald-deep">Maiplot</span>
-        <button onClick={onDone} className="text-sm text-ink-500 hover:text-ink-900">
-          Skip
-        </button>
-      </div>
-      <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-bone text-emerald-deep">
-        <span className="font-display text-2xl">{i + 1}</span>
-      </div>
-      <h1 className="font-display text-2xl text-ink-900">{SLIDES[i].title}</h1>
-      <p className="mx-auto mt-3 max-w-sm text-sm text-ink-500">{SLIDES[i].body}</p>
-      <div className="mt-8 flex items-center justify-center gap-2">
-        {SLIDES.map((_, n) => (
-          <span
-            key={n}
-            className={`h-1.5 rounded-full transition-all ${n === i ? 'w-6 bg-emerald-deep' : 'w-1.5 bg-ink-300/50'}`}
-          />
-        ))}
-      </div>
-      <button
-        onClick={() => (last ? onDone() : setI(i + 1))}
-        className="mt-8 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent"
-      >
-        {last ? 'Get Started' : 'Next'}
-      </button>
-    </div>
-  );
-}
-
-function RoleSelect({
-  role,
-  setRole,
-  onContinue,
-}: {
-  role: string;
-  setRole: (r: string) => void;
-  onContinue: () => void;
-}) {
-  return (
-    <div>
-      <h1 className="text-center font-display text-3xl text-ink-900">Welcome to Maiplot</h1>
-      <p className="mt-2 text-center text-sm text-ink-500">Tell us what brings you here today</p>
-      <ul className="mt-8 space-y-3">
-        {ROLES.map((r) => {
-          const active = r.value === role;
-          return (
-            <li key={r.value}>
-              <button
-                type="button"
-                onClick={() => setRole(r.value)}
-                className={`flex w-full items-center justify-between rounded-xl border px-5 py-4 text-left transition ${
-                  active ? 'border-emerald-deep bg-emerald-deep/5' : 'border-ink-300/40 hover:border-ink-500'
-                }`}
-              >
-                <span>
-                  <span className="block font-medium text-ink-900">{r.label}</span>
-                  <span className="mt-1 block text-xs text-ink-500">{r.desc}</span>
-                </span>
-                {active && (
-                  <span className="ml-3 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-deep text-xs text-white">
-                    ✓
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <button
-        type="button"
-        disabled={!role}
-        onClick={onContinue}
-        className="mt-8 w-full rounded-lg bg-emerald-deep px-4 py-3 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Continue
-      </button>
-    </div>
-  );
+/**
+ * 672px inner column for the form steps — the field width measured on the
+ * designed form screens (buyers-flow-1 etc.), inset 48px each side of the
+ * 768px shell. The account and check-email steps have no export of their own;
+ * holding them to the same measured field width keeps the funnel coherent
+ * rather than snapping between two widths mid-flow.
+ */
+function FormColumn({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto w-full max-w-[672px]">{children}</div>;
 }
 
 function passwordChecks(pw: string) {
