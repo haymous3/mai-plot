@@ -27,6 +27,27 @@ class UserWithPhone:
 
 
 @dataclass(frozen=True)
+class UserAccount:
+    """Everything GET /auth/me needs about the caller, in one read.
+
+    ⚠️ BVN and NIN are exposed as BOOLEANS, never values. Both are stored only
+    as bcrypt hashes (CLAUDE.md §4) and the hash must never leave the service —
+    it is offline-crackable against an 11-digit space.
+    """
+
+    id: UUID
+    role: str
+    verified_status: str
+    email: str | None
+    phone: str
+    full_name: str
+    seller_authority_type: str | None
+    poa_verified_status: str
+    bvn_verified: bool
+    nin_verified: bool
+
+
+@dataclass(frozen=True)
 class UserCore:
     """Minimal user view for id-based lookups (refresh, auth dependency)."""
 
@@ -106,6 +127,48 @@ class UserRepository:
         if row is None:
             return None
         return UserCore(id=row.id, role=row.role, verified_status=row.verified_status)
+
+    async def get_account(self, user_id: UUID) -> UserAccount | None:
+        """The caller's own account for GET /auth/me. None if unknown, soft
+        deleted or deactivated, so a token for a dead account reads as absent
+        rather than half-populated."""
+        stmt = (
+            select(
+                User.id,
+                User.role,
+                User.verified_status,
+                User.email,
+                User.seller_authority_type,
+                User.poa_verified_status,
+                UserPii.phone,
+                UserPii.full_name,
+                # Presence only. The hashes themselves never leave the service.
+                UserPii.bvn_hash.is_not(None).label("bvn_verified"),
+                UserPii.nin_hash.is_not(None).label("nin_verified"),
+            )
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+                UserPii.deleted_at.is_(None),
+            )
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return UserAccount(
+            id=row.id,
+            role=row.role,
+            verified_status=row.verified_status,
+            email=row.email,
+            phone=row.phone,
+            full_name=row.full_name,
+            seller_authority_type=row.seller_authority_type,
+            poa_verified_status=row.poa_verified_status,
+            bvn_verified=row.bvn_verified,
+            nin_verified=row.nin_verified,
+        )
 
     async def get_active_by_email(self, email: str) -> UserCore | None:
         """Fetch a live user by email for password login. Returns None for

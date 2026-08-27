@@ -13,8 +13,10 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_account_service,
     get_buyer_profile_service,
     get_bvn_verification_service,
+    get_change_password_service,
     get_current_user,
     get_email_verification_service,
     get_login_service,
@@ -32,10 +34,13 @@ from app.dependencies import (
     get_token_refresh_service,
 )
 from app.schemas.auth import (
+    AccountResponse,
     BuyerProfileRequest,
     BuyerProfileResponse,
     BvnVerifyRequest,
     BvnVerifyResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     EmailResendRequest,
     EmailResendResponse,
     EmailVerifyRequest,
@@ -65,12 +70,19 @@ from app.schemas.auth import (
     UserPublic,
 )
 from app.security import CurrentUser
+from app.services.account import AccountNotFound, AccountService
 from app.services.buyer_profile import BuyerProfileService, NotBuyer
 from app.services.bvn import InvalidBvnError
 from app.services.bvn_verification import (
     BvnAlreadyVerified,
     BvnVerificationService,
     BvnVerificationUnavailable,
+)
+from app.services.change_password import (
+    ChangePasswordService,
+    CurrentPasswordWrong,
+    NoPasswordSet,
+    SamePassword,
 )
 from app.services.email_verification import (
     EmailTokenExpired,
@@ -372,6 +384,98 @@ async def set_password(
             "Password must be at least 8 characters and include an uppercase letter and a number.",
         )
     return SetPasswordResponse(message="Password set")
+
+
+@router.get("/me", response_model=AccountResponse)
+async def get_me(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[AccountService, Depends(get_account_service)],
+) -> AccountResponse | JSONResponse:
+    """The caller's own account, for pre-filling Settings (SCRUM-188).
+
+    404 rather than 200-with-nulls when the account is gone (soft-deleted or
+    deactivated): a token can outlive the account it was issued for, and a
+    half-populated body would read as "you have no name" rather than "this
+    account no longer exists".
+    """
+    try:
+        account = await service.get(current_user.user_id)
+    except AccountNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
+    # role comes from the DB as a free str; AccountResponse narrows it to the
+    # AccountRole Literal. model_validate so Pydantic checks at runtime — an
+    # unexpected role surfaces as a 500 rather than silently widening the
+    # contract. Same idiom as UserPublic on the verify routes.
+    return AccountResponse.model_validate(
+        {
+            "id": account.id,
+            "role": account.role,
+            "verified_status": account.verified_status,
+            "email": account.email,
+            "phone": account.phone,
+            "full_name": account.full_name,
+            "seller_authority_type": account.seller_authority_type,
+            "poa_verified_status": account.poa_verified_status,
+            "bvn_verified": account.bvn_verified,
+            "nin_verified": account.nin_verified,
+            "employment_status": account.employment_status,
+            "preferred_location": account.preferred_location,
+            "budget_kobo": account.budget_kobo,
+        }
+    )
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ChangePasswordService, Depends(get_change_password_service)],
+) -> ChangePasswordResponse | JSONResponse:
+    """Change the password, proving knowledge of the current one (SCRUM-188).
+
+    Distinct from /auth/set-password, which takes no current password: that one
+    is the post-verification path where the freshly issued token IS the proof.
+    A Settings form must not accept a session alone as authority to rotate the
+    password.
+
+    Every refresh token is revoked on success, so the user is signed out
+    everywhere and must sign in again with the new password.
+    """
+    try:
+        await service.change(
+            user_id=current_user.user_id,
+            current_password=body.current_password,
+            new_password=body.new_password,
+        )
+    except NoPasswordSet:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "NO_PASSWORD_SET",
+            "This account has no password yet. Set one instead of changing it.",
+        )
+    except CurrentPasswordWrong:
+        # Deliberately the same shape as a login failure and never says which
+        # of the two passwords was at fault.
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "CURRENT_PASSWORD_INCORRECT",
+            "Your current password is incorrect.",
+        )
+    except SamePassword:
+        return _error(
+            422,
+            "PASSWORD_UNCHANGED",
+            "Your new password must be different from your current one.",
+        )
+    except WeakPassword:
+        return _error(
+            422,
+            "PASSWORD_TOO_WEAK",
+            "Password must be at least 8 characters and include an uppercase letter and a number.",
+        )
+    return ChangePasswordResponse(
+        message="Password changed. Please sign in again.", sessions_revoked=True
+    )
 
 
 @router.post("/profile", response_model=ProfileUpdateResponse)

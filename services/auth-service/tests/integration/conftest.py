@@ -12,8 +12,10 @@ InMemoryTwilioClient that the test can inspect.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+import sys
 from collections.abc import AsyncIterator, Generator
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -79,6 +81,13 @@ def _reset_adapter_singletons() -> None:
             setattr(dependencies, attr, None)
 
 
+# psycopg's async mode refuses to run on Windows' default ProactorEventLoop.
+# Selecting the psycopg escape hatch therefore also has to select a compatible
+# loop policy, at import time — before pytest-asyncio creates any loop.
+if os.environ.get("TEST_DB_DRIVER") == "psycopg" and sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
 @pytest.fixture(autouse=True)
 def _force_async_database_url() -> Generator[None, None, None]:
     """Pin the app's async engine to the same DB the test session uses, and
@@ -93,7 +102,14 @@ def _force_async_database_url() -> Generator[None, None, None]:
     user = os.environ.get("POSTGRES_USER", "maiplot")
     password = os.environ.get("POSTGRES_PASSWORD", "change-me-local")
     db = os.environ.get("POSTGRES_DB", "maiplot")
-    async_url = f"postgresql+asyncpg://{user}:{password}@localhost:{port}/{db}"
+    # asyncpg on Windows intermittently drops the connection mid-suite with
+    # "WinError 64: The specified network name is no longer available", failing
+    # every DB-touching test for reasons unrelated to the code under test.
+    # psycopg3 does not, so a developer on Windows can run the suite with
+    # TEST_DB_DRIVER=psycopg. CI keeps the default and exercises asyncpg, which
+    # is what production uses — this is a local escape hatch, not a swap.
+    driver = os.environ.get("TEST_DB_DRIVER", "asyncpg")
+    async_url = f"postgresql+{driver}://{user}:{password}@localhost:{port}/{db}"
 
     originals = {key: os.environ.get(key) for key in _FORCED_FAKE_SETTINGS}
     original = os.environ.get("DATABASE_URL")

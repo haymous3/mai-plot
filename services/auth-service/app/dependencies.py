@@ -32,8 +32,10 @@ from app.repositories.otp_repo import OtpRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
+from app.services.account import AccountService
 from app.services.buyer_profile import BuyerProfileService
 from app.services.bvn_verification import BvnVerificationService
+from app.services.change_password import ChangePasswordService
 from app.services.email_verification import EmailVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
@@ -283,6 +285,20 @@ def get_set_password_service(
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
 ) -> SetPasswordService:
     return SetPasswordService(credentials=credentials)
+
+
+def get_account_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    buyer_profiles: Annotated[BuyerProfileRepository, Depends(_buyer_profile_repo)],
+) -> AccountService:
+    return AccountService(users=users, buyer_profiles=buyer_profiles)
+
+
+def get_change_password_service(
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+) -> ChangePasswordService:
+    return ChangePasswordService(credentials=credentials, refresh_tokens=refresh_tokens)
 
 
 def get_profile_service(
