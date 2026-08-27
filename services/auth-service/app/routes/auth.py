@@ -110,7 +110,6 @@ from app.services.logout import LogoutService
 from app.services.nin import InvalidNinError
 from app.services.nin_verification import (
     NinAlreadyVerified,
-    NinNotEligible,
     NinVerificationService,
     NinVerificationUnavailable,
 )
@@ -671,13 +670,6 @@ async def verify_nin(
 ) -> NinVerifyResponse | JSONResponse:
     try:
         result = await service.verify(user_id=current_user.user_id, nin=body.nin)
-    except NinNotEligible:
-        # Only sellers with authority_type=owner may verify a NIN.
-        return _error(
-            status.HTTP_403_FORBIDDEN,
-            "NIN_NOT_ELIGIBLE",
-            "NIN verification is only available to property owners (seller, owner authority).",
-        )
     except InvalidNinError:
         # Never echo the NIN value in the error. Literal 422 sidesteps the
         # status.HTTP_422_* deprecation rename (see main.py).

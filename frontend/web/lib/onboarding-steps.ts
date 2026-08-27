@@ -16,7 +16,7 @@ export type OnboardingRole = 'buyer' | 'seller' | 'realtor';
 export type OnboardingStep =
   /** Buyer only: full name. Registration no longer collects it (SCRUM-185). */
   | 'personal-details'
-  /** Buyer only: BVN + buying capacity. All optional — the design has "Skip for now". */
+  /** Buyer only: NIN + buying capacity. All optional — the design has "Skip for now". */
   | 'buyer-profile'
   /** Seller only: NIN, selling authority, and a PoA document when not the owner. */
   | 'seller-verification'

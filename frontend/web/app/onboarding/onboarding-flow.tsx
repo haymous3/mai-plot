@@ -20,7 +20,7 @@ import {
  * endpoint as it completes, so there is no back navigation to offer: going back
  * would re-submit an identity check that has already been accepted. A user who
  * abandons mid-flow simply lands on their dashboard next sign-in, with the
- * point-of-need gates (BVN at loan-apply, PoA at listing creation) still in
+ * point-of-need gates (NIN at loan-apply, PoA at listing creation) still in
  * place as the backstop they have always been.
  *
  * The first name is threaded through from the details step purely so the

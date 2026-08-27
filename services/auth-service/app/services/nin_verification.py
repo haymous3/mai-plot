@@ -26,10 +26,6 @@ class NinError(RuntimeError):
     pass
 
 
-class NinNotEligible(NinError):
-    """Caller is not a seller with authority_type=owner."""
-
-
 class NinAlreadyVerified(NinError):
     pass
 
@@ -56,16 +52,21 @@ class NinVerificationService:
         self._pepper = pepper
 
     async def verify(self, *, user_id: UUID, nin: str) -> NinVerifyResult:
-        # Eligibility first: ineligible callers get 403 regardless of payload,
-        # and we never process their NIN at all.
-        authority = await self._users.get_authority(user_id)
-        if (
-            authority is None
-            or authority.role != "seller"
-            or authority.seller_authority_type != "owner"
-        ):
-            raise NinNotEligible()
-
+        # ⚠️ NO ROLE GATE (SCRUM-189). This used to be restricted to sellers
+        # with authority_type == "owner", which made NIN unusable as the
+        # platform-wide identity check: buyers were hard-403'd, and so was any
+        # PoA seller — even though seller onboarding already asked them for a
+        # NIN, so that flow was quietly broken for them.
+        #
+        # The NIN is the national identity number; every role has one and every
+        # role needs identity verification. The old gate expressed "only
+        # owner-sellers currently NEED this", not "only owner-sellers may
+        # safely do this", so widening it removes a restriction rather than a
+        # protection. Everything that actually protects the value is unchanged:
+        # the caller can only ever verify THEIR OWN id (user_id comes from the
+        # JWT, never the body), the value is bcrypt-hashed and never returned
+        # (§4), `has_nin` still blocks re-submission, and the unique
+        # `nin_lookup` still blocks one NIN across two accounts.
         validate_nin_format(nin)  # InvalidNinError -> 422, value never echoed
 
         if await self._users.has_nin(user_id):

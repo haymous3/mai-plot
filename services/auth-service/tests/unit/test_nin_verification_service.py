@@ -11,7 +11,6 @@ from app.repositories.user_repo import UserAuthority
 from app.services.nin import InvalidNinError, lookup_nin
 from app.services.nin_verification import (
     NinAlreadyVerified,
-    NinNotEligible,
     NinVerificationService,
     NinVerificationUnavailable,
 )
@@ -71,33 +70,54 @@ async def test_happy_path_hashes_and_stores() -> None:
 
 
 @pytest.mark.asyncio
-async def test_non_seller_is_not_eligible() -> None:
+async def test_a_buyer_can_verify_a_nin() -> None:
+    """SCRUM-189 removed the owner-seller gate. A buyer used to be hard-403'd
+    here, which is why buyer onboarding collected a BVN instead."""
     repo = _StubUserRepo(authority=UserAuthority(role="buyer", seller_authority_type=None))
     verifier = InMemoryNinVerifier()
-    with pytest.raises(NinNotEligible):
-        await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
-    assert verifier.calls == 0
-    assert repo.set_calls == []
+
+    result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    assert result.status == "verified"
+    assert len(repo.set_calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_poa_seller_is_not_eligible() -> None:
+async def test_a_poa_seller_can_verify_a_nin() -> None:
+    """This one was a live bug, not just a limitation: seller onboarding
+    already asked every seller for a NIN, so a PoA seller hit 403 on a step
+    the funnel required of them."""
     repo = _StubUserRepo(
         authority=UserAuthority(role="seller", seller_authority_type="power_of_attorney")
     )
     verifier = InMemoryNinVerifier()
-    with pytest.raises(NinNotEligible):
-        await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
-    assert verifier.calls == 0
+
+    result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    assert result.status == "verified"
 
 
 @pytest.mark.asyncio
-async def test_eligibility_checked_before_format() -> None:
-    # An ineligible caller with a malformed NIN still gets NinNotEligible,
-    # not a format error — we never process their input.
+async def test_a_realtor_can_verify_a_nin() -> None:
+    repo = _StubUserRepo(authority=UserAuthority(role="realtor", seller_authority_type=None))
+    verifier = InMemoryNinVerifier()
+
+    result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    assert result.status == "verified"
+
+
+@pytest.mark.asyncio
+async def test_format_is_still_validated_before_the_bureau_is_called() -> None:
+    """Dropping the role gate must not drop input validation with it."""
     repo = _StubUserRepo(authority=UserAuthority(role="buyer", seller_authority_type=None))
-    with pytest.raises(NinNotEligible):
-        await _service(repo, InMemoryNinVerifier()).verify(user_id=uuid4(), nin="bad")
+    verifier = InMemoryNinVerifier()
+
+    with pytest.raises(InvalidNinError):
+        await _service(repo, verifier).verify(user_id=uuid4(), nin="bad")
+
+    assert verifier.calls == 0
+    assert repo.set_calls == []
 
 
 @pytest.mark.asyncio

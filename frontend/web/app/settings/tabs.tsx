@@ -404,7 +404,7 @@ export function FinancialTab({
     account_name: string;
   } | null;
 }) {
-  const [bvn, setBvn] = useState('');
+  const [nin, setNin] = useState('');
   const [bankCode, setBankCode] = useState(payout?.bank_code ?? '');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState(payout?.account_name ?? '');
@@ -420,11 +420,11 @@ export function FinancialTab({
     setBusy(true);
     setNote(null);
     try {
-      if (bvn.trim() && !account.bvn_verified) {
-        const resp = await fetch('/api/buyer/bvn-verify', {
+      if (nin.trim() && !account.nin_verified) {
+        const resp = await fetch('/api/buyer/nin-verify', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ bvn: bvn.trim() }),
+          body: JSON.stringify({ nin: nin.trim() }),
         });
         if (!resp.ok) {
           const b = (await resp.json().catch(() => ({}))) as {
@@ -433,9 +433,9 @@ export function FinancialTab({
           setNote({
             tone: 'error',
             text:
-              b.error_code === 'BVN_FORMAT_INVALID'
-                ? 'BVN must be exactly 11 digits.'
-                : 'We could not verify that BVN. Please retry.',
+              b.error_code === 'NIN_FORMAT_INVALID'
+                ? 'NIN must be exactly 11 digits.'
+                : 'We could not verify that NIN. Please retry.',
           });
           return;
         }
@@ -482,23 +482,23 @@ export function FinancialTab({
       />
 
       <Field
-        id="bvn"
-        label="BVN"
-        hint="(Bank Verification Number)"
+        id="nin"
+        label="NIN"
+        hint="(National Identification Number)"
         note={<SecureNote>Your data is encrypted and used only for verification</SecureNote>}
       >
         {/*
-          Once verified the BVN cannot be re-submitted — /auth/verify/bvn 409s
-          with BVN_ALREADY_VERIFIED — and the value is never readable back (it
+          Once verified the NIN cannot be re-submitted — /auth/verify/nin 409s
+          with NIN_ALREADY_VERIFIED — and the value is never readable back (it
           is a bcrypt hash). So a verified account gets a status, not a field.
         */}
-        {account.bvn_verified ? (
-          <TextInput id="bvn" value="Verified" />
+        {account.nin_verified ? (
+          <TextInput id="nin" value="Verified" />
         ) : (
           <TextInput
-            id="bvn"
-            value={bvn}
-            onChange={(v) => setBvn(v.replace(/[^\d]/g, ''))}
+            id="nin"
+            value={nin}
+            onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
             placeholder="12345678901"
             inputMode="numeric"
             maxLength={11}
