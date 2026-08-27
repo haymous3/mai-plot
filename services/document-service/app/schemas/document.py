@@ -73,6 +73,54 @@ class LoanDocumentsResponse(BaseModel):
     items: list[LoanDocumentItem]
 
 
+# ---- Personal documents / My Documents (SCRUM-188) -------------------------
+
+UserDocumentCategory = Literal["identity", "financial", "property", "other"]
+
+
+class UserDocumentUploadResponse(BaseModel):
+    document_id: UUID
+    verification_status: str = "pending"
+
+
+class UserDocumentItem(BaseModel):
+    id: UUID
+    category: str
+    file_name: str
+    size_bytes: int
+    content_type: str
+    # 'failed' is what the design's "Rejected" pill labels — see migration 0003
+    # for why the existing status vocabulary is reused rather than extended.
+    verification_status: str
+    verification_notes: str | None
+    created_at: datetime
+
+
+class UserDocumentsResponse(BaseModel):
+    """The list plus every count the page renders.
+
+    Counts are returned by the server rather than derived on the client,
+    because the list can be filtered to one category while the sidebar badges
+    and stat cards must keep describing the whole collection.
+    """
+
+    items: list[UserDocumentItem]
+    # Keyed by category / status, always containing EVERY key with 0 for the
+    # empty ones — so "Property 0" and "Rejected 0" render as the design draws
+    # them instead of silently disappearing.
+    category_counts: dict[str, int]
+    status_counts: dict[str, int]
+    total: int
+
+
+class UserDocumentViewResponse(BaseModel):
+    url: str
+
+
+class UserDocumentDeleteResponse(BaseModel):
+    deleted: bool
+
+
 # ---- Admin verification ----------------------------------------------------
 
 ReviewAction = Literal["verify", "reject"]

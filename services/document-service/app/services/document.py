@@ -51,3 +51,14 @@ def build_document_key(listing_id: UUID, *, extension: str) -> str:
 def build_loan_document_key(loan_id: UUID, *, extension: str) -> str:
     """Private-bucket key: loans/{loan_id}/documents/{uuid}.{ext} (SCRUM-131)."""
     return f"loans/{loan_id}/documents/{uuid4()}.{extension}"
+
+
+def build_user_document_key(user_id: UUID, *, extension: str) -> str:
+    """Private-bucket key: users/{user_id}/documents/{uuid}.{ext} (SCRUM-188).
+
+    Keyed by the OWNER rather than by a listing or loan, because a personal
+    document belongs to the person and outlives both. The user_id prefix also
+    keeps everything one subject owns under a single path, which is what makes
+    an NDPR erasure request tractable.
+    """
+    return f"users/{user_id}/documents/{uuid4()}.{extension}"
