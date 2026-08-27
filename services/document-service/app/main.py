@@ -10,6 +10,7 @@ from app.routes.admin import router as admin_router
 from app.routes.documents import router as documents_router
 from app.routes.loan_documents import router as loan_documents_router
 from app.routes.my_documents import router as my_documents_router
+from app.routes.user_documents import router as user_documents_router
 from app.routes.view import router as view_router
 from app.security import AdminAccessError, AuthenticationError
 from app.telemetry import setup_telemetry
@@ -27,6 +28,10 @@ setup_telemetry(SERVICE_NAME, app)
 app.include_router(documents_router)
 app.include_router(loan_documents_router)
 app.include_router(my_documents_router)
+# Registered BEFORE view_router: `/documents/personal/{id}/view` must not be
+# captured by view_router's `/documents/{document_id}/view`, which would parse
+# "personal" as a document id.
+app.include_router(user_documents_router)
 app.include_router(view_router)
 app.include_router(admin_router)
 

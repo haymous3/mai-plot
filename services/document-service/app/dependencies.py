@@ -17,6 +17,7 @@ from app.repositories.document_repo import DocumentRepository
 from app.repositories.listing_repo import ListingRepository
 from app.repositories.loan_document_repo import LoanDocumentRepository
 from app.repositories.loan_repo import LoanRepository
+from app.repositories.user_document_repo import UserDocumentRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_queue import AdminQueueService
@@ -28,6 +29,7 @@ from app.services.listing_document_list import ListingDocumentListService
 from app.services.loan_document_upload import LoanDocumentService
 from app.services.ocr_dispatch import OcrDispatcher, build_ocr_dispatcher
 from app.services.seller_documents import SellerDocumentsService
+from app.services.user_documents import UserDocumentService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -173,6 +175,23 @@ def _loan_repo(session: SessionDep) -> LoanRepository:
 
 def _loan_document_repo(session: SessionDep) -> LoanDocumentRepository:
     return LoanDocumentRepository(session)
+
+
+def _user_document_repo(session: SessionDep) -> UserDocumentRepository:
+    return UserDocumentRepository(session)
+
+
+def get_user_document_service(
+    documents: Annotated[UserDocumentRepository, Depends(_user_document_repo)],
+    storage: DocumentStorageDep,
+    settings: SettingsDep,
+) -> UserDocumentService:
+    return UserDocumentService(
+        documents=documents,
+        storage=storage,
+        max_bytes=settings.max_document_bytes,
+        presign_ttl_seconds=settings.doc_presign_ttl_seconds,
+    )
 
 
 def get_loan_document_service(
