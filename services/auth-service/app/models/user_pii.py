@@ -42,6 +42,11 @@ class UserPii(Base):
     # collect a name. Default to empty string; the profile-update flow (M1+)
     # will populate it. Avoids a schema migration on this PII table.
     full_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Private-bucket key for the profile photo (SCRUM-188, migration 0011).
+    # Only the KEY lives here — the bytes stay in S3 and are served solely via
+    # a 15-minute pre-signed URL (§4). A photo of a person is personal data, so
+    # it belongs on this table rather than the cacheable `users` one.
+    avatar_s3_key: Mapped[str | None] = mapped_column(String(512), default=None)
     bvn_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     # Deterministic HMAC-SHA256(bvn, pepper) for cross-account dedup; unique.
     # bvn_hash (bcrypt) verifies, bvn_lookup (HMAC) is the queryable key.

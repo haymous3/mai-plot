@@ -45,6 +45,9 @@ class UserAccount:
     poa_verified_status: str
     bvn_verified: bool
     nin_verified: bool
+    # The private-bucket KEY, not a URL. The route mints a short-lived
+    # pre-signed URL from it; the key itself never reaches the client.
+    avatar_s3_key: str | None
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ class UserRepository:
                 # Presence only. The hashes themselves never leave the service.
                 UserPii.bvn_hash.is_not(None).label("bvn_verified"),
                 UserPii.nin_hash.is_not(None).label("nin_verified"),
+                UserPii.avatar_s3_key,
             )
             .join(UserPii, UserPii.user_id == User.id)
             .where(
@@ -168,7 +172,63 @@ class UserRepository:
             poa_verified_status=row.poa_verified_status,
             bvn_verified=row.bvn_verified,
             nin_verified=row.nin_verified,
+            avatar_s3_key=row.avatar_s3_key,
         )
+
+    async def set_avatar_key(self, user_id: UUID, *, key: str | None) -> tuple[bool, str | None]:
+        """Point the user at a new avatar object.
+
+        Returns (row_found, previous_key). Both halves matter and neither can
+        be inferred from the other: a missing row and a row with no photo yet
+        would both report `None` as the previous key, and the caller needs to
+        tell "no such user" from "no photo before now".
+
+        The PREVIOUS key is what lets the caller delete the superseded object.
+        Every upload mints a fresh uuid key, so without this the bucket would
+        accumulate one orphan per re-upload with nothing pointing at it.
+        """
+        pii = await self._session.get(UserPii, user_id)
+        if pii is None:
+            return False, None
+        previous = pii.avatar_s3_key
+        pii.avatar_s3_key = key
+        return True, previous
+
+    async def soft_delete(self, user_id: UUID) -> tuple[bool, str | None]:
+        """Mark the account deleted. Returns (deleted, avatar_key_to_purge).
+
+        `deleted` is False when there was no live row to delete — already
+        gone, or never existed. It cannot be inferred from the key, since a
+        successful delete of an account with no photo also yields None.
+
+        Sets `deleted_at` on BOTH tables. The trigger from migration 0009
+        mirrors users.deleted_at onto user_pii already, but writing it here
+        keeps the ORM's in-session view consistent with the database within
+        the same transaction — an ORM write does not see a trigger's effect
+        until it refreshes.
+
+        Soft, not hard: transactions, escrow movements and audit rows must
+        survive for CBN/AMLON. Freeing the phone and email for reuse is
+        handled by the partial unique indexes in migrations 0009 and 0010, so
+        this needs no extra work to release those identifiers.
+        """
+        now = datetime.now(UTC)
+        user = await self._session.get(User, user_id)
+        if user is None or user.deleted_at is not None:
+            return False, None
+        user.deleted_at = now
+        user.is_active = False
+
+        avatar_key: str | None = None
+        pii = await self._session.get(UserPii, user_id)
+        if pii is not None:
+            pii.deleted_at = now
+            # Drop the pointer as part of the same write. The object itself is
+            # deleted by the service; a face photo has no CBN retention basis
+            # the way the financial ledger does, so NDPR erasure wins here.
+            avatar_key = pii.avatar_s3_key
+            pii.avatar_s3_key = None
+        return True, avatar_key
 
     async def get_active_by_email(self, email: str) -> UserCore | None:
         """Fetch a live user by email for password login. Returns None for

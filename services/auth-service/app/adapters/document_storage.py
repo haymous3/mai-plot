@@ -55,6 +55,9 @@ class DocumentStorage(Protocol):
     ) -> str:  # pragma: no cover - protocol
         ...
 
+    async def delete(self, key: str) -> None:  # pragma: no cover - protocol
+        ...
+
 
 @dataclass
 class InMemoryDocumentStorage:
@@ -83,6 +86,13 @@ class InMemoryDocumentStorage:
         # Deterministic fake URL — no real signing, just enough for callers
         # and tests to assert a URL was produced for the right key.
         return f"memory://documents/{key}?expires={expires_seconds}"
+
+    async def delete(self, key: str) -> None:
+        # Idempotent, like S3's DeleteObject: removing an absent key is a
+        # no-op rather than an error. Callers use this to honour an erasure
+        # request, where "it is already gone" is success, not a failure.
+        self.objects.pop(key, None)
+        self.data.pop(key, None)
 
 
 class S3DocumentStorage:
@@ -151,6 +161,14 @@ class S3DocumentStorage:
             ExpiresIn=expires_seconds,
         )
         return url
+
+    async def delete(self, key: str) -> None:
+        # S3 DeleteObject is already idempotent — deleting a key that is not
+        # there returns 204, not an error — so this needs no existence check.
+        try:
+            await asyncio.to_thread(self._client.delete_object, Bucket=self._bucket, Key=key)
+        except Exception as exc:  # boto3 ClientError/BotoCoreError
+            raise DocumentStorageError(str(exc)) from exc
 
 
 def build_document_storage(

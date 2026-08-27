@@ -36,6 +36,19 @@ class StatusResponse(BaseModel):
     stage: str
 
 
+class ActiveDealsResponse(BaseModel):
+    """Whether the caller still has a deal in flight (SCRUM-188).
+
+    Deliberately a COUNT and a boolean and nothing else. This backs the
+    account-deletion guard in auth-service, which only needs to know "may this
+    account go away"; returning deal ids or stages here would leak one user's
+    transaction shape to any service that asks.
+    """
+
+    active_count: int
+    has_active: bool
+
+
 class DealItem(BaseModel):
     """A buyer's deal for the "Your Active Deals" list (SCRUM-95)."""
 

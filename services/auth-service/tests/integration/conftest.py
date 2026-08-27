@@ -28,6 +28,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.adapters.bvn import InMemoryBvnVerifier
+from app.adapters.deals import InMemoryDealChecker
 from app.adapters.document_storage import InMemoryDocumentStorage
 from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.nin import InMemoryNinVerifier
@@ -329,6 +330,24 @@ async def storage_fake() -> AsyncIterator[InMemoryDocumentStorage]:
     app.dependency_overrides[get_document_storage] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_document_storage, None)
+
+
+@pytest_asyncio.fixture
+async def deals_fake() -> AsyncIterator[InMemoryDealChecker]:
+    """Bind a fresh InMemoryDealChecker so account-deletion tests never need
+    transaction-service running.
+
+    Defaults to "no active deals" — the same answer the production fake gives.
+    Set `.has_active = True` to exercise the 409, or `.fail_next = True` to
+    exercise the fail-closed 503.
+    """
+    from app.dependencies import get_deal_checker
+    from app.main import app
+
+    fake = InMemoryDealChecker()
+    app.dependency_overrides[get_deal_checker] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_deal_checker, None)
 
 
 @pytest_asyncio.fixture

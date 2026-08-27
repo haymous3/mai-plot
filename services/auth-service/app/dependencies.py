@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.bvn import BvnVerifier, build_bvn_verifier
+from app.adapters.deals import DealChecker, build_deal_checker
 from app.adapters.document_storage import DocumentStorage, build_document_storage
 from app.adapters.email_verification import (
     EmailVerificationSender,
@@ -33,9 +34,11 @@ from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.account import AccountService
+from app.services.avatar_upload import AvatarService
 from app.services.buyer_profile import BuyerProfileService
 from app.services.bvn_verification import BvnVerificationService
 from app.services.change_password import ChangePasswordService
+from app.services.delete_account import DeleteAccountService
 from app.services.email_verification import EmailVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
@@ -68,6 +71,7 @@ _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
 _document_storage: DocumentStorage | None = None
 _poa_notifier: PoaNotifier | None = None
+_deal_checker: DealChecker | None = None
 
 
 async def get_redis(settings: SettingsDep) -> Redis | None:
@@ -157,12 +161,29 @@ async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
     return _document_storage
 
 
+async def get_deal_checker(settings: SettingsDep) -> DealChecker:
+    """Process-wide client for transaction-service's active-deal check.
+
+    ⚠️ The fake reports "no active deals", so binding it in production would
+    silently disable the deletion guard. `deal_check_use_fake` must be false
+    outside local/CI.
+    """
+    global _deal_checker
+    if _deal_checker is None:
+        _deal_checker = build_deal_checker(
+            use_fake=settings.deal_check_use_fake,
+            base_url=settings.transaction_service_url,
+        )
+    return _deal_checker
+
+
 RedisDep = Annotated["Redis | None", Depends(get_redis)]
 SmsClientDep = Annotated[SmsClient, Depends(get_sms_client)]
 EmailSenderDep = Annotated[EmailVerificationSender, Depends(get_email_sender)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]
 DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
+DealCheckerDep = Annotated[DealChecker, Depends(get_deal_checker)]
 
 
 def _user_repo(session: SessionDep) -> UserRepository:
@@ -299,6 +320,30 @@ def get_change_password_service(
     refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
 ) -> ChangePasswordService:
     return ChangePasswordService(credentials=credentials, refresh_tokens=refresh_tokens)
+
+
+def get_avatar_service(
+    settings: SettingsDep,
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    storage: DocumentStorageDep,
+) -> AvatarService:
+    return AvatarService(
+        users=users,
+        storage=storage,
+        max_upload_bytes=settings.avatar_max_upload_bytes,
+        url_ttl_seconds=settings.poa_presign_ttl_seconds,
+    )
+
+
+def get_delete_account_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    deals: DealCheckerDep,
+    storage: DocumentStorageDep,
+) -> DeleteAccountService:
+    return DeleteAccountService(
+        users=users, refresh_tokens=refresh_tokens, deals=deals, storage=storage
+    )
 
 
 def get_profile_service(
