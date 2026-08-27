@@ -16,12 +16,19 @@ import { GhostButton, OnboardingHeading, PrimaryButton } from './ui';
  *  - "Email Address (Optional)". Email is now the verification channel
  *    (SCRUM-180/181), so by this screen it is already known AND verified.
  *    Re-asking would invite a user to change the address they just proved they
- *    control. It also cannot be pre-filled: `UserPublic` returns only id, role
- *    and verified_status, and there is no GET /auth/me.
+ *    control. (SCRUM-188 added GET /auth/me, so it COULD now be pre-filled —
+ *    but the reason for omitting it was never the missing read: re-asking for
+ *    an address the user just proved they control is the problem.)
  *
  * The NIN field on step 2 is a BVN here. /auth/verify/nin is hard-gated to
  * sellers with owner authority (403 NIN_NOT_ELIGIBLE); BVN is the buyer
  * identity check and has no role gate. Product owner confirmed the swap.
+ *
+ * It posts to the existing `/api/buyer/bvn-verify`. SCRUM-185 briefly added a
+ * second route for this on the belief that `/api/buyer/*` and the onboarding
+ * session read DIFFERENT cookies — they do not. `lib/buyer-auth.ts` re-exports
+ * `SESSION_ACCESS_COOKIE as BUYER_ACCESS_COOKIE`: one cookie, two names. The
+ * duplicate was removed in SCRUM-188.
  */
 
 const EMPLOYMENT = [
@@ -124,7 +131,7 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
           setError('BVN must be exactly 11 digits.');
           return;
         }
-        const resp = await fetch('/api/auth/buyer/bvn', {
+        const resp = await fetch('/api/buyer/bvn-verify', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ bvn: bvn.trim() }),
