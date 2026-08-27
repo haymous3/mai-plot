@@ -41,6 +41,10 @@ class Account:
     poa_verified_status: str
     bvn_verified: bool
     nin_verified: bool
+    # The private-bucket KEY. The ROUTE turns it into a short-lived pre-signed
+    # URL; the key itself is never serialised to a client, so it stays useless
+    # to anyone who does not already hold bucket credentials.
+    avatar_s3_key: str | None
     # Buyer-only; None for every other role, and for a buyer who has not filled
     # in the optional buying-capacity step.
     employment_status: str | None
@@ -80,6 +84,7 @@ class AccountService:
             poa_verified_status=account.poa_verified_status,
             bvn_verified=account.bvn_verified,
             nin_verified=account.nin_verified,
+            avatar_s3_key=account.avatar_s3_key,
             employment_status=employment_status,
             preferred_location=preferred_location,
             budget_kobo=budget_kobo,

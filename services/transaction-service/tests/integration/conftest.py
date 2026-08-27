@@ -8,7 +8,9 @@ cross-service `tests.integration.conftest` name collision.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from collections.abc import AsyncIterator, Callable, Generator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -19,6 +21,13 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+# psycopg's async mode refuses to run on Windows' default ProactorEventLoop.
+# Selecting the psycopg escape hatch therefore also has to select a compatible
+# loop policy, at import time — before pytest-asyncio creates any loop.
+# Mirrors auth-service's conftest (SCRUM-188).
+if os.environ.get("TEST_DB_DRIVER") == "psycopg" and sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from app.config import get_settings
 from app.db import dispose_engine
@@ -50,7 +59,14 @@ def _force_async_database_url() -> Generator[None, None, None]:
     user = os.environ.get("POSTGRES_USER", "maiplot")
     password = os.environ.get("POSTGRES_PASSWORD", "change-me-local")
     db = os.environ.get("POSTGRES_DB", "maiplot")
-    async_url = f"postgresql+asyncpg://{user}:{password}@localhost:{port}/{db}"
+    # asyncpg on Windows intermittently drops the connection mid-suite with
+    # "WinError 64: The specified network name is no longer available", failing
+    # every DB-touching test for reasons unrelated to the code under test.
+    # psycopg3 does not, so a developer on Windows can run the suite with
+    # TEST_DB_DRIVER=psycopg. CI keeps the default and exercises asyncpg, which
+    # is what production uses — this is a local escape hatch, not a swap.
+    driver = os.environ.get("TEST_DB_DRIVER", "asyncpg")
+    async_url = f"postgresql+{driver}://{user}:{password}@localhost:{port}/{db}"
     original = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = async_url
     get_settings.cache_clear()

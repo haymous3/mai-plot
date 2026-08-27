@@ -14,10 +14,12 @@ from fastapi.responses import JSONResponse
 
 from app.dependencies import (
     get_account_service,
+    get_avatar_service,
     get_buyer_profile_service,
     get_bvn_verification_service,
     get_change_password_service,
     get_current_user,
+    get_delete_account_service,
     get_email_verification_service,
     get_login_service,
     get_logout_service,
@@ -35,12 +37,14 @@ from app.dependencies import (
 )
 from app.schemas.auth import (
     AccountResponse,
+    AvatarResponse,
     BuyerProfileRequest,
     BuyerProfileResponse,
     BvnVerifyRequest,
     BvnVerifyResponse,
     ChangePasswordRequest,
     ChangePasswordResponse,
+    DeleteAccountResponse,
     EmailResendRequest,
     EmailResendResponse,
     EmailVerifyRequest,
@@ -71,6 +75,12 @@ from app.schemas.auth import (
 )
 from app.security import CurrentUser
 from app.services.account import AccountNotFound, AccountService
+from app.services.avatar import InvalidAvatar
+from app.services.avatar_upload import (
+    AvatarService,
+    AvatarStorageUnavailable,
+    AvatarUserMissing,
+)
 from app.services.buyer_profile import BuyerProfileService, NotBuyer
 from app.services.bvn import InvalidBvnError
 from app.services.bvn_verification import (
@@ -83,6 +93,12 @@ from app.services.change_password import (
     CurrentPasswordWrong,
     NoPasswordSet,
     SamePassword,
+)
+from app.services.delete_account import (
+    AccountAlreadyGone,
+    AccountHasActiveDeals,
+    DeleteAccountService,
+    DeleteCheckUnavailable,
 )
 from app.services.email_verification import (
     EmailTokenExpired,
@@ -390,6 +406,7 @@ async def set_password(
 async def get_me(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     service: Annotated[AccountService, Depends(get_account_service)],
+    avatars: Annotated[AvatarService, Depends(get_avatar_service)],
 ) -> AccountResponse | JSONResponse:
     """The caller's own account, for pre-filling Settings (SCRUM-188).
 
@@ -418,6 +435,10 @@ async def get_me(
             "poa_verified_status": account.poa_verified_status,
             "bvn_verified": account.bvn_verified,
             "nin_verified": account.nin_verified,
+            # Minted here, not in AccountService: turning a key into a URL is
+            # a storage concern, and it keeps the account read free of any
+            # S3 dependency.
+            "avatar_url": avatars.presigned_url(account.avatar_s3_key),
             "employment_status": account.employment_status,
             "preferred_location": account.preferred_location,
             "budget_kobo": account.budget_kobo,
@@ -724,3 +745,93 @@ async def upload_poa(
         )
 
     return PoaUploadResponse(poa_verified_status=result.status, s3_key=result.s3_key)
+
+
+@router.post("/avatar", response_model=AvatarResponse)
+async def upload_avatar(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[AvatarService, Depends(get_avatar_service)],
+    file: Annotated[UploadFile, File(description="Profile photo — JPEG, PNG or WebP")],
+) -> AvatarResponse | JSONResponse:
+    """Set the caller's profile photo (SCRUM-188).
+
+    Open to every role. The bytes are validated server-side by magic number —
+    the client-supplied filename and Content-Type are not trusted — and stored
+    in the PRIVATE bucket, so the response carries a pre-signed URL rather than
+    anything durable.
+    """
+    data = await file.read()
+    try:
+        result = await service.upload(user_id=current_user.user_id, data=data)
+    except InvalidAvatar as exc:
+        # Never echo the image bytes. Literal 422 sidesteps the
+        # status.HTTP_422_* deprecation rename (see main.py).
+        return _error(422, exc.code, str(exc))
+    except AvatarUserMissing:
+        return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
+    except AvatarStorageUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "AVATAR_STORAGE_UNAVAILABLE",
+            "Photo storage is temporarily unavailable. Please retry.",
+        )
+    return AvatarResponse(avatar_url=result.url)
+
+
+@router.delete("/avatar", response_model=AvatarResponse)
+async def delete_avatar(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[AvatarService, Depends(get_avatar_service)],
+) -> AvatarResponse:
+    """Remove the caller's profile photo.
+
+    Idempotent — removing a photo that is not set is success, not a 404. The
+    caller asked to end up with no photo, and they already have.
+    """
+    await service.remove(user_id=current_user.user_id)
+    return AvatarResponse(avatar_url=None)
+
+
+@router.post("/account/delete", response_model=DeleteAccountResponse)
+async def delete_account(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[DeleteAccountService, Depends(get_delete_account_service)],
+) -> DeleteAccountResponse | JSONResponse:
+    """Soft-delete the caller's own account (SCRUM-188).
+
+    POST, not DELETE, because it is guarded and consequential rather than a
+    plain resource removal — and because the guard can legitimately refuse.
+
+    Soft: transactions, escrow and audit rows survive for CBN/AMLON. Migrations
+    0009/0010 make the deletion release the phone and email for reuse.
+
+    ⚠️ 503 when the active-deal guard cannot be evaluated. That is deliberate
+    fail-CLOSED behaviour — see adapters/deals.py. A retry in a minute costs
+    the user little; deleting an account over an unchecked escrow balance is
+    not recoverable through the product.
+    """
+    # The caller's own token is forwarded to transaction-service, whose
+    # active-deal endpoint is caller-scoped. Nothing else needs to be trusted.
+    header = request.headers.get("authorization", "")
+    token = header[7:] if header.lower().startswith("bearer ") else ""
+
+    try:
+        await service.delete(user_id=current_user.user_id, bearer_token=token)
+    except AccountHasActiveDeals:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "ACCOUNT_HAS_ACTIVE_DEALS",
+            "You still have a deal in progress. Complete or cancel it before "
+            "deleting your account.",
+        )
+    except DeleteCheckUnavailable:
+        return _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "DELETE_UNAVAILABLE",
+            "We could not confirm your account has no deals in progress. Please try again shortly.",
+        )
+    except AccountAlreadyGone:
+        return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
+
+    return DeleteAccountResponse(message="Your account has been deleted.", sessions_revoked=True)

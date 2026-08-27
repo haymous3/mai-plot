@@ -38,6 +38,7 @@ def _response(prefs: object) -> PreferenceResponse:
         push_enabled=prefs.push_enabled,  # type: ignore[attr-defined]
         sms_enabled=prefs.sms_enabled,  # type: ignore[attr-defined]
         email_enabled=prefs.email_enabled,  # type: ignore[attr-defined]
+        marketing_enabled=prefs.marketing_enabled,  # type: ignore[attr-defined]
     )
 
 
@@ -57,6 +58,7 @@ async def update_preferences(
         push_enabled=payload.push_enabled,
         sms_enabled=payload.sms_enabled,
         email_enabled=payload.email_enabled,
+        marketing_enabled=payload.marketing_enabled,
     )
     return _response(prefs)
 

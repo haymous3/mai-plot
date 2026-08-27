@@ -173,6 +173,16 @@ projects:
               - key: OCR_USE_FAKE
                 value: "true"
 
+              # Account-deletion guard (SCRUM-188). The fake always answers
+              # "no active deals", so this DISABLES the guard — acceptable on
+              # staging, which holds no real money, and consistent with the
+              # other fakes above.
+              # ⚠️ PRODUCTION MUST set DEAL_CHECK_USE_FAKE=false and point
+              # TRANSACTION_SERVICE_URL at the real service, or an account can
+              # be deleted out from under a funded escrow.
+              - key: DEAL_CHECK_USE_FAKE
+                value: "true"
+
           # -------------------------------------------------------------------------
           # notification-service API + worker only.
           #

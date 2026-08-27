@@ -123,6 +123,15 @@ services:
           - /auth/buyer/profile
           - /auth/poa/upload
           - /auth/set-password
+          # SCRUM-188. Same omission as the four above: every one of these is
+          # JWT-gated in the app and works when the frontend talks to
+          # auth-service directly, so a missing route here shows up only as a
+          # 404 through the gateway. /auth/me and /auth/change-password shipped
+          # in PR #174 without their Kong entries and were never routed.
+          - /auth/me
+          - /auth/change-password
+          - /auth/avatar
+          - /auth/account
         strip_path: false
         plugins:
           - name: rate-limiting

@@ -54,7 +54,16 @@ export default async function SettingsPage() {
     <SettingsClient
       account={account}
       payout={payout}
-      prefs={prefs ?? { push_enabled: true, sms_enabled: true, email_enabled: true }}
+      prefs={
+        prefs ?? {
+          push_enabled: true,
+          sms_enabled: true,
+          email_enabled: true,
+          // Opt-IN by default (NDPR §9) — the one flag that
+          // does NOT fall back to enabled.
+          marketing_enabled: false,
+        }
+      }
       home={roleHome(sessionRole() ?? 'buyer')}
     />
   );

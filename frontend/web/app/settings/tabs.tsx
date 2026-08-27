@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   Card,
@@ -15,8 +15,9 @@ import {
   ToggleRow,
 } from './settings-ui';
 import { PasswordField } from '../_components/password-field';
-import type { Account } from '@/lib/settings';
+import type { Account, NotificationPrefs } from '@/lib/settings';
 import { NIGERIAN_BANKS } from '@/lib/nigerian-banks';
+import { SESSION_LOGIN } from '@/lib/session';
 
 /**
  * The four Settings panels — SCRUM-188.
@@ -79,6 +80,17 @@ const PhoneIcon = () => (
     <path d="M6.5 3.5h-2a2 2 0 0 0-2 2C2.5 13.5 10.5 21.5 18.5 21.5a2 2 0 0 0 2-2v-2l-4.5-2-2.5 2.5a14 14 0 0 1-5-5L11 10.5z" />
   </svg>
 );
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+  </svg>
+);
+const CameraIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+    <path d="M4 8h3l1.5-2h7L17 8h3v11H4z" />
+    <circle cx="12" cy="13" r="3.2" />
+  </svg>
+);
 /** The save glyph the design puts inside both submit buttons. */
 const SaveIcon = () => (
   <svg
@@ -111,6 +123,137 @@ const PinIcon = () => (
 );
 
 // ── Profile ────────────────────────────────────────────────────────────────
+
+/**
+ * Profile photo — the avatar with a camera badge the design draws (SCRUM-188).
+ *
+ * `avatar_url` is a PRE-SIGNED URL with a 15-minute life, not a durable link,
+ * so it is held in state only for this page view. After an upload the server's
+ * fresh URL replaces it; nothing is cached anywhere it could outlive the
+ * signature.
+ *
+ * Uploads go straight to the BFF rather than being previewed from a local
+ * object URL first: the server is the only thing that decides whether the file
+ * is acceptable (it sniffs magic bytes), so showing an optimistic preview would
+ * mean rendering an image that may be rejected a moment later.
+ */
+function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [url, setUrl] = useState(initialUrl);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || '?';
+
+  async function upload(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const resp = await fetch('/api/auth/avatar', { method: 'POST', body: form });
+      const body = (await resp.json().catch(() => ({}))) as {
+        avatar_url?: string | null;
+        error_code?: string;
+      };
+      if (!resp.ok) {
+        setError(
+          body.error_code === 'AVATAR_TOO_LARGE'
+            ? 'That image is too large. Please choose one under 5MB.'
+            : body.error_code === 'AVATAR_INVALID'
+              ? 'Please choose a JPEG, PNG or WebP image.'
+              : 'We could not upload that photo. Please retry.',
+        );
+        return;
+      }
+      setUrl(body.avatar_url ?? null);
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+      // Clear the input so re-picking the SAME file fires change again.
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      const resp = await fetch('/api/auth/avatar', { method: 'DELETE' });
+      if (!resp.ok) {
+        setError('We could not remove that photo. Please retry.');
+        return;
+      }
+      setUrl(null);
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-8 flex items-center gap-6">
+      <div className="relative flex-none">
+        <span className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-surface-warm text-xl font-bold text-ink-500">
+          {url ? (
+            /* A pre-signed S3 URL cannot go through next/image: the signature
+               is per-request and the bucket host is not in the images
+               allowlist, so the optimiser would fetch a URL that has already
+               expired. Plain <img> is correct here. */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          aria-label={url ? 'Change profile photo' : 'Upload profile photo'}
+          className="absolute -bottom-0.5 -right-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-emerald-deep text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-deep focus-visible:ring-offset-2 disabled:opacity-60"
+        >
+          <CameraIcon />
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void upload(file);
+          }}
+        />
+      </div>
+
+      <div className="min-w-0">
+        <p className="text-sm font-bold leading-5 text-ink-buyer">Profile Photo</p>
+        <p className="mt-1 text-sm leading-5 text-ink-500">
+          {busy ? 'Working…' : 'Upload a photo to personalize your account'}
+        </p>
+        {url && !busy && (
+          <button
+            type="button"
+            onClick={() => void remove()}
+            className="mt-2 text-sm font-semibold text-status-danger underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-danger"
+          >
+            Remove photo
+          </button>
+        )}
+        {error && <StatusNote tone="error">{error}</StatusNote>}
+      </div>
+    </div>
+  );
+}
 
 export function ProfileTab({ account }: { account: Account }) {
   const [fullName, setFullName] = useState(account.full_name ?? '');
@@ -176,6 +319,8 @@ export function ProfileTab({ account }: { account: Account }) {
   return (
     <Card>
       <CardHeading title="Personal Information" />
+
+      <AvatarField initialUrl={account.avatar_url} name={account.full_name ?? ''} />
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field id="full-name" label="Full Name" required>
@@ -426,11 +571,9 @@ export function FinancialTab({
 
 // ── Notifications ──────────────────────────────────────────────────────────
 
-type Prefs = {
-  push_enabled: boolean;
-  sms_enabled: boolean;
-  email_enabled: boolean;
-};
+// Alias, not a second declaration: this used to be a local copy of the shape,
+// which silently went stale when marketing_enabled was added to the real type.
+type Prefs = NotificationPrefs;
 
 export function NotificationsTab({ initial }: { initial: Prefs }) {
   const [prefs, setPrefs] = useState<Prefs>(initial);
@@ -494,6 +637,19 @@ export function NotificationsTab({ initial }: { initial: Prefs }) {
           checked={prefs.push_enabled}
           onChange={(v) => void toggle('push_enabled', v)}
         />
+        {/*
+          Marketing sits apart from the three above and is opt-IN: it defaults
+          false server-side because NDPR (§9) requires explicit consent for
+          promotional messaging, while the transactional channels follow the
+          table's opt-out model. See notification-service migration 0005.
+        */}
+        <ToggleRow
+          id="marketing-emails"
+          label="Marketing Emails"
+          description="Receive promotional content and offers"
+          checked={prefs.marketing_enabled}
+          onChange={(v) => void toggle('marketing_enabled', v)}
+        />
       </div>
 
       {note && <StatusNote tone={note.tone}>{note.text}</StatusNote>}
@@ -504,6 +660,15 @@ export function NotificationsTab({ initial }: { initial: Prefs }) {
 // ── Security ───────────────────────────────────────────────────────────────
 
 export function SecurityTab() {
+  return (
+    <>
+      <ChangePasswordCard />
+      <DangerZone />
+    </>
+  );
+}
+
+function ChangePasswordCard() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -623,5 +788,120 @@ export function SecurityTab() {
         Changing your password signs you out on every device.
       </p>
     </Card>
+  );
+}
+
+/**
+ * Danger Zone — irreversible account actions (SCRUM-188).
+ *
+ * ⚠️ The design's copy says "All your data will be permanently removed." That
+ * is NOT what happens and the copy is deliberately changed. The deletion is
+ * SOFT: transactions, escrow movements, commissions and audit rows survive,
+ * because CBN and AMLON require the financial trail to outlive the account
+ * (CLAUDE.md §9). Telling a user their financial records are gone when the
+ * ledger deliberately keeps them would be a false promise, and an NDPR
+ * subject-access request would immediately contradict it.
+ *
+ * What IS removed: the account stops authenticating, every session is revoked,
+ * the profile photo is deleted from S3, and the phone and email are released
+ * for re-registration (migrations 0009/0010).
+ *
+ * Two-step confirm rather than a window.confirm(): the destructive button is
+ * inert until the user types DELETE, which is hard to do by accident and does
+ * not depend on a dialog the browser may suppress.
+ */
+const _CONFIRM_WORD = 'DELETE';
+
+function DangerZone() {
+  const [arming, setArming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      const resp = await fetch('/api/account/delete', { method: 'POST' });
+      if (!resp.ok) {
+        const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
+        setError(
+          b.error_code === 'ACCOUNT_HAS_ACTIVE_DEALS'
+            ? 'You still have a deal in progress. Complete or cancel it before deleting your account.'
+            : b.error_code === 'DELETE_UNAVAILABLE'
+              ? 'We could not confirm your account has no deals in progress. Please try again shortly.'
+              : 'We could not delete your account. Please retry.',
+        );
+        return;
+      }
+      // The BFF cleared the session cookies, so a full navigation (not a
+      // client-side push) is what makes the app re-read them as signed out.
+      window.location.href = SESSION_LOGIN;
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-8 rounded-2xl border border-status-danger/30 bg-white p-8">
+      <h2 className="text-xl font-bold leading-7 text-status-danger">Danger Zone</h2>
+      <p className="mt-1.5 text-sm leading-5 text-ink-500">Irreversible actions for your account</p>
+
+      <div className="mt-7 rounded-xl border border-status-danger/20 bg-status-danger/5 p-6">
+        <h3 className="text-base font-bold leading-6 text-ink-buyer">Delete Account</h3>
+        <p className="mt-1.5 text-sm leading-5 text-ink-500">
+          Your profile and photo are removed and you are signed out everywhere. Records we are
+          legally required to keep — completed transactions and their financial history — are
+          retained.
+        </p>
+
+        {!arming ? (
+          <div className="mt-5">
+            <PrimaryButton tone="danger" onClick={() => setArming(true)}>
+              <TrashIcon />
+              Delete My Account
+            </PrimaryButton>
+          </div>
+        ) : (
+          <div className="mt-5">
+            <label
+              htmlFor="confirm-delete"
+              className="block text-sm font-bold leading-5 text-ink-buyer"
+            >
+              Type {_CONFIRM_WORD} to confirm
+            </label>
+            <div className="max-w-[320px]">
+              <TextInput
+                id="confirm-delete"
+                value={typed}
+                onChange={setTyped}
+                placeholder={_CONFIRM_WORD}
+              />
+            </div>
+            {error && <StatusNote tone="error">{error}</StatusNote>}
+            <div className="mt-5 flex items-center gap-4">
+              <PrimaryButton
+                tone="danger"
+                disabled={typed !== _CONFIRM_WORD || busy}
+                onClick={() => void remove()}
+              >
+                {busy ? 'Deleting…' : 'Permanently delete'}
+              </PrimaryButton>
+              <GhostButton
+                onClick={() => {
+                  setArming(false);
+                  setTyped('');
+                  setError(null);
+                }}
+              >
+                Cancel
+              </GhostButton>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

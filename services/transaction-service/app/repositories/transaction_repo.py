@@ -147,6 +147,45 @@ class TransactionRepository:
             for r in rows
         ]
 
+    async def count_active_for_party(self, user_id: UUID) -> int:
+        """How many non-terminal deals this user is a party to (SCRUM-188).
+
+        Backs the account-deletion guard: a user with a deal still in flight
+        must not be able to delete their account out from under an escrow
+        balance or a pending title transfer.
+
+        Terminal stages are 'completed' and 'cancelled' — the two with no
+        outgoing transitions in state_machine._TRANSITIONS. Everything else,
+        including 'disputed', counts as active; a dispute is precisely when an
+        account must not vanish.
+
+        Matches ANY of the three party columns, so it is role-agnostic and one
+        query serves buyers, sellers and realtors alike. `realtor_id` is on the
+        table (migration 0001) even though app/models/transaction.py does not
+        map it — the assigned realtor is a party to a live deal too.
+
+        Note there is no `deleted_at` filter: `transactions` genuinely has no
+        such column. It is the current-state projection of an append-only
+        event log, and a deal leaves circulation by reaching 'cancelled', not
+        by being soft-deleted.
+        """
+        count = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS n
+                    FROM transactions
+                    WHERE (buyer_id = :uid
+                           OR seller_id = :uid
+                           OR realtor_id = :uid)
+                      AND stage NOT IN ('completed', 'cancelled')
+                    """
+                ),
+                {"uid": user_id},
+            )
+        ).scalar_one()
+        return int(count)
+
     async def commission_gate(self, transaction_id: UUID) -> CommissionGate:
         """The deal's recorded realtor commission (cross-service read of
         realtor-service's commissions) + whether a realtor was involved at all."""

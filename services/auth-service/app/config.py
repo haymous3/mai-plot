@@ -138,6 +138,20 @@ class Settings(BaseSettings):
     poa_max_upload_bytes: int = 10 * 1024 * 1024
     poa_presign_ttl_seconds: int = 900
 
+    # Profile photo (SCRUM-188). Shares the PoA bucket and its pre-signed-URL
+    # discipline — same private bucket, same 15-minute TTL — but has its own
+    # size ceiling because an avatar has no business being as large as a
+    # scanned legal document.
+    avatar_max_upload_bytes: int = 5 * 1024 * 1024
+
+    # Account deletion guard (SCRUM-188). auth-service asks transaction-service
+    # whether the caller still has a deal in flight before soft-deleting. The
+    # fake is the default so local + CI never need transaction-service running;
+    # it reports 'no active deals'. Production MUST set this false — with the
+    # fake bound the guard always passes.
+    deal_check_use_fake: bool = True
+    transaction_service_url: str = "http://transaction-service:8000"
+
     # PoA review queue (SCRUM-56). The legal team reviews PoA documents via
     # admin endpoints gated to the `legal_team` role AND an IP allowlist
     # (CLAUDE.md: admin endpoints require JWT + IP whitelist). Kong enforces the

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    SessionDep,
     get_buyer_deals_service,
     get_current_user,
     get_financing_summary_service,
@@ -21,9 +22,15 @@ from app.dependencies import (
     get_transaction_status_service,
 )
 from app.repositories.offer_repo import OfferRow
+from app.repositories.transaction_repo import TransactionRepository
 from app.schemas.financing import FinancingSummaryOut
 from app.schemas.offer import CounterRequest, CreateOfferRequest, OfferResponse, RespondRequest
-from app.schemas.transaction import DealsResponse, StatusChangeRequest, StatusResponse
+from app.schemas.transaction import (
+    ActiveDealsResponse,
+    DealsResponse,
+    StatusChangeRequest,
+    StatusResponse,
+)
 from app.security import CurrentUser
 from app.services.buyer_deals import BuyerDealsService
 from app.services.financing_summary import (
@@ -92,6 +99,26 @@ async def list_my_deals(
     """The caller's deals for the "Your Active Deals" surface (SCRUM-95),
     newest first."""
     return await service.list_for_buyer(caller.user_id)
+
+
+@router.get("/active-deals", response_model=ActiveDealsResponse)
+async def my_active_deals(
+    caller: CurrentUserDep,
+    session: SessionDep,
+) -> ActiveDealsResponse:
+    """Whether the caller is a party to any non-terminal deal (SCRUM-188).
+
+    Exists for auth-service's account-deletion guard, which must refuse to
+    delete an account with money or a title still in motion. It is scoped to
+    the CALLER rather than taking a user_id, so auth-service simply forwards
+    the user's own bearer token and no service-to-service credential has to be
+    invented for it.
+
+    Declared before the `/{transaction_id}/...` routes so "active-deals" is
+    never captured as a transaction id.
+    """
+    count = await TransactionRepository(session).count_active_for_party(caller.user_id)
+    return ActiveDealsResponse(active_count=count, has_active=count > 0)
 
 
 @router.get("/{transaction_id}/financing-summary", response_model=None)

@@ -222,10 +222,31 @@ class AccountResponse(BaseModel):
     poa_verified_status: str
     bvn_verified: bool
     nin_verified: bool
+    # A short-lived PRE-SIGNED URL, or null when no photo is set. Never the S3
+    # key: the bucket is private (§4) and the key would be meaningless to a
+    # browser anyway. Expect it to expire — re-read /auth/me for a fresh one
+    # rather than caching it.
+    avatar_url: str | None
     # Buyer-only; null for other roles and for buyers who skipped the step.
     employment_status: str | None
     preferred_location: str | None
     budget_kobo: int | None
+
+
+class AvatarResponse(BaseModel):
+    """Result of setting or clearing the profile photo (SCRUM-188)."""
+
+    avatar_url: str | None
+
+
+class DeleteAccountResponse(BaseModel):
+    """Result of a soft account deletion (SCRUM-188)."""
+
+    message: str
+    # Always true — every session dies with the account. Returned explicitly so
+    # the client clears its cookies on this fact rather than on a hard-coded
+    # assumption, matching ChangePasswordResponse.
+    sessions_revoked: bool
 
 
 class ChangePasswordRequest(BaseModel):

@@ -8,10 +8,13 @@ import { sessionAccessToken } from '@/lib/session-server';
  * (SCRUM-188). Proxies notification-service `GET`/`PATCH
  * /notifications/preferences`.
  *
- * ⚠️ THREE CHANNELS, NOT FOUR. The backend stores `push_enabled`,
- * `sms_enabled` and `email_enabled`. The design's fourth toggle, "Marketing
- * Emails", has no column — it needs a migration and lands in a later PR rather
- * than being faked with a control that forgets its state on reload.
+ * ⚠️ `marketing_enabled` is opt-IN while the other three are opt-out. NDPR
+ * (§9) requires explicit consent for promotional messaging, so it defaults
+ * false server-side; the transactional channels default true. See
+ * notification-service migration 0005 before changing any default here.
+ *
+ * The field list below is an allowlist, so a new preference must be added in
+ * BOTH places — it is otherwise dropped silently on the way through.
  *
  * PATCH is partial: only the channels present are changed, so toggling one
  * cannot clobber another.
@@ -59,7 +62,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   // "leave it alone" upstream, but sending an unknown key would be dropped
   // silently and look like a working control.
   const out: Record<string, boolean> = {};
-  for (const key of ['push_enabled', 'sms_enabled', 'email_enabled'] as const) {
+  for (const key of [
+    'push_enabled',
+    'sms_enabled',
+    'email_enabled',
+    'marketing_enabled',
+  ] as const) {
     if (typeof payload[key] === 'boolean') out[key] = payload[key] as boolean;
   }
   return proxy('PATCH', JSON.stringify(out));
