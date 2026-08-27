@@ -173,15 +173,12 @@ projects:
               - key: OCR_USE_FAKE
                 value: "true"
 
-              # Account-deletion guard (SCRUM-188). The fake always answers
-              # "no active deals", so this DISABLES the guard — acceptable on
-              # staging, which holds no real money, and consistent with the
-              # other fakes above.
-              # ⚠️ PRODUCTION MUST set DEAL_CHECK_USE_FAKE=false and point
-              # TRANSACTION_SERVICE_URL at the real service, or an account can
-              # be deleted out from under a funded escrow.
-              - key: DEAL_CHECK_USE_FAKE
-                value: "true"
+              # NOTE: the account-deletion guard's DEAL_CHECK_USE_FAKE used to
+              # live here (SCRUM-188). It moved onto auth-service in SCRUM-190:
+              # only auth-service reads it, and it is meaningless without the
+              # TRANSACTION_SERVICE_URL that sits beside it there. Splitting the
+              # two across a shared group and a service was how you end up
+              # turning the guard off by accident.
 
           # -------------------------------------------------------------------------
           # notification-service API + worker only.
@@ -401,6 +398,29 @@ projects:
             envVars:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
+
+              # ── Account-deletion guard (SCRUM-188/190) ────────────────────
+              # ⚠️ These two MUST be changed together. The fake always answers
+              # "no active deals", so leaving it true DISABLES the guard and an
+              # account can be deleted out from under a funded escrow. But
+              # flipping it to false WITHOUT a reachable URL is just as bad in
+              # the other direction: the guard fails CLOSED, so every deletion
+              # answers 503 and no one can delete their account at all.
+              #
+              # Staying fake on staging is deliberate — it holds no real money.
+              - key: DEAL_CHECK_USE_FAKE
+                value: "true"
+              # Resolved at deploy time, NOT hardcoded: Render suffixes private
+              # service hostnames (`transaction-service-i0rz`), so the compose
+              # name in the app's default would not resolve — the same trap
+              # documented on Kong's *_HOSTPORT vars above.
+              #
+              # `hostport` yields "host:port" with no scheme and Blueprint
+              # cannot prepend one, so HttpDealChecker normalises a scheme-less
+              # base URL to http:// (internal network, same as Kong uses).
+              - key: TRANSACTION_SERVICE_URL
+                fromService: { type: pserv, name: transaction-service, property: hostport }
+
               - key: OTP_EXPIRE_MINUTES
                 value: "5"
               - key: OTP_RATE_LIMIT_PER_HOUR

@@ -11,7 +11,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from app.adapters.deals import DealCheckUnavailable, HttpDealChecker
+from app.adapters.deals import DealCheckUnavailable, HttpDealChecker, _normalise_base_url
 
 pytestmark = pytest.mark.asyncio
 
@@ -42,6 +42,45 @@ def patch_transport(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped
         monkeypatch.setattr(httpx.AsyncClient, "__init__", patched)
 
     return _install
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        # Render's `fromService: { property: hostport }` yields a bare
+        # host:port with no scheme, and Blueprint syntax cannot prepend one.
+        ("transaction-service-i0rz:8000", "http://transaction-service-i0rz:8000"),
+        ("http://transaction-service:8000", "http://transaction-service:8000"),
+        ("https://tx.internal", "https://tx.internal"),
+        # Trailing slashes must not survive — the caller appends a path.
+        ("http://tx:8000/", "http://tx:8000"),
+        ("tx:8000/", "http://tx:8000"),
+        ("  tx:8000  ", "http://tx:8000"),
+    ],
+)
+async def test_base_url_is_normalised(given: str, expected: str) -> None:
+    """A scheme-less base URL would make httpx reject every request, which the
+    fail-closed guard turns into a 503 on every account deletion.
+
+    `async` only because this module carries a module-level asyncio mark; the
+    function under test is synchronous.
+    """
+    assert _normalise_base_url(given) == expected
+
+
+async def test_a_scheme_less_base_url_still_reaches_the_endpoint(patch_transport) -> None:  # type: ignore[no-untyped-def]
+    """End-to-end shape check for the Render case, not just the helper."""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"active_count": 0, "has_active": False})
+
+    patch_transport(handler)
+    checker = HttpDealChecker(base_url="transaction-service-i0rz:8000")
+    await checker.has_active_deals(bearer_token=_TOKEN)
+
+    assert seen["url"] == "http://transaction-service-i0rz:8000/transactions/active-deals"
 
 
 async def test_reports_active_deals(patch_transport) -> None:  # type: ignore[no-untyped-def]
