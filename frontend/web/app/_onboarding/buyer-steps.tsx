@@ -20,13 +20,15 @@ import { GhostButton, OnboardingHeading, PrimaryButton } from './ui';
  *    but the reason for omitting it was never the missing read: re-asking for
  *    an address the user just proved they control is the problem.)
  *
- * The NIN field on step 2 is a BVN here. /auth/verify/nin is hard-gated to
- * sellers with owner authority (403 NIN_NOT_ELIGIBLE); BVN is the buyer
- * identity check and has no role gate. Product owner confirmed the swap.
+ * Step 2 collects a NIN, as the design draws it. SCRUM-185 had to substitute
+ * a BVN here because /auth/verify/nin was hard-gated to sellers with owner
+ * authority (403 NIN_NOT_ELIGIBLE) and would have rejected every buyer.
+ * SCRUM-189 removed that gate — NIN is now the platform-wide identity check
+ * for every role — so the field matches the design again.
  *
- * It posts to the existing `/api/buyer/bvn-verify`. SCRUM-185 briefly added a
- * second route for this on the belief that `/api/buyer/*` and the onboarding
- * session read DIFFERENT cookies — they do not. `lib/buyer-auth.ts` re-exports
+ * It posts to `/api/buyer/nin-verify`. SCRUM-185 briefly added a second route
+ * for this on the belief that `/api/buyer/*` and the onboarding session read
+ * DIFFERENT cookies — they do not. `lib/buyer-auth.ts` re-exports
  * `SESSION_ACCESS_COOKIE as BUYER_ACCESS_COOKIE`: one cookie, two names. The
  * duplicate was removed in SCRUM-188.
  */
@@ -108,42 +110,42 @@ export function PersonalDetailsStep({
  * Step 2 — identity and buying capacity. Every field is optional server-side,
  * which is why this is the one step the design gives a "Skip for now".
  *
- * BVN and the capacity fields go to different endpoints, so they are sent
- * independently: a BVN that fails verification must not silently discard the
+ * NIN and the capacity fields go to different endpoints, so they are sent
+ * independently: a NIN that fails verification must not silently discard the
  * budget the user just typed.
  */
 export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void> }) {
-  const [bvn, setBvn] = useState('');
+  const [nin, setNin] = useState('');
   const [employment, setEmployment] = useState('');
   const [location, setLocation] = useState('');
   const [budget, setBudget] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const bvnLooksValid = /^\d{11}$/.test(bvn.trim());
+  const ninLooksValid = /^\d{11}$/.test(nin.trim());
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      if (bvn.trim()) {
-        if (!bvnLooksValid) {
-          setError('BVN must be exactly 11 digits.');
+      if (nin.trim()) {
+        if (!ninLooksValid) {
+          setError('NIN must be exactly 11 digits.');
           return;
         }
-        const resp = await fetch('/api/buyer/bvn-verify', {
+        const resp = await fetch('/api/buyer/nin-verify', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ bvn: bvn.trim() }),
+          body: JSON.stringify({ nin: nin.trim() }),
         });
         if (!resp.ok) {
           const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
           setError(
-            b.error_code === 'BVN_FORMAT_INVALID'
-              ? 'BVN must be exactly 11 digits.'
-              : b.error_code === 'BVN_ALREADY_VERIFIED'
-                ? 'This BVN has already been verified.'
-                : 'We could not verify that BVN. You can skip and add it later.',
+            b.error_code === 'NIN_FORMAT_INVALID'
+              ? 'NIN must be exactly 11 digits.'
+              : b.error_code === 'NIN_ALREADY_VERIFIED'
+                ? 'This NIN has already been verified.'
+                : 'We could not verify that NIN. You can skip and add it later.',
           );
           return;
         }
@@ -181,13 +183,13 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
       />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        <FieldLabel htmlFor="bvn" hint="(Bank Verification Number)">
-          BVN
+        <FieldLabel htmlFor="nin" hint="(National Identification Number)">
+          NIN
         </FieldLabel>
         <TextField
-          id="bvn"
-          value={bvn}
-          onChange={(v) => setBvn(v.replace(/[^\d]/g, ''))}
+          id="nin"
+          value={nin}
+          onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
           placeholder="12345678901"
           inputMode="numeric"
           maxLength={11}

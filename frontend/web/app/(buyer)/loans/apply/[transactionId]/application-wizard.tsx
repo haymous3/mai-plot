@@ -44,9 +44,9 @@ export function ApplicationWizard({
 
   const [step, setStep] = useState(1);
 
-  // Step 1 — BVN is verified against auth-service; employment + income are sent
+  // Step 1 — NIN is verified against auth-service; employment + income are sent
   // with the application and persisted on the loan (SCRUM-131).
-  const [bvn, setBvn] = useState('');
+  const [nin, setNin] = useState('');
   const [employment, setEmployment] = useState('');
   const [income, setIncome] = useState('');
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
@@ -68,7 +68,7 @@ export function ApplicationWizard({
 
   async function submitStep1() {
     const errs: Record<string, string> = {};
-    if (!/^\d{11}$/.test(bvn)) errs.bvn = 'BVN must be 11 digits';
+    if (!/^\d{11}$/.test(nin)) errs.nin = 'NIN must be 11 digits';
     if (!employment) errs.employment = 'Please select employment status';
     if (!income || Number(income) <= 0) errs.income = 'Please enter a valid monthly income';
     setStep1Errors(errs);
@@ -76,10 +76,10 @@ export function ApplicationWizard({
 
     setVerifying(true);
     try {
-      const resp = await fetch('/api/buyer/bvn-verify', {
+      const resp = await fetch('/api/buyer/nin-verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ bvn }),
+        body: JSON.stringify({ nin }),
       });
       // 202 accepted (initiated) or 409 already verified both let us proceed.
       if (resp.status === 202 || resp.ok || resp.status === 409) {
@@ -87,13 +87,13 @@ export function ApplicationWizard({
         return;
       }
       const body = (await resp.json()) as { error_code?: string };
-      if (body.error_code === 'BVN_FORMAT_INVALID') {
-        setStep1Errors({ bvn: 'BVN must be 11 digits' });
+      if (body.error_code === 'NIN_FORMAT_INVALID') {
+        setStep1Errors({ nin: 'NIN must be 11 digits' });
       } else {
-        setStep1Errors({ bvn: 'Could not verify your BVN. Please try again.' });
+        setStep1Errors({ nin: 'Could not verify your NIN. Please try again.' });
       }
     } catch {
-      setStep1Errors({ bvn: 'Could not reach the server. Please try again.' });
+      setStep1Errors({ nin: 'Could not reach the server. Please try again.' });
     } finally {
       setVerifying(false);
     }
@@ -190,14 +190,14 @@ export function ApplicationWizard({
 
           {step === 1 && (
             <StepCard title="Personal Information">
-              <Field label="Bank Verification Number (BVN)" error={step1Errors.bvn} hint="Your BVN is used for identity verification">
+              <Field label="National Identification Number (NIN)" error={step1Errors.nin} hint="Your NIN is used for identity verification">
                 <input
                   inputMode="numeric"
                   maxLength={11}
-                  value={bvn}
-                  onChange={(e) => setBvn(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Enter your 11-digit BVN"
-                  className={inputClass(!!step1Errors.bvn)}
+                  value={nin}
+                  onChange={(e) => setNin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter your 11-digit NIN"
+                  className={inputClass(!!step1Errors.nin)}
                 />
               </Field>
               <Field label="Employment Status" error={step1Errors.employment}>
@@ -268,7 +268,7 @@ export function ApplicationWizard({
               <ReviewBlock title="Personal Information">
                 <ReviewGrid
                   rows={[
-                    ['BVN', bvn],
+                    ['NIN', nin],
                     ['Employment Status', EMPLOYMENT_OPTIONS.find((o) => o.value === employment)?.label ?? '—'],
                     ['Monthly Income', formatNaira(Number(income) * 100)],
                   ]}

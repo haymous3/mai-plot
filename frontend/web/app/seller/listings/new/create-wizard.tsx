@@ -43,7 +43,12 @@ const DOC_SLOTS: { key: DocKey; type: string; label: string; required: boolean }
 type DocKey = 'c_of_o' | 'survey_plan' | 'deed_of_assignment' | 'other';
 
 const CREATE_ERRORS: Record<string, string> = {
-  BVN_REQUIRED: 'Complete your identity (BVN) verification before listing a property.',
+  // ⚠️ The CODE is still `BVN_REQUIRED`, but listing-service's gate only
+  // checks verified_status in (id_verified, fully_verified) — it never cared
+  // which identity document set that. Since SCRUM-189 the funnel collects a
+  // NIN, so the code name is a misnomer; renaming it is an API-contract
+  // change and is deliberately NOT bundled into this copy fix.
+  BVN_REQUIRED: 'Complete your identity (NIN) verification before listing a property.',
   POA_NOT_VERIFIED: 'Your power-of-attorney document must be verified before you can publish.',
   SELLER_ROLE_REQUIRED: 'Only seller accounts can create listings.',
   URGENCY_TAG_REQUIRED_FOR_DISTRESS: 'A distress sale needs an urgency window.',

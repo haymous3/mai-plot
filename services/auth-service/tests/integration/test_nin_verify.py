@@ -74,7 +74,7 @@ async def test_nin_verify_happy_path_for_owner_seller(
 
 
 @pytest.mark.asyncio
-async def test_nin_verify_rejects_buyer(
+async def test_nin_verify_accepts_a_buyer(
     clean_auth_tables: None,
     disable_rate_limit: None,
     sms_fake: InMemoryTwilioClient,
@@ -88,14 +88,16 @@ async def test_nin_verify_rejects_buyer(
         role="buyer",
         seller_authority_type=None,
     )
+    # SCRUM-189: this used to be a hard 403 NIN_NOT_ELIGIBLE, which is why
+    # buyer onboarding collected a BVN instead. NIN is now the platform-wide
+    # identity check, so every role may verify their own.
     response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
-    assert response.status_code == 403
-    assert_error_envelope(response.json(), "NIN_NOT_ELIGIBLE")
-    assert nin_fake.calls == 0
+    assert response.status_code == 202
+    assert nin_fake.calls == 1
 
 
 @pytest.mark.asyncio
-async def test_nin_verify_rejects_poa_seller(
+async def test_nin_verify_accepts_a_poa_seller(
     clean_auth_tables: None,
     disable_rate_limit: None,
     sms_fake: InMemoryTwilioClient,
@@ -109,9 +111,11 @@ async def test_nin_verify_rejects_poa_seller(
         role="seller",
         seller_authority_type="power_of_attorney",
     )
+    # This was a live bug, not just a limitation: seller onboarding already
+    # asked every seller for a NIN, so a PoA seller was 403'd on a step the
+    # funnel required of them.
     response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
-    assert response.status_code == 403
-    assert_error_envelope(response.json(), "NIN_NOT_ELIGIBLE")
+    assert response.status_code == 202
 
 
 @pytest.mark.asyncio

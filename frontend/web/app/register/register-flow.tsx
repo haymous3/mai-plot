@@ -22,7 +22,7 @@ import {
 // Verification is a 6-digit SMS code again (SCRUM-175 moved it back from the
 // SCRUM-152 email magic link). Registration still does NOT establish a session,
 // so the old post-OTP steps (set-password, personal details, KYC) stay gone —
-// KYC remains at point-of-need (buyer BVN at loan-apply, seller NIN/PoA at
+// KYC remains at point-of-need (NIN at loan-apply, seller NIN/PoA at
 // listing creation, both already gating there). The session is established when
 // the code is verified on /verify-otp.
 //
