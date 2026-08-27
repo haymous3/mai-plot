@@ -204,6 +204,46 @@ class LoginResponse(BaseModel):
     user: UserPublic
 
 
+class AccountResponse(BaseModel):
+    """The caller's own account — GET /auth/me (SCRUM-188).
+
+    ⚠️ BVN and NIN appear ONLY as booleans. Both are stored as bcrypt hashes
+    (CLAUDE.md §4) and neither the value nor the hash may leave the service: an
+    11-digit identifier is trivially crackable offline from its hash.
+    """
+
+    id: UUID
+    role: AccountRole
+    verified_status: str
+    email: str | None
+    phone: str
+    full_name: str
+    seller_authority_type: str | None
+    poa_verified_status: str
+    bvn_verified: bool
+    nin_verified: bool
+    # Buyer-only; null for other roles and for buyers who skipped the step.
+    employment_status: str | None
+    preferred_location: str | None
+    budget_kobo: int | None
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    # Composition is enforced in ChangePasswordService so the error maps to the
+    # standard envelope; the length floor is declared here.
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str
+    # True always today — every session is revoked on a password change — but
+    # returned explicitly so the client does not have to hard-code that policy.
+    sessions_revoked: bool
+
+
 class SetPasswordRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RefreshToken
@@ -50,6 +50,22 @@ class RefreshTokenRepository:
             revoked_at = revoked_at.replace(tzinfo=UTC)
         return StoredRefreshToken(
             id=row.id, user_id=row.user_id, expires_at=expires_at, revoked_at=revoked_at
+        )
+
+    async def revoke_all_for_user(self, user_id: UUID) -> None:
+        """Revoke every live refresh token for a user.
+
+        Used when the password changes (SCRUM-188): a password change that
+        leaves previously issued sessions alive is half a fix — the whole point
+        is to lock out whoever might already hold one.
+
+        Idempotent by construction: rows already revoked are excluded by the
+        WHERE, so their original revoked_at is preserved.
+        """
+        await self._session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(UTC))
         )
 
     async def revoke(self, token_id: UUID) -> None:

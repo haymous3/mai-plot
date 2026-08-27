@@ -13,19 +13,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
-from app.services.password import hash_password
+from app.services.password import hash_password, is_strong
 
 
 class WeakPassword(RuntimeError):
     """The password fails the composition policy (length/uppercase/digit)."""
-
-
-def _is_strong(password: str) -> bool:
-    return (
-        len(password) >= 8
-        and any(c.isupper() for c in password)
-        and any(c.isdigit() for c in password)
-    )
 
 
 class SetPasswordService:
@@ -35,6 +27,6 @@ class SetPasswordService:
     async def set(self, *, user_id: UUID, password: str) -> None:
         """Hash + upsert the caller's password. Enforces the same policy the UI
         shows (≥8 chars, an uppercase letter, and a number)."""
-        if not _is_strong(password):
+        if not is_strong(password):
             raise WeakPassword
         await self._credentials.upsert(user_id=user_id, password_hash=hash_password(password))

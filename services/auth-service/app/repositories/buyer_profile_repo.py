@@ -6,6 +6,7 @@ directly. One row per buyer; upsert keyed on user_id.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
@@ -14,9 +15,38 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import BuyerProfile
 
 
+@dataclass(frozen=True)
+class BuyerProfileRow:
+    """View struct — keeps the ORM out of the service layer."""
+
+    employment_status: str | None
+    preferred_location: str | None
+    budget_kobo: int | None
+
+
 class BuyerProfileRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get(self, user_id: UUID) -> BuyerProfileRow | None:
+        """The caller's buyer profile, or None if they have not filled one in.
+
+        Soft-deleted rows read as absent so a deleted-then-recreated profile
+        does not resurrect old buying-capacity figures.
+        """
+        stmt = select(
+            BuyerProfile.employment_status,
+            BuyerProfile.preferred_location,
+            BuyerProfile.budget_kobo,
+        ).where(BuyerProfile.user_id == user_id, BuyerProfile.deleted_at.is_(None))
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return BuyerProfileRow(
+            employment_status=row.employment_status,
+            preferred_location=row.preferred_location,
+            budget_kobo=row.budget_kobo,
+        )
 
     async def upsert(
         self,
