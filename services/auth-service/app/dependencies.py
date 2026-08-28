@@ -47,6 +47,11 @@ from app.services.nin_verification import NinVerificationService
 from app.services.otp_attempts import OtpAttemptLimiter
 from app.services.otp_resend import OtpResendService
 from app.services.otp_verification import OtpVerificationService
+from app.services.password_reset import (
+    RESET_RATE_LIMIT_PREFIX,
+    ForgotPasswordService,
+    ResetPasswordService,
+)
 from app.services.poa_document import PoaDocumentService
 from app.services.poa_notifier import PoaNotifier, build_poa_notifier
 from app.services.poa_queue import PoaQueueService
@@ -227,6 +232,17 @@ def _rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
     return OtpRateLimiter(redis, max_per_hour=settings.otp_rate_limit_per_hour)
 
 
+def _reset_rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
+    """Forgot-password budget. Same allowance as the OTP one but its own Redis
+    namespace: it is keyed on the email, and sharing the OTP namespace would let
+    a verification resend eat a user's reset allowance for that same address."""
+    return OtpRateLimiter(
+        redis,
+        max_per_hour=settings.otp_rate_limit_per_hour,
+        key_prefix=RESET_RATE_LIMIT_PREFIX,
+    )
+
+
 def _otp_attempts(redis: RedisDep, settings: SettingsDep) -> OtpAttemptLimiter:
     return OtpAttemptLimiter(redis, max_attempts=settings.otp_max_attempts)
 
@@ -285,6 +301,37 @@ def get_resend_verification_service(
         rate_limiter=rate_limiter,
         verification_expire_minutes=settings.email_verification_expire_minutes,
         verify_base_url=settings.email_verification_base_url,
+    )
+
+
+def get_forgot_password_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
+    rate_limiter: Annotated[OtpRateLimiter, Depends(_reset_rate_limiter)],
+    email_sender: EmailSenderDep,
+    settings: SettingsDep,
+) -> ForgotPasswordService:
+    return ForgotPasswordService(
+        users=users,
+        tokens=email_tokens,
+        email_sender=email_sender,
+        rate_limiter=rate_limiter,
+        reset_expire_minutes=settings.password_reset_expire_minutes,
+        reset_base_url=settings.password_reset_base_url,
+    )
+
+
+def get_reset_password_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    email_tokens: Annotated[EmailVerificationRepository, Depends(_email_token_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+) -> ResetPasswordService:
+    return ResetPasswordService(
+        users=users,
+        tokens=email_tokens,
+        credentials=credentials,
+        refresh_tokens=refresh_tokens,
     )
 
 

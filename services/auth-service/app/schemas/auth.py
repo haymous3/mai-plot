@@ -35,7 +35,11 @@ OtpPurpose = Literal["registration", "login"]
 VerificationChannel = Literal["email", "phone"]
 # Purposes an email magic link may serve (mirrors the email_verification_tokens
 # purpose CHECK). Only 'registration' is issued today; login/reset are reserved.
-EmailVerifyPurpose = Literal["registration", "login", "reset"]
+# Purposes POST /auth/verify/email will accept from a client. "password_reset"
+# is deliberately absent: that route mints a JWT pair on a valid token, so a
+# reset link must not be redeemable there (see migration 0012). "reset" was a
+# reserved placeholder nothing ever minted and went with it.
+EmailVerifyPurpose = Literal["registration", "login"]
 
 
 class RegisterRequest(BaseModel):
@@ -187,6 +191,51 @@ class EmailResendResponse(BaseModel):
     # Deliberately generic — the response is identical whether or not the address
     # has an unverified account, so it can't be used to enumerate accounts.
     message: str = "If that email needs verification, we've sent a new link."
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Public endpoint — the caller has, by definition, lost their way in.
+    # Normalised exactly as registration normalises it so the lookup matches
+    # the stored address.
+    email: str = Field(max_length=254)
+
+    @model_validator(mode="after")
+    def _normalise(self) -> ForgotPasswordRequest:
+        try:
+            object.__setattr__(self, "email", normalise_email(self.email))
+        except InvalidEmailError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+
+class ForgotPasswordResponse(BaseModel):
+    # Deliberately generic — byte-identical whether or not the address has an
+    # account, so the endpoint cannot be used to enumerate users.
+    message: str = "If that email has an account, we've sent a reset link."
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # The token from the emailed link. POSTed rather than sent as a GET query
+    # so it never lands in access logs or browser history — same as
+    # EmailVerifyRequest. No `purpose` field: this route only ever accepts a
+    # password_reset token, and letting the client name the purpose is what
+    # would allow a verification token to be spent here.
+    token: str = Field(min_length=1, max_length=512)
+    # Composition (uppercase + digit) is enforced in ResetPasswordService so
+    # the error maps to the standard envelope; the length floor is declared here.
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+    # True always today — every session dies with a reset — but returned
+    # explicitly so the client does not hard-code the policy. Matches
+    # ChangePasswordResponse.
+    sessions_revoked: bool
 
 
 class LoginRequest(BaseModel):

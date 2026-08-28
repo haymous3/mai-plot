@@ -97,6 +97,12 @@ services:
           # /auth/verify/email/resend, while /auth/verify/bvn and
           # /auth/verify/nin stay JWT-gated there.
           - /auth/verify/email
+          # Password reset (SCRUM-191) MUST be public — the whole point is that
+          # the user cannot log in, so they cannot hold a JWT. Covers
+          # /auth/password/forgot and /auth/password/reset. Note this is
+          # /auth/password/*, NOT /auth/change-password or /auth/set-password:
+          # both of those stay JWT-gated in auth-protected below.
+          - /auth/password
         strip_path: false
         plugins:
           - name: rate-limiting

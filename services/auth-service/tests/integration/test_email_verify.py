@@ -142,12 +142,14 @@ async def test_verify_wrong_purpose_returns_401(
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
 ) -> None:
-    # A token minted for 'registration' must not satisfy a 'reset' verify.
+    # A token minted for 'registration' must not satisfy a verify for another
+    # purpose. ('reset' stood here until SCRUM-191 removed it from the accepted
+    # Literal — password reset has its own endpoint and its own purpose.)
     await _register(http_client)
     token = extract_email_token(email_verification_fake.sent[-1].verify_url)
 
     response = await http_client.post(
-        "/auth/verify/email", json={"token": token, "purpose": "reset"}
+        "/auth/verify/email", json={"token": token, "purpose": "login"}
     )
     assert response.status_code == 401
     assert_error_envelope(response.json(), "EMAIL_TOKEN_INVALID")

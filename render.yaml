@@ -437,6 +437,14 @@ projects:
               # Wrong value = every verification link fails.
               - key: EMAIL_VERIFICATION_BASE_URL
                 sync: false
+              - key: PASSWORD_RESET_EXPIRE_MINUTES
+                value: "15"
+              # ⚠️ MANUAL, same reasoning as EMAIL_VERIFICATION_BASE_URL above:
+              # the reset link must reach the frontend wired to THIS
+              # auth-service. Production is
+              # https://www.maihomme.com/reset-password.
+              - key: PASSWORD_RESET_BASE_URL
+                sync: false
 
               # ── Twilio: STAYS FAKE on staging (SCRUM-177) ──────────────────
               # A real-SMS exception was briefly enabled here on 2026-08-23 and
