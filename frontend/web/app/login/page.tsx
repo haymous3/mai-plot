@@ -73,7 +73,7 @@ export default function LoginPage({
 
           <div className="mt-8">
             <Suspense fallback={null}>
-              <LoginForm />
+              <LoginForm role={role} />
             </Suspense>
           </div>
 

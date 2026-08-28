@@ -699,7 +699,10 @@ function ChangePasswordCard() {
           PASSWORD_UNCHANGED: 'Your new password must be different from your current one.',
           PASSWORD_TOO_WEAK:
             'Use at least 8 characters, including an uppercase letter and a number.',
-          NO_PASSWORD_SET: 'This account has no password yet. Use "Forgot password" to set one.',
+          // SCRUM-191: this used to point at a "Forgot password" control that
+          // had never been built. It exists now, so name where it actually is.
+          NO_PASSWORD_SET:
+            'This account has no password yet. Set one from the Forgot password page.',
         };
         setNote({
           tone: 'error',
@@ -786,6 +789,21 @@ function ChangePasswordCard() {
 
       <p className="mt-4 text-xs leading-4 text-ink-500">
         Changing your password signs you out on every device.
+      </p>
+
+      {/*
+        SCRUM-191. This form needs the CURRENT password, so a signed-in user who
+        cannot recall it — or who has no password at all (NO_PASSWORD_SET, which
+        registration leaves possible) — was stuck here with nowhere to go. The
+        reset flow is that way out, and it is the destination the error copy
+        above now names.
+      */}
+      <p className="mt-2 text-xs leading-4 text-ink-500">
+        Don&rsquo;t know your current password?{' '}
+        <a href="/forgot-password" className="font-medium text-emerald-deep hover:underline">
+          Reset it by email
+        </a>
+        .
       </p>
     </Card>
   );
