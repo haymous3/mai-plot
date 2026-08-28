@@ -12,7 +12,7 @@ const MESSAGES: Record<string, string> = {
   INVALID_REQUEST: 'Please enter your email and password.',
 };
 
-export function LoginForm() {
+export function LoginForm({ role }: { role: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next');
@@ -74,9 +74,23 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-1.5">
-        <label htmlFor="password" className="block text-sm font-medium text-ink-700">
-          Password
-        </label>
+        <div className="flex items-center justify-between">
+          <label htmlFor="password" className="block text-sm font-medium text-ink-700">
+            Password
+          </label>
+          {/*
+            SCRUM-191. Sits on the label row because that is where it is looked
+            for — right next to the field that just failed. The role rides along
+            so recovery keeps the same left-panel copy as the screen the user is
+            leaving; without it a seller lands on a buyer-flavoured page.
+          */}
+          <a
+            href={`/forgot-password?role=${role}`}
+            className="text-sm font-medium text-emerald-deep hover:underline"
+          >
+            Forgot password?
+          </a>
+        </div>
         <PasswordField
           id="password"
           name="password"
