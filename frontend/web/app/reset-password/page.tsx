@@ -14,7 +14,7 @@ export const metadata: Metadata = {
  * a POST (not this GET) so it never lands in server access logs.
  *
  * Unlike /verify-email this page does NOT act on mount — the token is only
- * spent once the user has actually typed a password. See design/password-recovery.
+ * spent once the user has actually typed a password. See docs/password-recovery-design.md.
  */
 export default function ResetPasswordPage() {
   return (
