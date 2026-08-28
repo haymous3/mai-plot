@@ -68,6 +68,27 @@ class ReviewFile:
     file_name: str
 
 
+# The only content types this route will ever put in a Content-Type header.
+#
+# These bytes are served `inline` from the admin's own origin, so a type the
+# browser renders as ACTIVE content (text/html, image/svg+xml) would execute in
+# the reviewer's session — a stored XSS with an admin as the victim.
+#
+# Nothing can currently store such a type: `detect_document_type()` derives it
+# from MAGIC BYTES and only ever returns these three, and the client's header is
+# never trusted. But that invariant lives in another module, enforced by another
+# ticket, and this is the boundary where being wrong is dangerous. Anything
+# outside the set degrades to octet-stream, which browsers download rather than
+# render.
+SERVABLE_CONTENT_TYPES = frozenset({"application/pdf", "image/jpeg", "image/png"})
+
+_FALLBACK_CONTENT_TYPE = "application/octet-stream"
+
+
+def _safe_content_type(candidate: str) -> str:
+    return candidate if candidate in SERVABLE_CONTENT_TYPES else _FALLBACK_CONTENT_TYPE
+
+
 def _content_type_for(key: str) -> str:
     """Infer a content type from the object key.
 
@@ -81,7 +102,22 @@ def _content_type_for(key: str) -> str:
         return "image/jpeg"
     if lowered.endswith(".png"):
         return "image/png"
-    return "application/octet-stream"
+    return _FALLBACK_CONTENT_TYPE
+
+
+def _safe_filename(name: str) -> str:
+    """Reduce an uploaded filename to something safe to quote in a header.
+
+    `file_name` is whatever the owner's browser sent at upload (SCRUM-188), so
+    it reaches here unfiltered. A `"` would close the quoted string in
+    `Content-Disposition: inline; filename="..."` early and let the rest be read
+    as further header parameters; a CR/LF would be header injection outright.
+    Keep a conservative set and let everything else become an underscore.
+    """
+    cleaned = "".join(c if (c.isalnum() or c in "._- ") else "_" for c in name.strip()).strip()
+    # Leading dots would produce ".", ".." or a hidden file on the reviewer's disk.
+    cleaned = cleaned.lstrip(".")
+    return cleaned[:120] or "document"
 
 
 class AdminDocumentFileService:
@@ -148,10 +184,16 @@ class AdminDocumentFileService:
             personal = await self._user_documents.get_for_review(document_id)
             if personal is None:
                 raise DocumentNotFound()
-            # The stored content_type is authoritative here: it was determined
-            # from the file's MAGIC BYTES at upload (SCRUM-188), not from a
-            # client-supplied header or the extension.
-            return personal.s3_key, personal.content_type, personal.file_name
+            # The stored content_type was determined from the file's MAGIC
+            # BYTES at upload (SCRUM-188), never a client-supplied header — but
+            # it is still narrowed against the allowlist before it becomes a
+            # response header, and the filename is stripped before it is quoted
+            # into Content-Disposition.
+            return (
+                personal.s3_key,
+                _safe_content_type(personal.content_type),
+                _safe_filename(personal.file_name),
+            )
 
         listing = await self._documents.get_view(document_id)
         if listing is None:
@@ -162,5 +204,5 @@ class AdminDocumentFileService:
         return (
             listing.s3_key,
             _content_type_for(listing.s3_key),
-            listing.s3_key.rsplit("/", 1)[-1],
+            _safe_filename(listing.s3_key.rsplit("/", 1)[-1]),
         )

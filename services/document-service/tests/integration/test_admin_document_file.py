@@ -308,3 +308,32 @@ async def test_an_invalid_source_is_rejected(
         f"/admin/documents/{uuid4()}/file?source=everything", headers=auth_header(token)
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_response_carries_nosniff(
+    clean_tables: None,
+    http_client: AsyncClient,
+    doc_storage_fake: Any,
+    seed_seller: Callable[..., UUID],
+    seed_user_document: Callable[..., UUID],
+    mint_access_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """These bytes render inline on the admin's own origin, so the browser must
+    not be free to sniff a different type out of them."""
+    buyer = seed_seller(phone="08011112222", role="buyer")
+    document_id = seed_user_document(user_id=buyer)
+    await doc_storage_fake.put(
+        key=f"users/{buyer}/documents/{document_id}.pdf",
+        data=b"%PDF-1.4",
+        content_type="application/pdf",
+    )
+    admin = seed_seller(phone="08000000000", role="admin")
+    token = mint_access_token(admin, "admin")
+
+    response = await http_client.get(
+        f"/admin/documents/{document_id}/file?source=personal", headers=auth_header(token)
+    )
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"

@@ -139,7 +139,17 @@ async def review_file(
     return Response(
         content=doc.content,
         media_type=doc.content_type,
-        # inline so the admin UI can render it in an iframe/object rather than
-        # triggering a download the reviewer then has to clean off their disk.
-        headers={"Content-Disposition": f'inline; filename="{doc.file_name}"'},
+        headers={
+            # inline so the admin UI can render it in an iframe/object rather
+            # than triggering a download the reviewer then has to clean off
+            # their disk. The filename is sanitised in the service.
+            "Content-Disposition": f'inline; filename="{doc.file_name}"',
+            # The service serves only pdf/jpeg/png and degrades anything else
+            # to octet-stream; nosniff stops the browser second-guessing that
+            # and rendering a disguised payload as active content on the admin
+            # origin. (A CSP sandbox header is deliberately NOT set here: the
+            # allowlist already makes active content unservable, and sandboxing
+            # risks the built-in PDF viewer the review UI relies on.)
+            "X-Content-Type-Options": "nosniff",
+        },
     )

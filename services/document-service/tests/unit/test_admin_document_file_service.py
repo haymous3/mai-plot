@@ -219,3 +219,108 @@ async def test_unknown_extension_falls_back_to_octet_stream() -> None:
 
     doc = await svc.get_file(document_id=uuid4(), viewer=_ADMIN)
     assert doc.content_type == "application/octet-stream"
+
+
+# --------------------------------------------------------------------------
+# Serving hardening: these bytes render inline on the ADMIN's own origin
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stored_type",
+    ["text/html", "image/svg+xml", "application/xhtml+xml", "text/xml"],
+)
+async def test_active_content_types_are_never_echoed(stored_type: str) -> None:
+    """A type the browser executes would be stored XSS with an admin victim.
+
+    detect_document_type() cannot produce these today — it reads magic bytes
+    and returns pdf/jpeg/png only — but that invariant lives in another module,
+    and this is the boundary where being wrong is dangerous.
+    """
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.pdf",
+        content_type=stored_type,
+        file_name="payload.pdf",
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert served.content_type == "application/octet-stream"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("good", ["application/pdf", "image/jpeg", "image/png"])
+async def test_the_three_real_document_types_are_served_as_themselves(good: str) -> None:
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.bin",
+        content_type=good,
+        file_name="scan.pdf",
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert served.content_type == good
+
+
+@pytest.mark.asyncio
+async def test_a_quote_in_the_filename_cannot_break_out_of_the_header() -> None:
+    """file_name is whatever the owner's browser sent, and it gets quoted into
+    Content-Disposition. A bare `"` would close the string early."""
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.pdf",
+        content_type="application/pdf",
+        file_name='ok".pdf"; download; x="',
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert '"' not in served.file_name
+
+
+@pytest.mark.asyncio
+async def test_crlf_in_the_filename_cannot_inject_a_header() -> None:
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.pdf",
+        content_type="application/pdf",
+        file_name="a.pdf\r\nSet-Cookie: admin=1",
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert "\r" not in served.file_name
+    assert "\n" not in served.file_name
+    assert ":" not in served.file_name
+
+
+@pytest.mark.asyncio
+async def test_a_path_traversal_filename_is_flattened() -> None:
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.pdf",
+        content_type="application/pdf",
+        file_name="../../../etc/passwd",
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert "/" not in served.file_name
+    assert not served.file_name.startswith(".")
+
+
+@pytest.mark.asyncio
+async def test_a_filename_of_only_punctuation_still_yields_a_name() -> None:
+    doc = UserDocFile(
+        s3_key="users/x/documents/d.pdf",
+        content_type="application/pdf",
+        file_name="...",
+        user_id=uuid4(),
+    )
+    svc, _, _ = _service(user=_StubUserRepo(doc))
+
+    served = await svc.get_file(document_id=uuid4(), viewer=_ADMIN, source="personal")
+    assert served.file_name == "document"
