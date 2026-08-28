@@ -27,8 +27,11 @@ def hash_token(token: str) -> str:
 
 
 def build_verify_url(base_url: str, token: str) -> str:
-    """Compose the magic link the email carries. The frontend landing page reads
-    the token from the query string and POSTs it to /auth/verify/email (so the
-    token stays out of server logs). Shared by registration + resend."""
+    """Compose the magic link the email carries: base_url with ?token= appended.
+
+    The frontend landing page reads the token from the query string and POSTs it
+    to the service (so the token stays out of server logs). The base_url is what
+    decides which flow the link belongs to — registration and resend pass the
+    verification page, password reset (SCRUM-191) passes the reset page."""
     separator = "&" if "?" in base_url else "?"
     return f"{base_url}{separator}token={token}"

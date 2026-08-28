@@ -21,6 +21,7 @@ from app.dependencies import (
     get_current_user,
     get_delete_account_service,
     get_email_verification_service,
+    get_forgot_password_service,
     get_login_service,
     get_logout_service,
     get_nin_verification_service,
@@ -30,6 +31,7 @@ from app.dependencies import (
     get_profile_service,
     get_registration_service,
     get_resend_verification_service,
+    get_reset_password_service,
     get_seller_authority_service,
     get_seller_poa_status_service,
     get_set_password_service,
@@ -49,6 +51,8 @@ from app.schemas.auth import (
     EmailResendResponse,
     EmailVerifyRequest,
     EmailVerifyResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -64,6 +68,8 @@ from app.schemas.auth import (
     ProfileUpdateResponse,
     RegisterRequest,
     RegisterResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     SellerAuthorityRequest,
     SellerAuthorityResponse,
     SellerPoaStatusResponse,
@@ -120,6 +126,13 @@ from app.services.otp_verification import (
     OtpInvalidWithAttempts,
     OtpTooManyAttempts,
     OtpVerificationService,
+)
+from app.services.password_reset import (
+    ForgotPasswordService,
+    PasswordResetRateLimited,
+    ResetPasswordService,
+    ResetTokenExpired,
+    ResetTokenInvalid,
 )
 from app.services.poa import InvalidPoaDocument
 from app.services.poa_upload import (
@@ -380,6 +393,72 @@ async def otp_resend(
             "Too many verification codes for this number. Try again later.",
         )
     return OtpResendResponse()
+
+
+@router.post(
+    "/password/forgot",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ForgotPasswordResponse,
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    service: Annotated[ForgotPasswordService, Depends(get_forgot_password_service)],
+) -> ForgotPasswordResponse | JSONResponse:
+    """Start a password reset (SCRUM-191). Public — the caller cannot log in.
+
+    Answers with the same generic 202 whether or not the address has an
+    account; only a rate limit surfaces a different status. Do not add a
+    "no such account" branch here, and do not make the 202 conditional: the
+    response is the enumeration surface.
+    """
+    try:
+        await service.request(email=body.email)
+    except PasswordResetRateLimited:
+        return _error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "PASSWORD_RESET_RATE_LIMITED",
+            "Too many reset requests for this address. Try again later.",
+        )
+    return ForgotPasswordResponse()
+
+
+@router.post("/password/reset", response_model=ResetPasswordResponse)
+async def reset_password(
+    body: ResetPasswordRequest,
+    service: Annotated[ResetPasswordService, Depends(get_reset_password_service)],
+) -> ResetPasswordResponse | JSONResponse:
+    """Finish a password reset (SCRUM-191). The frontend reads the token from
+    the emailed link's query string and POSTs it here with the new password.
+
+    Deliberately issues no tokens — the user is sent to /login. This is also
+    the only way a phone-OTP-only account gets a first password without ever
+    logging in, which matters while SMS to Nigerian networks is unavailable
+    (CLAUDE.md §2).
+    """
+    try:
+        await service.reset(token=body.token, new_password=body.new_password)
+    except ResetTokenExpired:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "RESET_TOKEN_EXPIRED",
+            "This reset link has expired. Request a new one.",
+        )
+    except ResetTokenInvalid:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "RESET_TOKEN_INVALID",
+            "This reset link is invalid or has already been used.",
+        )
+    except WeakPassword:
+        return _error(
+            422,
+            "PASSWORD_TOO_WEAK",
+            "Password must be at least 8 characters and include an uppercase letter and a number.",
+        )
+    return ResetPasswordResponse(
+        message="Password reset. Please sign in with your new password.",
+        sessions_revoked=True,
+    )
 
 
 @router.post("/set-password", response_model=SetPasswordResponse)

@@ -108,6 +108,16 @@ class Settings(BaseSettings):
     # follow early.
     email_verification_base_url: str = "https://www.maihomme.com/verify-email"
 
+    # Password reset (SCRUM-191). Shares the email_verification_tokens table
+    # and the same sender; only the purpose, the window and the landing page
+    # differ. The window is half the verification one: a reset link is a live
+    # key to an account, whereas a verification link only confirms an address
+    # the holder already controls.
+    password_reset_expire_minutes: int = 15
+    # Frontend landing page for the reset link. Same reasoning as
+    # email_verification_base_url: point at the final URL, not a redirect.
+    password_reset_base_url: str = "https://www.maihomme.com/reset-password"
+
     # BVN verification (SCRUM-46). The fake verifier is default for local +
     # CI. bvn_pepper is the HMAC key for the deterministic bvn_lookup column
     # used for cross-account dedup — it is a server secret, NOT per-user,
