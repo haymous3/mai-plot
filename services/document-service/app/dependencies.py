@@ -118,8 +118,9 @@ def get_document_view_service(
 
 def get_admin_queue_service(
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    user_documents: Annotated[UserDocumentRepository, Depends(_user_document_repo)],
 ) -> AdminQueueService:
-    return AdminQueueService(documents=documents)
+    return AdminQueueService(documents=documents, user_documents=user_documents)
 
 
 def get_listing_document_list_service(
@@ -136,9 +137,10 @@ def get_seller_documents_service(
 
 def get_document_review_service(
     documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    user_documents: Annotated[UserDocumentRepository, Depends(_user_document_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
 ) -> DocumentReviewService:
-    return DocumentReviewService(documents=documents, audit=audit)
+    return DocumentReviewService(documents=documents, user_documents=user_documents, audit=audit)
 
 
 def _ocr_dispatcher(

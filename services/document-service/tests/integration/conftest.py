@@ -204,6 +204,49 @@ def seed_document(db_engine: Engine) -> Callable[..., UUID]:
 
 
 @pytest.fixture
+def seed_user_document(db_engine: Engine) -> Callable[..., UUID]:
+    """A personal document (My Documents, SCRUM-188) owned by a person.
+
+    Unlike seed_document there is no listing involved — that is the whole
+    reason user_documents exists.
+    """
+
+    def _seed(
+        *,
+        user_id: UUID,
+        category: str = "identity",
+        status: str = "pending",
+        file_name: str = "nin-slip.pdf",
+        deleted: bool = False,
+    ) -> UUID:
+        document_id = uuid4()
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO user_documents
+                        (id, user_id, category, file_name, size_bytes, content_type,
+                         s3_key, verification_status, deleted_at)
+                    VALUES (:id, :uid, :cat, :name, 2048, 'application/pdf',
+                            :s3, :status, CASE WHEN :deleted THEN NOW() ELSE NULL END)
+                    """
+                ),
+                {
+                    "id": document_id,
+                    "uid": user_id,
+                    "cat": category,
+                    "name": file_name,
+                    "s3": f"users/{user_id}/documents/{document_id}.pdf",
+                    "status": status,
+                    "deleted": deleted,
+                },
+            )
+        return document_id
+
+    return _seed
+
+
+@pytest.fixture
 def seed_offer(db_engine: Engine) -> Callable[..., None]:
     """Insert an offer (the access relationship that lets a buyer view docs)."""
 

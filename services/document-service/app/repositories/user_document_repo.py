@@ -28,6 +28,33 @@ class UserDocRow:
 
 
 @dataclass(frozen=True)
+class UserDocStatus:
+    """Owner + status of a personal document, for the admin review path."""
+
+    user_id: UUID
+    verification_status: str
+
+
+@dataclass(frozen=True)
+class UserDocQueueRow:
+    """One row of the admin review queue.
+
+    `owner_name` is a LEFT JOIN onto user_pii and is None when the owner has
+    no name on file — the reviewer then falls back to the user_id.
+    """
+
+    id: UUID
+    user_id: UUID
+    owner_name: str | None
+    category: str
+    file_name: str
+    size_bytes: int
+    content_type: str
+    verification_status: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class CategoryCount:
     category: str
     count: int
@@ -222,3 +249,102 @@ class UserDocumentRepository:
             )
         ).first()
         return updated is not None
+
+    # ------------------------------------------------------------------
+    # Admin review (SCRUM-192)
+    #
+    # The three methods below are the only ones NOT scoped to an owner: a
+    # reviewer acts on other people's documents by definition. Every one of
+    # them still filters `deleted_at IS NULL` — a document the owner has
+    # removed must not surface in a queue or be decidable afterwards.
+    # ------------------------------------------------------------------
+
+    async def list_queue(
+        self, *, status: str, page: int, page_size: int
+    ) -> tuple[list[UserDocQueueRow], int]:
+        """Personal documents in a given verification status, oldest-first (FIFO).
+
+        LEFT JOIN so a document whose owner has no `user_pii` row still
+        appears — an INNER JOIN would silently drop it from the queue, which
+        is the one place a document must never disappear from.
+        """
+        total = (
+            await self._session.execute(
+                text(
+                    "SELECT COUNT(*) FROM user_documents "
+                    "WHERE verification_status = :s AND deleted_at IS NULL"
+                ),
+                {"s": status},
+            )
+        ).scalar_one()
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT d.id, d.user_id, p.full_name AS owner_name, d.category,
+                           d.file_name, d.size_bytes, d.content_type,
+                           d.verification_status, d.created_at
+                    FROM user_documents d
+                    LEFT JOIN user_pii p ON p.user_id = d.user_id
+                    WHERE d.verification_status = :s AND d.deleted_at IS NULL
+                    ORDER BY d.created_at ASC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {"s": status, "limit": page_size, "offset": (page - 1) * page_size},
+            )
+        ).all()
+        items = [
+            UserDocQueueRow(
+                id=r.id,
+                user_id=r.user_id,
+                owner_name=r.owner_name,
+                category=r.category,
+                file_name=r.file_name,
+                size_bytes=r.size_bytes,
+                content_type=r.content_type,
+                verification_status=r.verification_status,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+        return items, int(total)
+
+    async def get_status(self, document_id: UUID) -> UserDocStatus | None:
+        """The owner + current verification status of a personal document, or None."""
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT user_id, verification_status FROM user_documents "
+                    "WHERE id = :id AND deleted_at IS NULL"
+                ),
+                {"id": document_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return UserDocStatus(user_id=row.user_id, verification_status=row.verification_status)
+
+    async def set_verification(
+        self,
+        document_id: UUID,
+        *,
+        status: str,
+        verified_by_user_id: UUID,
+        notes: str | None,
+    ) -> None:
+        """Apply an admin verification decision to a user_documents row.
+
+        Same signature as `DocumentRepository.set_verification` on purpose:
+        `DocumentReviewService` picks one repository or the other by source and
+        calls this identically for both.
+        """
+        await self._session.execute(
+            text(
+                "UPDATE user_documents "
+                "SET verification_status = :s, verified_by_user_id = :by, "
+                "    verification_notes = :notes, updated_at = NOW() "
+                "WHERE id = :id AND deleted_at IS NULL"
+            ),
+            {"s": status, "by": verified_by_user_id, "notes": notes, "id": document_id},
+        )
