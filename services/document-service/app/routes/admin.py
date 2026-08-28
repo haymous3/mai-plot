@@ -10,9 +10,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.dependencies import (
+    get_admin_document_file_service,
     get_admin_queue_service,
     get_document_review_service,
     require_admin,
@@ -24,6 +25,13 @@ from app.schemas.document import (
     DocSource,
 )
 from app.security import CurrentUser
+from app.services.admin_document_file import (
+    AdminDocumentFileService,
+    DocumentUnavailable,
+)
+from app.services.admin_document_file import (
+    DocumentNotFound as ReviewFileNotFound,
+)
 from app.services.admin_queue import AdminQueueService
 from app.services.document_review import (
     DocumentNotFound,
@@ -91,4 +99,57 @@ async def review_document(
         document_id=result.document_id,
         verification_status=result.verification_status,
         source=result.source,
+    )
+
+
+@router.get("/{document_id}/file")
+async def review_file(
+    document_id: UUID,
+    request: Request,
+    admin: Annotated[CurrentUser, Depends(require_admin)],
+    service: Annotated[AdminDocumentFileService, Depends(get_admin_document_file_service)],
+    source: DocSource = "listing",
+) -> Response:
+    """Stream a document to a reviewer, verified or not.
+
+    Deliberately separate from `GET /documents/{id}/view`, which serves only
+    VERIFIED documents to buyers and sellers. A reviewer must see the
+    unverified ones — that is the job — so the two audiences get two routes
+    rather than one route with a role branch inside its guard.
+    """
+    try:
+        doc = await service.get_file(
+            document_id=document_id,
+            viewer=admin,
+            source=source,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except ReviewFileNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND, "DOCUMENT_NOT_FOUND", "No document found with that id."
+        )
+    except DocumentUnavailable:
+        return _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "DOCUMENT_STORAGE_UNAVAILABLE",
+            "The document is temporarily unavailable. Please retry.",
+        )
+
+    return Response(
+        content=doc.content,
+        media_type=doc.content_type,
+        headers={
+            # inline so the admin UI can render it in an iframe/object rather
+            # than triggering a download the reviewer then has to clean off
+            # their disk. The filename is sanitised in the service.
+            "Content-Disposition": f'inline; filename="{doc.file_name}"',
+            # The service serves only pdf/jpeg/png and degrades anything else
+            # to octet-stream; nosniff stops the browser second-guessing that
+            # and rendering a disguised payload as active content on the admin
+            # origin. (A CSP sandbox header is deliberately NOT set here: the
+            # allowlist already makes active content unservable, and sandboxing
+            # risks the built-in PDF viewer the review UI relies on.)
+            "X-Content-Type-Options": "nosniff",
+        },
     )

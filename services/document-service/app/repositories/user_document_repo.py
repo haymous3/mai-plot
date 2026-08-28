@@ -36,6 +36,16 @@ class UserDocStatus:
 
 
 @dataclass(frozen=True)
+class UserDocFile:
+    """Everything needed to stream a personal document to a reviewer."""
+
+    s3_key: str
+    content_type: str
+    file_name: str
+    user_id: UUID
+
+
+@dataclass(frozen=True)
 class UserDocQueueRow:
     """One row of the admin review queue.
 
@@ -347,4 +357,32 @@ class UserDocumentRepository:
                 "WHERE id = :id AND deleted_at IS NULL"
             ),
             {"s": status, "by": verified_by_user_id, "notes": notes, "id": document_id},
+        )
+
+    async def get_for_review(self, document_id: UUID) -> UserDocFile | None:
+        """One live document by id, with NO owner scoping.
+
+        The only unscoped read in this repository. A reviewer has to open other
+        people's documents by definition, so the caller (the admin route) is
+        what gates this — `get_owned` remains the path for the owner.
+        """
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT s3_key, content_type, file_name, user_id
+                    FROM user_documents
+                    WHERE id = :id AND deleted_at IS NULL
+                    """
+                ),
+                {"id": document_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return UserDocFile(
+            s3_key=row.s3_key,
+            content_type=row.content_type,
+            file_name=row.file_name,
+            user_id=row.user_id,
         )
