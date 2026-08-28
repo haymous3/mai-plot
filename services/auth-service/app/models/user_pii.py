@@ -47,6 +47,10 @@ class UserPii(Base):
     # a 15-minute pre-signed URL (§4). A photo of a person is personal data, so
     # it belongs on this table rather than the cacheable `users` one.
     avatar_s3_key: Mapped[str | None] = mapped_column(String(512), default=None)
+    # The account holder's OWN location (SCRUM-193, migration 0013).
+    # Not to be confused with buyer_profiles.preferred_location, which is
+    # where a buyer wants to BUY — see that migration for why they differ.
+    location: Mapped[str | None] = mapped_column(String(120), default=None)
     bvn_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     # Deterministic HMAC-SHA256(bvn, pepper) for cross-account dedup; unique.
     # bvn_hash (bcrypt) verifies, bvn_lookup (HMAC) is the queryable key.

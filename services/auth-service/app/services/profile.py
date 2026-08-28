@@ -2,8 +2,8 @@
 
 The onboarding wizard's "Personal details" screen collects a full name
 (required) and an optional email once the user is OTP-verified. This writes
-them to the caller's own rows via UserRepository — full_name to user_pii, email
-to users. Non-§11: a user's self-service profile edit, not a schema migration or
+them to the caller's own rows via UserRepository — full_name and location to
+user_pii, email to users. Non-§11: a user's self-service profile edit, not a schema migration or
 a financial override. Email is unique, so a collision with another account maps
 to a clean 409 rather than a 500 (pre-check mirrors the phone/BVN convention).
 """
@@ -27,7 +27,15 @@ class ProfileService:
     def __init__(self, *, users: UserRepository) -> None:
         self._users = users
 
-    async def update(self, *, user_id: UUID, full_name: str, email: str | None) -> None:
+    async def update(
+        self,
+        *,
+        user_id: UUID,
+        full_name: str,
+        email: str | None,
+        location: str | None = None,
+        set_location: bool = False,
+    ) -> None:
         name = full_name.strip()
         if not name:
             raise InvalidFullName
@@ -36,4 +44,13 @@ class ProfileService:
             normalised_email, user_id=user_id
         ):
             raise EmailAlreadyInUse
-        await self._users.update_profile(user_id, full_name=name, email=normalised_email)
+        # A whitespace-only location is a cleared one, not a stored blank —
+        # "not said" has to stay distinguishable from "said nothing".
+        normalised_location = location.strip() if location and location.strip() else None
+        await self._users.update_profile(
+            user_id,
+            full_name=name,
+            email=normalised_email,
+            location=normalised_location,
+            set_location=set_location,
+        )

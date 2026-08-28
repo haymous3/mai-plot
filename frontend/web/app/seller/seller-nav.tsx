@@ -66,7 +66,14 @@ export function SellerNav() {
 
       {/* Settings + Logout pinned to the bottom behind a top rule — node 276:421. */}
       <div className="flex flex-none flex-col gap-2 border-t border-line px-4 py-4">
-        <Link href="/seller/settings" className={itemClass(false)}>
+        {/*
+          `/settings`, not `/seller/settings` — the latter never existed and
+          this link 404'd from SCRUM-98 until SCRUM-193. Settings is one screen
+          for every role: it replaces the app chrome with its own bar (which is
+          what the seller export draws, sidebar absent) and its back arrow
+          returns to roleHome(), so a seller lands back on /seller.
+        */}
+        <Link href="/settings" className={itemClass(false)}>
           <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center">
             ⚙
           </span>

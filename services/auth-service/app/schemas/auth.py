@@ -276,6 +276,9 @@ class AccountResponse(BaseModel):
     # browser anyway. Expect it to expire — re-read /auth/me for a fresh one
     # rather than caching it.
     avatar_url: str | None
+    # The account holder's OWN location, for every role (SCRUM-193). Distinct
+    # from preferred_location below, which is where a BUYER wants to buy.
+    location: str | None
     # Buyer-only; null for other roles and for buyers who skipped the step.
     employment_status: str | None
     preferred_location: str | None
@@ -335,6 +338,12 @@ class ProfileUpdateRequest(BaseModel):
     # add it later). Blank-after-strip full_name is rejected in ProfileService.
     full_name: str = Field(min_length=1, max_length=120)
     email: str | None = Field(default=None, max_length=254)
+    # SCRUM-193. Tri-state on purpose, and NOT the same convention as `email`:
+    # omitted leaves the stored value alone, while an explicit null or blank
+    # CLEARS it. Without that distinction a location could never be removed
+    # once set. The route tells the two apart with pydantic's `model_fields_set`
+    # rather than a sentinel default, so the annotation stays honest.
+    location: str | None = Field(default=None, max_length=120)
 
 
 class ProfileUpdateResponse(BaseModel):
