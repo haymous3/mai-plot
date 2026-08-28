@@ -5,6 +5,14 @@ information: a registered address and an unregistered one must produce
 byte-identical bodies and the same status. Several tests here exist only to
 hold that line, because the natural way to write the endpoint — a 404 for an
 unknown address — is an account-enumeration oracle.
+
+Every test that calls `/auth/register` takes `disable_rate_limit` as well as
+`disable_reset_rate_limit`: the two flows use separate limiter dependencies, so
+overriding one leaves the other talking to the real Redis. The memoised Redis
+client outlives a test's event loop, and the next test to reach it dies with
+"Event loop is closed" — a CI-only failure, because a local Redis that is simply
+absent makes the limiter fail open instead. Same convention as every other
+integration test that registers.
 """
 
 from __future__ import annotations
@@ -58,6 +66,7 @@ async def _reset_link_token(
 @pytest.mark.asyncio
 async def test_forgot_sends_a_reset_link_for_a_known_address(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -86,6 +95,7 @@ async def test_forgot_sends_a_reset_link_for_a_known_address(
 @pytest.mark.asyncio
 async def test_forgot_response_is_identical_for_known_and_unknown_addresses(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -105,6 +115,7 @@ async def test_forgot_response_is_identical_for_known_and_unknown_addresses(
 @pytest.mark.asyncio
 async def test_forgot_supersedes_an_earlier_unused_link(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -213,6 +224,7 @@ async def test_reset_revokes_every_existing_session(
 @pytest.mark.asyncio
 async def test_reset_token_is_single_use(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -246,6 +258,7 @@ async def test_reset_token_is_single_use(
 @pytest.mark.asyncio
 async def test_a_reset_token_cannot_be_spent_at_verify_email(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -271,6 +284,7 @@ async def test_a_reset_token_cannot_be_spent_at_verify_email(
 @pytest.mark.asyncio
 async def test_a_verification_token_cannot_be_spent_at_password_reset(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
@@ -304,6 +318,7 @@ async def test_reset_with_an_unknown_token_returns_401(
 @pytest.mark.asyncio
 async def test_reset_with_a_weak_password_returns_422_and_keeps_the_link_alive(
     clean_auth_tables: None,
+    disable_rate_limit: None,
     disable_reset_rate_limit: None,
     email_verification_fake: InMemoryEmailClient,
     http_client: AsyncClient,
