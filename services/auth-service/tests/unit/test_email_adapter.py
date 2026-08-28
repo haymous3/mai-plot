@@ -1,4 +1,4 @@
-"""Verification-email adapter: fake, ResendClient, factory (SCRUM-152)."""
+"""Transactional-email adapter: fake, ResendClient, factory (SCRUM-152/191)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,14 @@ import pytest
 from app.adapters.email_verification import (
     EmailDeliveryError,
     InMemoryEmailClient,
+    PasswordResetEmail,
     ResendClient,
     VerificationEmail,
     build_email_verification_client,
 )
 
 _URL = "https://app.maihomme.com/verify-email?token=abc123"
+_RESET_URL = "https://www.maihomme.com/reset-password?token=xyz789"
 
 
 @pytest.mark.asyncio
@@ -136,3 +138,78 @@ def test_factory_rejects_unknown_provider() -> None:
             from_address="no@maihomme.com",
             timeout_seconds=1.0,
         )
+
+
+# --- password-reset template (SCRUM-191) ---
+
+
+@pytest.mark.asyncio
+async def test_in_memory_keeps_resets_apart_from_verifications() -> None:
+    """A test asserting "a reset was sent" must not pass on a verification."""
+    client = InMemoryEmailClient()
+    await client.send_verification(VerificationEmail(to="a@example.com", verify_url=_URL))
+    await client.send_password_reset(PasswordResetEmail(to="a@example.com", reset_url=_RESET_URL))
+
+    assert len(client.sent) == 1
+    assert len(client.sent_password_resets) == 1
+    assert client.sent_password_resets[0].reset_url == _RESET_URL
+
+
+@pytest.mark.asyncio
+async def test_in_memory_reset_honours_fail_next() -> None:
+    client = InMemoryEmailClient(fail_next=True)
+    with pytest.raises(EmailDeliveryError):
+        await client.send_password_reset(
+            PasswordResetEmail(to="a@example.com", reset_url=_RESET_URL)
+        )
+    assert client.fail_next is False
+    assert client.sent_password_resets == []
+
+
+@pytest.mark.asyncio
+async def test_resend_client_sends_reset_with_its_own_subject_and_link() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "email_2"})
+
+    client = ResendClient(api_key="re_key", from_address="Maihomme <no@maihomme.com>")
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.resend.com"
+    )
+    try:
+        await client.send_password_reset(
+            PasswordResetEmail(to="buyer@example.com", reset_url=_RESET_URL)
+        )
+    finally:
+        await client.aclose()
+
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    assert payload["to"] == ["buyer@example.com"]
+    # Distinct copy from the verification mail — not the "Verify your ..." subject.
+    assert payload["subject"] == "Reset your Maihomme password"
+    assert "verify" not in str(payload["subject"]).lower()
+    assert _RESET_URL in payload["html"]
+    assert _RESET_URL in payload["text"]
+    # Reassures a recipient who did not ask for this that nothing has changed.
+    assert "not been changed" in payload["text"]
+
+
+@pytest.mark.asyncio
+async def test_resend_client_raises_on_4xx_for_reset() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"message": "invalid"})
+
+    client = ResendClient(api_key="re_key", from_address="no@maihomme.com")
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.resend.com"
+    )
+    try:
+        with pytest.raises(EmailDeliveryError):
+            await client.send_password_reset(
+                PasswordResetEmail(to="buyer@example.com", reset_url=_RESET_URL)
+            )
+    finally:
+        await client.aclose()

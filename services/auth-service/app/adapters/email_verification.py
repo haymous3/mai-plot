@@ -16,8 +16,12 @@ provider (product owner accepted the residency trade-off), but the
 factory below is the single seam where an SesClient slots in later —
 flip `email_provider` in settings, no call-site changes.
 
-The verification email is a fixed template, so this adapter owns the
-subject/body — call sites pass only the recipient and the link.
+Each email is a fixed template, so this adapter owns every subject/body —
+call sites pass only the recipient and the link. Two templates live here:
+account verification (SCRUM-152) and password reset (SCRUM-191). They are
+separate methods rather than one `send(subject, body)` so a call site cannot
+send the wrong copy, and so the in-memory fake can assert which KIND of mail
+a flow sent.
 """
 
 from __future__ import annotations
@@ -62,6 +66,45 @@ class VerificationEmail:
     verify_url: str
 
 
+_RESET_SUBJECT = "Reset your Maihomme password"
+
+
+def _render_reset_bodies(reset_url: str) -> tuple[str, str]:
+    """Return (html_body, text_body) for a password-reset email.
+
+    The copy must state that an unrequested reset is harmless and changes
+    nothing - this mail is the one an attacker can trigger for someone else's
+    address, so it should never read as an alarm or imply an account change
+    has already happened.
+    """
+    text_body = (
+        "We received a request to reset your Maihomme password.\n\n"
+        "Choose a new password here:\n"
+        f"{reset_url}\n\n"
+        "The link expires shortly and can only be used once. "
+        "If you did not request this, you can ignore this email - "
+        "your password has not been changed."
+    )
+    html_body = (
+        "<p>We received a request to reset your Maihomme password.</p>"
+        "<p>Choose a new password by clicking the button below:</p>"
+        f'<p><a href="{reset_url}" '
+        'style="background:#0b7a4b;color:#fff;padding:12px 20px;'
+        'border-radius:6px;text-decoration:none">Reset password</a></p>'
+        f'<p>Or paste this link into your browser:<br><a href="{reset_url}">{reset_url}</a></p>'
+        "<p>The link expires shortly and can only be used once. "
+        "If you did not request this, you can ignore this email - "
+        "your password has not been changed.</p>"
+    )
+    return html_body, text_body
+
+
+@dataclass(frozen=True)
+class PasswordResetEmail:
+    to: str
+    reset_url: str
+
+
 class EmailDeliveryError(RuntimeError):
     """Raised when the provider rejects or fails to accept the message."""
 
@@ -69,6 +112,11 @@ class EmailDeliveryError(RuntimeError):
 class EmailVerificationSender(Protocol):
     async def send_verification(
         self, email: VerificationEmail
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def send_password_reset(
+        self, email: PasswordResetEmail
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -82,6 +130,7 @@ class InMemoryEmailClient:
     """
 
     sent: list[VerificationEmail] = field(default_factory=list)
+    sent_password_resets: list[PasswordResetEmail] = field(default_factory=list)
     fail_next: bool = False
 
     async def send_verification(self, email: VerificationEmail) -> None:
@@ -89,6 +138,14 @@ class InMemoryEmailClient:
             self.fail_next = False
             raise EmailDeliveryError("simulated email delivery failure")
         self.sent.append(email)
+
+    async def send_password_reset(self, email: PasswordResetEmail) -> None:
+        # Kept in its own list so a test asserting "a reset was sent" cannot
+        # be satisfied by a verification email, and vice versa.
+        if self.fail_next:
+            self.fail_next = False
+            raise EmailDeliveryError("simulated email delivery failure")
+        self.sent_password_resets.append(email)
 
 
 class ResendClient:
@@ -110,12 +167,27 @@ class ResendClient:
 
     async def send_verification(self, email: VerificationEmail) -> None:
         html_body, text_body = _render_bodies(email.verify_url)
+        await self._send(
+            to=email.to, subject=_SUBJECT, html=html_body, text=text_body, kind="verification"
+        )
+
+    async def send_password_reset(self, email: PasswordResetEmail) -> None:
+        html_body, text_body = _render_reset_bodies(email.reset_url)
+        await self._send(
+            to=email.to,
+            subject=_RESET_SUBJECT,
+            html=html_body,
+            text=text_body,
+            kind="password_reset",
+        )
+
+    async def _send(self, *, to: str, subject: str, html: str, text: str, kind: str) -> None:
         payload = {
             "from": self._from_address,
-            "to": [email.to],
-            "subject": _SUBJECT,
-            "html": html_body,
-            "text": text_body,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+            "text": text,
         }
         started = time.perf_counter()
         try:
@@ -125,7 +197,7 @@ class ResendClient:
             # Only the domain part is logged — never the full recipient address.
             logger.error(
                 "resend.send.failed",
-                extra={"to_domain": _domain(email.to), "duration_ms": duration_ms},
+                extra={"to_domain": _domain(to), "kind": kind, "duration_ms": duration_ms},
             )
             raise EmailDeliveryError(str(exc)) from exc
 
@@ -133,7 +205,8 @@ class ResendClient:
         logger.info(
             "resend.send.ok",
             extra={
-                "to_domain": _domain(email.to),
+                "to_domain": _domain(to),
+                "kind": kind,
                 "status_code": response.status_code,
                 "duration_ms": duration_ms,
             },
