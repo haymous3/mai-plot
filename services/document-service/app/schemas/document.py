@@ -125,13 +125,40 @@ class UserDocumentDeleteResponse(BaseModel):
 
 ReviewAction = Literal["verify", "reject"]
 
+# Which table a reviewed document lives in. Defaults to "listing" everywhere so
+# the endpoints behave exactly as they did before SCRUM-192 for existing callers.
+DocSource = Literal["listing", "personal"]
+
 
 class DocQueueItem(BaseModel):
+    """One row of the admin review queue, from EITHER document table.
+
+    `source` is the discriminator; the fields below it are populated for one
+    source and None for the other. They are optional rather than split across
+    two models because the reviewer works one queue, and a union response
+    model would push the branch into every consumer.
+
+    ⚠️ `listing_id` and `document_type` used to be required. Widening them to
+    optional is safe only because nothing consumed this endpoint — it shipped
+    in SCRUM-23 and never got a UI (SCRUM-192 builds the first one).
+    """
+
     id: UUID
-    listing_id: UUID
-    document_type: str
+    source: DocSource
     verification_status: str
     created_at: datetime
+
+    # Listing documents only.
+    listing_id: UUID | None = None
+    document_type: str | None = None
+
+    # Personal documents only. `owner_name` is None when the owner has no
+    # name on file; the UI falls back to the id.
+    user_id: UUID | None = None
+    owner_name: str | None = None
+    category: str | None = None
+    file_name: str | None = None
+    size_bytes: int | None = None
 
 
 class Pagination(BaseModel):
@@ -150,6 +177,9 @@ class DocReviewRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     action: ReviewAction
+    # Which table the document id refers to. Defaults to the pre-SCRUM-192
+    # behaviour so an existing caller needs no change.
+    source: DocSource = "listing"
     # Required for reject (enforced in the service for a specific code).
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -157,3 +187,4 @@ class DocReviewRequest(BaseModel):
 class DocReviewResponse(BaseModel):
     document_id: UUID
     verification_status: str
+    source: DocSource = "listing"

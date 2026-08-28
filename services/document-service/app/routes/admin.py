@@ -17,7 +17,12 @@ from app.dependencies import (
     get_document_review_service,
     require_admin,
 )
-from app.schemas.document import DocQueueResponse, DocReviewRequest, DocReviewResponse
+from app.schemas.document import (
+    DocQueueResponse,
+    DocReviewRequest,
+    DocReviewResponse,
+    DocSource,
+)
 from app.security import CurrentUser
 from app.services.admin_queue import AdminQueueService
 from app.services.document_review import (
@@ -42,10 +47,13 @@ async def review_queue(
     admin: Annotated[CurrentUser, Depends(require_admin)],
     service: Annotated[AdminQueueService, Depends(get_admin_queue_service)],
     verification_status: Annotated[str, Query(alias="status")] = "pending",
+    source: DocSource = "listing",
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> DocQueueResponse:
-    return await service.list_queue(status=verification_status, page=page, page_size=page_size)
+    return await service.list_queue(
+        source=source, status=verification_status, page=page, page_size=page_size
+    )
 
 
 @router.post("/{document_id}/review", response_model=DocReviewResponse)
@@ -62,6 +70,7 @@ async def review_document(
             admin=admin,
             action=body.action,
             notes=body.notes,
+            source=body.source,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
@@ -70,10 +79,16 @@ async def review_document(
             status.HTTP_404_NOT_FOUND, "DOCUMENT_NOT_FOUND", "No document found with that id."
         )
     except DocumentNotPending:
-        return _error(422, "DOCUMENT_NOT_PENDING", "Only a pending document can be reviewed.")
+        return _error(
+            422,
+            "DOCUMENT_NOT_PENDING",
+            "Only a pending or under-review document can be reviewed.",
+        )
     except NotesRequired:
         return _error(422, "NOTES_REQUIRED_FOR_REJECTION", "A rejection must include notes.")
 
     return DocReviewResponse(
-        document_id=result.document_id, verification_status=result.verification_status
+        document_id=result.document_id,
+        verification_status=result.verification_status,
+        source=result.source,
     )
