@@ -29,6 +29,26 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _normalise_base_url(raw: str) -> str:
+    """Accept a bare `host:port` as well as a full URL.
+
+    Render addresses private services as `<name>-<suffix>:8000` and exposes
+    that through `fromService: { property: hostport }` — which yields
+    "host:port" with NO scheme, and Blueprint syntax gives us no way to
+    prepend one. httpx rejects a scheme-less URL outright, so without this the
+    deal check would fail every time, the guard would fail CLOSED, and every
+    account deletion would answer 503.
+
+    Defaults to http:// because this is an internal, private-network call —
+    the same scheme Kong uses to reach these services. A value that already
+    carries a scheme is left alone.
+    """
+    trimmed = raw.strip().rstrip("/")
+    if "://" not in trimmed:
+        return f"http://{trimmed}"
+    return trimmed
+
+
 class DealCheckUnavailable(RuntimeError):
     """transaction-service could not be consulted. Callers MUST NOT treat this
     as "no active deals" — it means "unknown"."""
@@ -44,7 +64,7 @@ class HttpDealChecker:
     and waiting is better than a wrong answer but not by much."""
 
     def __init__(self, *, base_url: str, timeout_seconds: float = 5.0) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _normalise_base_url(base_url)
         self._timeout = timeout_seconds
 
     async def has_active_deals(self, *, bearer_token: str) -> bool:
