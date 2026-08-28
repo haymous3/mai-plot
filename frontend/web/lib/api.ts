@@ -319,6 +319,40 @@ export interface AdminQueueResponse {
 
 export type AuthorityFilter = 'owner' | 'power_of_attorney';
 
+/** Which table an admin-reviewed document lives in (SCRUM-192).
+ * `listing` = a seller's legal paperwork for a property (listing_documents).
+ * `personal` = a person's own My Documents upload (user_documents). */
+export type DocSource = 'listing' | 'personal';
+
+/** The statuses a document can be reviewed FROM. `under_review` is where the
+ * OCR pipeline parks a document it could not read — those need a human most,
+ * so the queue has to surface them. */
+export type DocReviewableStatus = 'pending' | 'under_review';
+
+/** A row in the admin document review queue (GET /admin/documents/queue).
+ * The fields below `source` are populated for one source and null for the
+ * other — the endpoint serves both tables. */
+export interface DocQueueItem {
+  id: string;
+  source: DocSource;
+  verification_status: string;
+  created_at: string;
+  // listing documents only
+  listing_id: string | null;
+  document_type: string | null;
+  // personal documents only
+  user_id: string | null;
+  owner_name: string | null;
+  category: string | null;
+  file_name: string | null;
+  size_bytes: number | null;
+}
+
+export interface DocQueueResponse {
+  data: DocQueueItem[];
+  pagination: Pagination;
+}
+
 /** A row in the legal-team PoA review queue (GET /admin/poa/queue). */
 export interface PoaQueueItem {
   user_id: string;
