@@ -20,6 +20,7 @@ from app.repositories.loan_repo import LoanRepository
 from app.repositories.user_document_repo import UserDocumentRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_document_file import AdminDocumentFileService
 from app.services.admin_queue import AdminQueueService
 from app.services.document_review import DocumentReviewService
 from app.services.document_upload import DocumentUploadService
@@ -121,6 +122,20 @@ def get_admin_queue_service(
     user_documents: Annotated[UserDocumentRepository, Depends(_user_document_repo)],
 ) -> AdminQueueService:
     return AdminQueueService(documents=documents, user_documents=user_documents)
+
+
+def get_admin_document_file_service(
+    documents: Annotated[DocumentRepository, Depends(_document_repo)],
+    user_documents: Annotated[UserDocumentRepository, Depends(_user_document_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    storage: DocumentStorageDep,
+) -> AdminDocumentFileService:
+    return AdminDocumentFileService(
+        documents=documents,
+        user_documents=user_documents,
+        audit=audit,
+        storage=storage,
+    )
 
 
 def get_listing_document_list_service(
