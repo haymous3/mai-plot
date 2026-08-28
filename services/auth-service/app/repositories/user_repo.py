@@ -48,6 +48,7 @@ class UserAccount:
     # The private-bucket KEY, not a URL. The route mints a short-lived
     # pre-signed URL from it; the key itself never reaches the client.
     avatar_s3_key: str | None
+    location: str | None
 
 
 @dataclass(frozen=True)
@@ -149,6 +150,7 @@ class UserRepository:
                 UserPii.bvn_hash.is_not(None).label("bvn_verified"),
                 UserPii.nin_hash.is_not(None).label("nin_verified"),
                 UserPii.avatar_s3_key,
+                UserPii.location,
             )
             .join(UserPii, UserPii.user_id == User.id)
             .where(
@@ -173,6 +175,7 @@ class UserRepository:
             bvn_verified=row.bvn_verified,
             nin_verified=row.nin_verified,
             avatar_s3_key=row.avatar_s3_key,
+            location=row.location,
         )
 
     async def set_avatar_key(self, user_id: UUID, *, key: str | None) -> tuple[bool, str | None]:
@@ -321,13 +324,29 @@ class UserRepository:
         )
         return (await self._session.execute(stmt)).first() is not None
 
-    async def update_profile(self, user_id: UUID, *, full_name: str, email: str | None) -> None:
+    async def update_profile(
+        self,
+        user_id: UUID,
+        *,
+        full_name: str,
+        email: str | None,
+        location: str | None = None,
+        set_location: bool = False,
+    ) -> None:
         """Set the caller's display name (user_pii) and, when supplied, email
         (users). Only touches the caller's own rows; email is left unchanged
-        when None so a re-submit without email does not clear an existing one."""
+        when None so a re-submit without email does not clear an existing one.
+
+        `location` follows a different rule from `email` on purpose: it is
+        writable to NULL. `set_location` says "the caller sent this field", so
+        clearing a location is expressible, while a caller that omits it
+        entirely leaves the stored value alone. Reusing the email convention
+        would have made a location impossible to remove once set."""
         pii = await self._session.get(UserPii, user_id)
         if pii is not None:
             pii.full_name = full_name
+            if set_location:
+                pii.location = location
         if email is not None:
             user = await self._session.get(User, user_id)
             if user is not None:

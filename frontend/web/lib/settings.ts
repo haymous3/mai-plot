@@ -23,6 +23,12 @@ export type Account = {
    * /auth/me for a fresh one rather than caching it anywhere.
    */
   avatar_url: string | null;
+  /**
+   * The account holder's OWN location (SCRUM-193, `user_pii.location`). Every
+   * role has one. Do not confuse it with `preferred_location` below, which is
+   * buyer-only and means where they want to BUY.
+   */
+  location: string | null;
   /** Buyer-only; null for other roles and for buyers who skipped the step. */
   employment_status: string | null;
   preferred_location: string | null;

@@ -255,17 +255,33 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
   );
 }
 
+/**
+ * Where the Settings "Location" box reads and writes, which is NOT the same
+ * column for every role (SCRUM-193).
+ *
+ *  - buyer  -> `buyer_profiles.preferred_location`, i.e. where they want to BUY
+ *  - others -> `user_pii.location`, i.e. where the account holder IS
+ *
+ * Those are genuinely different questions — a seller can live in Abuja and be
+ * selling in Lagos — so migration 0013 added a second column rather than
+ * widening the first. The buyer path is left exactly as SCRUM-188 built it;
+ * unifying the two behind one meaning would move existing buyers' data and
+ * wants its own ticket.
+ */
+function storedLocation(account: Account): string {
+  return (account.role === 'buyer' ? account.preferred_location : account.location) ?? '';
+}
+
 export function ProfileTab({ account }: { account: Account }) {
   const [fullName, setFullName] = useState(account.full_name ?? '');
-  const [location, setLocation] = useState(account.preferred_location ?? '');
+  const [location, setLocation] = useState(storedLocation(account));
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{
     tone: 'ok' | 'error';
     text: string;
   } | null>(null);
 
-  const dirty =
-    fullName !== (account.full_name ?? '') || location !== (account.preferred_location ?? '');
+  const dirty = fullName !== (account.full_name ?? '') || location !== storedLocation(account);
 
   async function save() {
     setBusy(true);
@@ -274,7 +290,14 @@ export function ProfileTab({ account }: { account: Account }) {
       const profile = await fetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName.trim() }),
+        // `location` is sent for every role, but only means anything for the
+        // non-buyer ones — a buyer's box is saved to buyer_profiles below.
+        // Sending null rather than omitting it lets a location be CLEARED;
+        // the endpoint distinguishes "sent null" from "not sent".
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          ...(account.role === 'buyer' ? {} : { location: location.trim() || null }),
+        }),
       });
       if (!profile.ok) {
         const b = (await profile.json().catch(() => ({}))) as {
@@ -290,7 +313,7 @@ export function ProfileTab({ account }: { account: Account }) {
         return;
       }
 
-      // Location lives on buyer_profile, so only buyers have somewhere to put it.
+      // A buyer's box means "where I want to buy" and lives on buyer_profile.
       if (account.role === 'buyer') {
         const buyer = await fetch('/api/auth/buyer/profile', {
           method: 'POST',
@@ -357,17 +380,15 @@ export function ProfileTab({ account }: { account: Account }) {
           <TextInput id="phone" value={account.phone} icon={<PhoneIcon />} />
         </Field>
 
-        {account.role === 'buyer' && (
-          <Field id="location" label="Location">
-            <TextInput
-              id="location"
-              value={location}
-              onChange={setLocation}
-              placeholder="Lagos, Nigeria"
-              icon={<PinIcon />}
-            />
-          </Field>
-        )}
+        <Field id="location" label="Location">
+          <TextInput
+            id="location"
+            value={location}
+            onChange={setLocation}
+            placeholder="Lagos, Nigeria"
+            icon={<PinIcon />}
+          />
+        </Field>
       </div>
 
       {note && <StatusNote tone={note.tone}>{note.text}</StatusNote>}
@@ -376,7 +397,7 @@ export function ProfileTab({ account }: { account: Account }) {
         <GhostButton
           onClick={() => {
             setFullName(account.full_name ?? '');
-            setLocation(account.preferred_location ?? '');
+            setLocation(storedLocation(account));
             setNote(null);
           }}
         >

@@ -517,6 +517,7 @@ async def get_me(
             # a storage concern, and it keeps the account read free of any
             # S3 dependency.
             "avatar_url": avatars.presigned_url(account.avatar_s3_key),
+            "location": account.location,
             "employment_status": account.employment_status,
             "preferred_location": account.preferred_location,
             "budget_kobo": account.budget_kobo,
@@ -583,12 +584,20 @@ async def update_profile(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     service: Annotated[ProfileService, Depends(get_profile_service)],
 ) -> ProfileUpdateResponse | JSONResponse:
-    """Save the caller's personal details (full name + optional email) from the
-    onboarding "Personal details" screen (SCRUM-132). Authed by the access token
-    issued at /auth/otp/verify."""
+    """Save the caller's personal details (full name, optional email, optional
+    location) from the onboarding "Personal details" screen (SCRUM-132) and from
+    Settings -> Profile (SCRUM-188/193). Authed by the access token issued at
+    /auth/otp/verify."""
     try:
         await service.update(
-            user_id=current_user.user_id, full_name=body.full_name, email=body.email
+            user_id=current_user.user_id,
+            full_name=body.full_name,
+            email=body.email,
+            location=body.location,
+            # "Did the caller send this field?" — an omitted location leaves the
+            # stored one alone, an explicit null clears it. Only pydantic can
+            # tell those apart, and only here, before the value is passed on.
+            set_location="location" in body.model_fields_set,
         )
     except InvalidFullName:
         return _error(422, "FULL_NAME_REQUIRED", "Please enter your full name.")
