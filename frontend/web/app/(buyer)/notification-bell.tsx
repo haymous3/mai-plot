@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
 interface NotificationItem {
@@ -111,6 +112,18 @@ export function NotificationBell() {
               ))
             )}
           </ul>
+          {/*
+            The bell shows the newest 8 and nothing more. Until SCRUM-196 there
+            was no way to see the rest — this is the way out to the full inbox,
+            with its category tabs and search.
+          */}
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-ink-300/20 px-4 py-3 text-center text-xs font-medium text-emerald-deep transition hover:bg-emerald-deep/5"
+          >
+            View all notifications
+          </Link>
         </div>
       )}
     </div>
