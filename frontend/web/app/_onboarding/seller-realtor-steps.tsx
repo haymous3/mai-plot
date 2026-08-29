@@ -19,7 +19,18 @@ import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
  * controls and CTAs all 68px.
  */
 
-const ACCEPT = 'application/pdf,image/png,image/jpeg';
+/**
+ * The two uploads on these screens have DIFFERENT server rules, so they get
+ * different accept lists (SCRUM-199). One shared constant was letting a seller
+ * pick a PNG that auth-service always rejected.
+ *
+ *   PoA         auth-service `poa.detect_document_type()` — PDF or JPEG only
+ *   credentials realtor-service `credentials.py`          — PDF, JPEG or PNG
+ *
+ * Both cap at 10MB (`poa_max_upload_bytes`, `gov_id_max_upload_bytes`).
+ */
+const POA_ACCEPT = 'application/pdf,image/jpeg';
+const CREDENTIAL_ACCEPT = 'application/pdf,image/png,image/jpeg';
 const MAX_BYTES = 5 * 1024 * 1024;
 
 /**
@@ -161,8 +172,8 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
               file={file}
               onFile={setFile}
               title="Upload document"
-              subtitle="PDF, PNG, or JPG (max 5MB)"
-              accept={ACCEPT}
+              subtitle="PDF or JPG (max 10MB)"
+              accept={POA_ACCEPT}
               disabled={busy}
             />
           </div>
@@ -264,8 +275,8 @@ export function RealtorProfileStep({ onDone }: { onDone: () => void | Promise<vo
             file={file}
             onFile={setFile}
             title="Upload credentials"
-            subtitle="License, certification, or registration"
-            accept={ACCEPT}
+            subtitle="PDF, PNG, or JPG (max 10MB)"
+            accept={CREDENTIAL_ACCEPT}
             disabled={busy}
           />
         </div>
