@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -84,11 +85,57 @@ def _detail(
     )
 
 
+class _StubTransactions:
+    """Just enough of TransactionRepository for the seller lookup (SCRUM-195)."""
+
+    def __init__(self, seller_id: UUID | None = None, *, raises: bool = False) -> None:
+        self.seller_id = seller_id or uuid4()
+        self._raises = raises
+
+    async def get_status(self, transaction_id: UUID) -> object | None:
+        if self._raises:
+            raise RuntimeError("db down")
+        if self.seller_id is None:
+            return None
+        return SimpleNamespace(
+            stage="payment_held",
+            buyer_id=uuid4(),
+            seller_id=self.seller_id,
+            listing_id=uuid4(),
+            agreed_price_kobo=_AMOUNT,
+            platform_fee_kobo=None,
+        )
+
+
+class _StubSellers:
+    def __init__(self, *, raises: bool = False) -> None:
+        self.calls: list[dict[str, object]] = []
+        self._raises = raises
+
+    async def offer_received(self, **kwargs: object) -> None:
+        return None
+
+    async def deposit_confirmed(
+        self, *, seller_id: UUID, transaction_id: UUID, amount_kobo: int
+    ) -> None:
+        if self._raises:
+            raise RuntimeError("broker down")
+        self.calls.append(
+            {
+                "seller_id": seller_id,
+                "transaction_id": transaction_id,
+                "amount_kobo": amount_kobo,
+            }
+        )
+
+
 def _service(
     payments: _StubPayments,
     escrow: _StubEscrow,
     receipts: _StubReceipts | None = None,
     audit: _StubAudit | None = None,
+    transactions: _StubTransactions | None = None,
+    sellers: _StubSellers | None = None,
 ) -> PaystackWebhookService:
     return PaystackWebhookService(
         payments=payments,  # type: ignore[arg-type]
@@ -96,6 +143,8 @@ def _service(
         receipts=receipts or _StubReceipts(),
         audit=audit or _StubAudit(),  # type: ignore[arg-type]
         secret=_SECRET,
+        transactions=transactions,  # type: ignore[arg-type]
+        sellers=sellers,
     )
 
 
@@ -284,3 +333,116 @@ async def test_transfer_event_non_uuid_reference_ignored() -> None:
         {"event": "transfer.success", "data": {"reference": "not-a-uuid"}}
     )
     assert outcome == WebhookOutcome.ignored
+
+
+# --------------------------------------------------------------------------
+# SCRUM-195 — the seller is told once escrow is actually funded
+# --------------------------------------------------------------------------
+
+
+async def test_seller_is_notified_after_a_deposit_is_credited() -> None:
+    pe = uuid4()
+    detail = _detail(pe_id=pe)
+    payments, escrow = _StubPayments(detail), _StubEscrow()
+    txs, sellers = _StubTransactions(), _StubSellers()
+
+    outcome = await _service(payments, escrow, transactions=txs, sellers=sellers).handle(
+        _charge_success(pe)
+    )
+
+    assert outcome == WebhookOutcome.credited
+    assert sellers.calls == [
+        {
+            "seller_id": txs.seller_id,
+            "transaction_id": detail.transaction_id,
+            "amount_kobo": _AMOUNT,
+        }
+    ]
+
+
+async def test_the_notification_uses_the_server_recorded_amount() -> None:
+    """Never the webhook's own figure — the same rule the escrow credit follows."""
+    pe = uuid4()
+    payments, escrow = _StubPayments(_detail(pe_id=pe)), _StubEscrow()
+    sellers = _StubSellers()
+
+    await _service(payments, escrow, transactions=_StubTransactions(), sellers=sellers).handle(
+        _charge_success(pe)
+    )
+
+    assert sellers.calls[0]["amount_kobo"] == _AMOUNT
+
+
+async def test_a_duplicate_webhook_does_not_re_notify() -> None:
+    """Paystack retries. A seller must not be told twice that one deposit landed."""
+    pe = uuid4()
+    payments = _StubPayments(_detail(pe_id=pe, status="completed"))
+    sellers = _StubSellers()
+
+    outcome = await _service(
+        payments, _StubEscrow(), transactions=_StubTransactions(), sellers=sellers
+    ).handle(_charge_success(pe))
+
+    assert outcome == WebhookOutcome.duplicate
+    assert sellers.calls == []
+
+
+async def test_an_amount_mismatch_credits_nothing_and_notifies_nobody() -> None:
+    pe = uuid4()
+    payments, escrow = _StubPayments(_detail(pe_id=pe)), _StubEscrow()
+    sellers = _StubSellers()
+    # The helper takes the amount, so the payload stays typed rather than
+    # being mutated through a dict[str, object].
+    payload = _charge_success(pe, amount=_AMOUNT + 1)
+
+    outcome = await _service(
+        payments, escrow, transactions=_StubTransactions(), sellers=sellers
+    ).handle(payload)
+
+    assert outcome == WebhookOutcome.amount_mismatch
+    assert escrow.credits == []
+    assert sellers.calls == []
+
+
+async def test_a_broker_outage_does_not_fail_the_webhook() -> None:
+    """The credit is already committed. Raising here would make Paystack retry a
+    deposit that already succeeded, for the sake of a message."""
+    pe = uuid4()
+    payments, escrow = _StubPayments(_detail(pe_id=pe)), _StubEscrow()
+
+    outcome = await _service(
+        payments,
+        escrow,
+        transactions=_StubTransactions(),
+        sellers=_StubSellers(raises=True),
+    ).handle(_charge_success(pe))
+
+    assert outcome == WebhookOutcome.credited
+    assert escrow.credits == [_AMOUNT]
+
+
+async def test_a_failed_seller_lookup_does_not_fail_the_webhook() -> None:
+    pe = uuid4()
+    payments, escrow = _StubPayments(_detail(pe_id=pe)), _StubEscrow()
+
+    outcome = await _service(
+        payments,
+        escrow,
+        transactions=_StubTransactions(raises=True),
+        sellers=_StubSellers(),
+    ).handle(_charge_success(pe))
+
+    assert outcome == WebhookOutcome.credited
+    assert escrow.credits == [_AMOUNT]
+
+
+async def test_without_a_notifier_the_webhook_still_credits() -> None:
+    """Both collaborators are optional, so every construction that predates
+    SCRUM-195 keeps working and simply sends nothing."""
+    pe = uuid4()
+    payments, escrow = _StubPayments(_detail(pe_id=pe)), _StubEscrow()
+
+    outcome = await _service(payments, escrow).handle(_charge_success(pe))
+
+    assert outcome == WebhookOutcome.credited
+    assert escrow.credits == [_AMOUNT]

@@ -29,7 +29,9 @@ from uuid import UUID
 from app.adapters.receipt_storage import ReceiptStorage
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.payment_repo import PaymentEventDetail, PaymentEventRepository
+from app.repositories.transaction_repo import TransactionRepository
 from app.services.escrow_ledger import EscrowLedgerService
+from app.services.seller_notifier import SellerNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +58,19 @@ class PaystackWebhookService:
         receipts: ReceiptStorage,
         audit: AuditLogRepository,
         secret: str,
+        transactions: TransactionRepository | None = None,
+        sellers: SellerNotifier | None = None,
     ) -> None:
         self._payments = payments
         self._escrow = escrow
         self._receipts = receipts
         self._audit = audit
         self._secret = secret
+        # SCRUM-195. Optional so every existing construction of this service —
+        # including the tests that predate the notification — keeps working and
+        # simply sends nothing.
+        self._transactions = transactions
+        self._sellers = sellers
 
     def verify_signature(self, raw_body: bytes, signature: str | None) -> bool:
         """HMAC-SHA512 of the raw body, constant-time compared to the header."""
@@ -118,7 +127,37 @@ class PaystackWebhookService:
             new_value={"transaction_id": str(pe.transaction_id), "amount_kobo": pe.amount_kobo},
         )
         logger.info("paystack.deposit.credited", extra={"payment_event_id": str(pe.id)})
+
+        # Tell the seller their escrow has been funded (SCRUM-195). LAST, and
+        # best-effort: the credit above is the money and is already committed,
+        # so a broker outage must not turn a successful deposit into a webhook
+        # error that Paystack then retries.
+        #
+        # Only `deposit_confirmed` is raised, never a "deposit received" at
+        # initiation. At initiation the buyer has only been handed a Paystack
+        # authorization URL — no money has moved — so telling a seller a
+        # deposit had been made would be false. The design shows both states;
+        # only one of them is real here.
+        await self._notify_seller(pe.transaction_id, pe.amount_kobo)
         return WebhookOutcome.credited
+
+    async def _notify_seller(self, transaction_id: UUID, amount_kobo: int) -> None:
+        if self._transactions is None or self._sellers is None:
+            return
+        try:
+            status = await self._transactions.get_status(transaction_id)
+            if status is None:
+                return
+            await self._sellers.deposit_confirmed(
+                seller_id=status.seller_id,
+                transaction_id=transaction_id,
+                amount_kobo=amount_kobo,
+            )
+        except Exception as exc:  # never let a message failure fail the webhook
+            logger.warning(
+                "paystack.deposit.notify_failed",
+                extra={"transaction_id": str(transaction_id), "error": str(exc)},
+            )
 
     async def _handle_transfer(self, event: str, payload: dict[str, Any]) -> WebhookOutcome:
         """Finalise a payout the disbursement left `processing`. We look the event

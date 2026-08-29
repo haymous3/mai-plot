@@ -160,6 +160,8 @@ def get_webhook_service(
     escrow: Annotated[EscrowLedgerService, Depends(get_escrow_service)],
     receipts: Annotated[ReceiptStorage, Depends(get_receipt_storage)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    notifier: Annotated[SellerNotifier, Depends(get_seller_notifier)],
 ) -> PaystackWebhookService:
     return PaystackWebhookService(
         payments=payments,
@@ -167,6 +169,9 @@ def get_webhook_service(
         receipts=receipts,
         audit=audit,
         secret=settings.paystack_webhook_secret,
+        # SCRUM-195 — the seller is told once their escrow is actually funded.
+        transactions=transactions,
+        sellers=notifier,
     )
 
 
