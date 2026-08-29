@@ -1,4 +1,4 @@
-"""Seller notification on a new offer (SCRUM-117).
+"""Seller notifications: a new offer (SCRUM-117), a confirmed deposit (SCRUM-195).
 
 When a buyer makes an offer, the seller is alerted so they can respond inside the
 72h window. The notification itself is owned by notification-service; this is the
@@ -22,11 +22,17 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 _OFFER_RECEIVED = "offer_received"
+_DEPOSIT_CONFIRMED = "deposit_confirmed"
 
 
 class SellerNotifier(Protocol):
     async def offer_received(
         self, *, seller_id: UUID, offer_id: UUID, listing_id: UUID, amount_kobo: int
+    ) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def deposit_confirmed(
+        self, *, seller_id: UUID, transaction_id: UUID, amount_kobo: int
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -36,6 +42,11 @@ class NullSellerNotifier:
 
     async def offer_received(
         self, *, seller_id: UUID, offer_id: UUID, listing_id: UUID, amount_kobo: int
+    ) -> None:
+        return None
+
+    async def deposit_confirmed(
+        self, *, seller_id: UUID, transaction_id: UUID, amount_kobo: int
     ) -> None:
         return None
 
@@ -73,6 +84,39 @@ class CelerySellerNotifier:
             logger.warning(
                 "offer.notify_failed",
                 extra={"offer_id": str(offer_id), "listing_id": str(listing_id), "error": str(exc)},
+            )
+
+    async def deposit_confirmed(
+        self, *, seller_id: UUID, transaction_id: UUID, amount_kobo: int
+    ) -> None:
+        """Tell the seller a buyer's deposit has cleared into escrow.
+
+        Fired from the Paystack webhook AFTER the escrow credit, and swallowed
+        exactly like offer_received: the money has already moved and is the
+        source of truth. Raising here would fail the webhook, Paystack would
+        retry, and the retry path would have to re-derive that the credit
+        already happened — risking noise on a ledger for the sake of a message.
+        """
+        naira = amount_kobo // 100
+        try:
+            self._app.send_task(
+                "notifications.dispatch",
+                kwargs={
+                    "user_id": str(seller_id),
+                    "type": _DEPOSIT_CONFIRMED,
+                    "title": "Deposit confirmed",
+                    "body": (
+                        f"A deposit of ₦{naira:,} has been confirmed and credited "
+                        "to the escrow account for your property."
+                    ),
+                    "reference_type": "transaction",
+                    "reference_id": str(transaction_id),
+                },
+            )
+        except Exception as exc:  # broker down etc. — never fail the webhook
+            logger.warning(
+                "deposit.notify_failed",
+                extra={"transaction_id": str(transaction_id), "error": str(exc)},
             )
 
 
