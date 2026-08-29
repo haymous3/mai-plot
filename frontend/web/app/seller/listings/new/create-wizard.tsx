@@ -3,10 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import type { SellerPoaStatus } from '@/lib/api';
 import { projectedExpiry } from '@/lib/countdown';
 import { formatNaira } from '@/lib/format';
 
-type PropertyType = 'land' | 'residential' | 'commercial';
+type PropertyType = 'residential' | 'commercial';
 type SaleType = 'normal' | 'distress';
 type UrgencyTag = '7_days' | '14_days' | '30_days';
 type Authority = 'owner' | 'power_of_attorney';
@@ -21,11 +22,52 @@ const STEPS = [
   'Review',
 ];
 
+// 'land' was removed here (SCRUM-199) at the product owner's request. The
+// BACKEND still accepts it — listing-service's property_type CHECK and the
+// existing land listings are untouched — so this narrows what a seller can
+// newly create, not what the platform can hold.
 const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
-  { value: 'land', label: 'Land' },
   { value: 'residential', label: 'Residential' },
   { value: 'commercial', label: 'Commercial' },
 ];
+
+/**
+ * Media limits, mirrored from listing-service `app/config.py` (SCRUM-199).
+ *
+ * These are shown to the seller AND checked before upload, so an over-size file
+ * is refused here with a sentence rather than after a 200MB round trip that
+ * ends in MEDIA_TOO_LARGE. The server remains the authority — this is a
+ * courtesy, not the guard.
+ *
+ * ⚠️ The accept lists are narrower than the `image/*` and `video/*` they
+ * replace, and deliberately so: listing-service validates by MAGIC BYTES and
+ * accepts only JPEG, PNG and MP4. `image/*` let a seller pick a GIF or a HEIC
+ * the server was always going to reject.
+ */
+/**
+ * PoA document limits, mirrored from auth-service (SCRUM-199).
+ *
+ * ⚠️ PDF and JPEG only — NOT PNG. `poa.detect_document_type()` reads magic
+ * bytes and accepts exactly those two. The onboarding screen's copy says
+ * "PDF, PNG, or JPG (max 5MB)", which is wrong on both counts; it is corrected
+ * in the same change.
+ */
+const MAX_POA_MB = 10;
+const POA_ACCEPT = 'application/pdf,image/jpeg';
+
+const POA_ERRORS: Record<string, string> = {
+  POA_DOCUMENT_INVALID: 'The document must be a PDF or JPEG file.',
+  POA_DOCUMENT_TOO_LARGE: `The document exceeds the ${MAX_POA_MB}MB limit.`,
+  POA_ALREADY_SUBMITTED: 'A document is already on file and awaiting review.',
+  POA_NOT_ELIGIBLE: 'Only a power-of-attorney seller can upload this document.',
+  NO_SESSION: 'Your session expired — please sign in again.',
+};
+
+const MAX_PHOTO_MB = 5;
+const MAX_VIDEO_MB = 200;
+const MAX_PHOTOS = 15;
+const PHOTO_ACCEPT = 'image/jpeg,image/png';
+const VIDEO_ACCEPT = 'video/mp4';
 
 const URGENCY: { value: UrgencyTag; label: string }[] = [
   { value: '7_days', label: '7 days' },
@@ -58,7 +100,7 @@ const CREATE_ERRORS: Record<string, string> = {
 // coordinate to central Lagos so the required geo-point is satisfied.
 const DEFAULT_LOCATION = { lat: 6.5244, lng: 3.3792 };
 
-export function CreateListingWizard() {
+export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -67,7 +109,7 @@ export function CreateListingWizard() {
 
   // Property details
   const [title, setTitle] = useState('');
-  const [propertyType, setPropertyType] = useState<PropertyType>('land');
+  const [propertyType, setPropertyType] = useState<PropertyType>('residential');
   const [sizeSqm, setSizeSqm] = useState('');
   const [description, setDescription] = useState('');
   // Location
@@ -82,10 +124,20 @@ export function CreateListingWizard() {
   // Media
   const [images, setImages] = useState<File[]>([]);
   const [video, setVideo] = useState<File | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   // Documents
   const [docs, setDocs] = useState<Partial<Record<DocKey, File>>>({});
   // Authority
-  const [authority, setAuthority] = useState<Authority>('owner');
+  // Seeded from the ACCOUNT, not left at a default: this is a declared fact
+  // about the seller, and showing "Direct Owner" to someone registered under a
+  // power of attorney would be telling them something untrue about themselves.
+  const [authority, setAuthority] = useState<Authority>(
+    poa?.authority_type === 'power_of_attorney' ? 'power_of_attorney' : 'owner',
+  );
+  const [poaFile, setPoaFile] = useState<File | null>(null);
+  const [poaBusy, setPoaBusy] = useState(false);
+  const [poaError, setPoaError] = useState<string | null>(null);
+  const [poaUploaded, setPoaUploaded] = useState(false);
 
   const priceKobo = Math.round(Number(priceNaira.replace(/[^0-9.]/g, '')) * 100);
   const expiry = saleType === 'distress' ? projectedExpiry(urgency) : null;
@@ -112,6 +164,83 @@ export function CreateListingWizard() {
     form.set('file', file);
     const resp = await fetch(`/api/seller/listings/${listingId}/documents`, { method: 'POST', body: form });
     return resp.ok;
+  }
+
+  /** Add images, refusing over-size files and anything past the per-listing cap. */
+  function addImages(files: File[]) {
+    const room = MAX_PHOTOS - images.length;
+    if (room <= 0) {
+      setMediaError(`You can upload at most ${MAX_PHOTOS} images.`);
+      return;
+    }
+    const tooBig = files.filter((f) => f.size > MAX_PHOTO_MB * 1024 * 1024);
+    const ok = files.filter((f) => f.size <= MAX_PHOTO_MB * 1024 * 1024).slice(0, room);
+    setImages((prev) => [...prev, ...ok]);
+    // Name the files that were dropped. "Some images were too large" leaves the
+    // seller guessing which of a multi-select failed.
+    const notes: string[] = [];
+    if (tooBig.length > 0) {
+      notes.push(
+        `${tooBig.map((f) => f.name).join(', ')} exceeded ${MAX_PHOTO_MB}MB and ${tooBig.length === 1 ? 'was' : 'were'} not added.`,
+      );
+    }
+    if (files.length - tooBig.length > ok.length) {
+      notes.push(`Only ${MAX_PHOTOS} images are allowed, so the rest were not added.`);
+    }
+    setMediaError(notes.join(' ') || null);
+  }
+
+  function pickVideo(file: File | null) {
+    if (file && file.size > MAX_VIDEO_MB * 1024 * 1024) {
+      setMediaError(`${file.name} exceeds the ${MAX_VIDEO_MB}MB video limit.`);
+      return;
+    }
+    setMediaError(null);
+    setVideo(file);
+  }
+
+  /**
+   * Upload the PoA document (SCRUM-199).
+   *
+   * Account-level, not per-listing: CLAUDE.md §8.1 gates a PoA seller's ability
+   * to publish ANY listing on one verified document, so this posts to the same
+   * `/api/auth/seller/poa` the onboarding step uses.
+   *
+   * `/auth/poa/upload` refuses a caller whose ACCOUNT is not a power_of_attorney
+   * seller, so an owner who switches the choice here has to declare that first —
+   * hence the authority POST ahead of the file.
+   */
+  async function uploadPoa() {
+    if (!poaFile) return;
+    setPoaBusy(true);
+    setPoaError(null);
+    try {
+      if (poa?.authority_type !== 'power_of_attorney') {
+        const declared = await fetch('/api/auth/seller/authority', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ authority_type: 'power_of_attorney' }),
+        });
+        if (!declared.ok) {
+          setPoaError('We could not record your authority. Please retry.');
+          return;
+        }
+      }
+      const form = new FormData();
+      form.append('file', poaFile);
+      const resp = await fetch('/api/auth/seller/poa', { method: 'POST', body: form });
+      if (!resp.ok) {
+        const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
+        setPoaError(POA_ERRORS[b.error_code ?? ''] ?? 'We could not upload that document. Please retry.');
+        return;
+      }
+      setPoaUploaded(true);
+      setPoaFile(null);
+    } catch {
+      setPoaError('Could not reach the server. Please try again.');
+    } finally {
+      setPoaBusy(false);
+    }
   }
 
   async function submit() {
@@ -206,7 +335,7 @@ export function CreateListingWizard() {
         {step === 0 && (
           <Section title="Property Details">
             <Field label="Listing Title">
-              <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 2 Plots of Land, Lekki Phase 1" />
+              <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 3-Bedroom Duplex, Lekki Phase 1" />
             </Field>
             <Field label="Property Type">
               <select className={inputCls} value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)}>
@@ -285,10 +414,10 @@ export function CreateListingWizard() {
           <Section title="Media Upload">
             <Field label="Property Images">
               <FilePicker
-                accept="image/*"
+                accept={PHOTO_ACCEPT}
                 multiple
-                onPick={(files) => setImages((prev) => [...prev, ...files])}
-                hint="Drag and drop images here, or browse"
+                onPick={(files) => addImages(files)}
+                hint={`JPEG or PNG, up to ${MAX_PHOTO_MB}MB each · ${MAX_PHOTOS} images max`}
               />
               {images.length > 0 && (
                 <ul className="mt-3 space-y-1 text-sm text-ink-600">
@@ -305,11 +434,16 @@ export function CreateListingWizard() {
             </Field>
             <Field label="Video (Optional)">
               <FilePicker
-                accept="video/*"
-                onPick={(files) => setVideo(files[0] ?? null)}
-                hint={video ? video.name : 'Upload Video'}
+                accept={VIDEO_ACCEPT}
+                onPick={(files) => pickVideo(files[0] ?? null)}
+                hint={video ? video.name : `MP4, up to ${MAX_VIDEO_MB}MB`}
               />
             </Field>
+            {mediaError && (
+              <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                {mediaError}
+              </p>
+            )}
           </Section>
         )}
 
@@ -346,9 +480,61 @@ export function CreateListingWizard() {
               <Choice active={authority === 'power_of_attorney'} onClick={() => setAuthority('power_of_attorney')} title="Power of Attorney" sub="Authorized representative" />
             </div>
             {authority === 'power_of_attorney' && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                Power-of-attorney sellers must have their PoA document verified before the listing can go live.
-              </p>
+              <>
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Power-of-attorney sellers must have their PoA document verified before the
+                  listing can go live.
+                </p>
+
+                {/*
+                  Three states, because the upload endpoint has three answers.
+                  A document already on file 409s unless it was rejected, so
+                  offering an upload in that case would fail every time.
+                */}
+                {poaUploaded || (poa?.has_document && poa.status !== 'rejected') ? (
+                  <p className="rounded-lg bg-emerald-deep/5 px-3 py-2 text-xs text-emerald-deep">
+                    {poaUploaded || poa?.status === 'pending'
+                      ? 'Your Power of Attorney document is on file and awaiting review.'
+                      : 'Your Power of Attorney document has been verified.'}
+                  </p>
+                ) : (
+                  <Field label="Power of Attorney Document">
+                    {poa?.status === 'rejected' && (
+                      <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                        Your previous document was rejected
+                        {poa.rejection_reason ? `: ${poa.rejection_reason}` : ''}. Please upload a
+                        replacement.
+                      </p>
+                    )}
+                    <FilePicker
+                      accept={POA_ACCEPT}
+                      onPick={(files) => {
+                        const f = files[0] ?? null;
+                        if (f && f.size > MAX_POA_MB * 1024 * 1024) {
+                          setPoaError(`${f.name} exceeds the ${MAX_POA_MB}MB limit.`);
+                          return;
+                        }
+                        setPoaError(null);
+                        setPoaFile(f);
+                      }}
+                      hint={poaFile ? poaFile.name : `PDF or JPEG, up to ${MAX_POA_MB}MB`}
+                    />
+                    <button
+                      type="button"
+                      disabled={!poaFile || poaBusy}
+                      onClick={() => void uploadPoa()}
+                      className="mt-3 rounded-lg bg-emerald-deep px-4 py-2 text-sm font-medium text-bone transition hover:bg-emerald-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {poaBusy ? 'Uploading…' : 'Upload document'}
+                    </button>
+                    {poaError && (
+                      <p role="alert" className="mt-2 text-xs text-red-700">
+                        {poaError}
+                      </p>
+                    )}
+                  </Field>
+                )}
+              </>
             )}
           </Section>
         )}
