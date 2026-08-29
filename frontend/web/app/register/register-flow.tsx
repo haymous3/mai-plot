@@ -48,6 +48,7 @@ export function RegisterFlow() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
   const [role, setRole] = useState('');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -71,6 +72,7 @@ export function RegisterFlow() {
         body: JSON.stringify({
           phone: `+234${local}`,
           role,
+          full_name: fullName.trim(),
           email: email.trim(),
           password,
           verification_channel: channel,
@@ -139,6 +141,8 @@ export function RegisterFlow() {
         {step === 'account' && (
           <FormColumn>
           <AccountStep
+            fullName={fullName}
+            setFullName={setFullName}
             email={email}
             setEmail={setEmail}
             phone={phone}
@@ -209,6 +213,8 @@ function looksLikeEmail(value: string): boolean {
 }
 
 function AccountStep({
+  fullName,
+  setFullName,
   email,
   setEmail,
   phone,
@@ -222,6 +228,8 @@ function AccountStep({
   onBack,
   onContinue,
 }: {
+  fullName: string;
+  setFullName: (v: string) => void;
   email: string;
   setEmail: (v: string) => void;
   phone: string;
@@ -245,12 +253,14 @@ function AccountStep({
   const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-deep';
 
   const local = phone.replace(/\D/g, '').replace(/^0/, '');
+  const nameOk = fullName.trim().length > 0;
   const emailOk = looksLikeEmail(email);
   const phoneOk = local.length === 10;
   const passwordOk = strong && confirm === password;
-  const canContinue = emailOk && phoneOk && passwordOk;
+  const canContinue = nameOk && emailOk && phoneOk && passwordOk;
 
   function submit() {
+    if (!nameOk) return setLocalError('Please enter your full name.');
     if (!emailOk) return setLocalError('Please enter a valid email address.');
     if (!phoneOk) return setLocalError('Enter a valid 10-digit phone number.');
     if (!strong) return setLocalError('Choose a stronger password (see the requirements below).');
@@ -269,12 +279,32 @@ function AccountStep({
         We&rsquo;ll email you a link to verify your account.
       </p>
 
-      {/* Full Name is NOT collected here any more (SCRUM-185). The designed
-          post-verification "Personal details" screen owns it, and asking twice
-          would show that screen an empty field to someone who had already
-          typed their name. `RegisterRequest.full_name` is already Optional, so
-          this needs no API change. */}
-      <label className="mt-8 block text-sm font-medium text-ink-700">Email Address</label>
+      {/*
+        Full Name is collected here again (SCRUM-197), reversing SCRUM-185.
+
+        SCRUM-185 moved it to the post-verification "Personal details" screen,
+        but that screen was only ever in the BUYER flow. Sellers and realtors
+        walked a path that asked for a name nowhere, and registration stores
+        `full_name or ""`, so every one of them ended up with a permanently
+        empty name — an empty required field in their own Settings, and nothing
+        for the welcome screen to greet.
+
+        Asking once, here, is what every role has in common. The buyer's
+        Personal-details step is removed in the same change so nobody is asked
+        twice. `RegisterRequest.full_name` was already Optional, so the API is
+        unchanged; the requirement is enforced in this form.
+      */}
+      <label className="mt-8 block text-sm font-medium text-ink-700">Full Name</label>
+      <input
+        type="text"
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        placeholder="Ada Obi"
+        autoComplete="name"
+        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+      />
+
+      <label className="mt-5 block text-sm font-medium text-ink-700">Email Address</label>
       <input
         type="email"
         value={email}

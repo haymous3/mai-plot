@@ -6,7 +6,8 @@ import { FieldError, FieldLabel, SecureNote, SelectField, TextField } from './fi
 import { GhostButton, OnboardingHeading, PrimaryButton } from './ui';
 
 /**
- * The two buyer steps — `buyers-flow-after-email-verification-{1,2}.png`.
+ * The buyer profile step — `buyers-flow-after-email-verification-2.png`.
+ * (Screen 1, Personal details, was removed in SCRUM-197; see below.)
  *
  * ⚠️ TWO ELEMENTS OF THE EXPORT ARE NOT BUILT, because nothing backs them:
  *
@@ -42,78 +43,10 @@ const EMPLOYMENT = [
   { value: 'other', label: 'Other' },
 ] as const;
 
-/** Step 1 — the full name registration no longer collects (SCRUM-185). */
-export function PersonalDetailsStep({
-  onDone,
-}: {
-  onDone: (fullName: string) => void | Promise<void>;
-}) {
-  const [fullName, setFullName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+// PersonalDetailsStep lived here until SCRUM-197. Registration collects the
+// full name again — for every role, not just buyers — so a second ask would
+// have shown an empty field for something already typed.
 
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      const resp = await fetch('/api/auth/profile', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName.trim() }),
-      });
-      if (!resp.ok) {
-        const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
-        setError(
-          b.error_code === 'FULL_NAME_REQUIRED'
-            ? 'Please enter your full name.'
-            : 'We could not save your details. Please retry.',
-        );
-        return;
-      }
-      await onDone(fullName.trim());
-    } catch {
-      setError('Could not reach the server. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="w-full">
-      <OnboardingHeading title="Personal details" subtitle="Tell us a bit about yourself" />
-
-      <div className="mx-auto mt-14 max-w-[672px]">
-        <FieldLabel htmlFor="full-name" required>
-          Full Name
-        </FieldLabel>
-        <TextField
-          id="full-name"
-          value={fullName}
-          onChange={setFullName}
-          placeholder="John Doe"
-          autoComplete="name"
-          disabled={busy}
-        />
-        {error && <FieldError>{error}</FieldError>}
-
-        <div className="mt-12">
-          <PrimaryButton disabled={!fullName.trim() || busy} onClick={() => void submit()}>
-            {busy ? 'Saving…' : 'Continue'}
-          </PrimaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Step 2 — identity and buying capacity. Every field is optional server-side,
- * which is why this is the one step the design gives a "Skip for now".
- *
- * NIN and the capacity fields go to different endpoints, so they are sent
- * independently: a NIN that fails verification must not silently discard the
- * budget the user just typed.
- */
 export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void> }) {
   const [nin, setNin] = useState('');
   const [employment, setEmployment] = useState('');
