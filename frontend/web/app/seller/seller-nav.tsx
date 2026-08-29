@@ -11,7 +11,12 @@ const NAV = [
   { href: '/seller/offers', label: 'Offers', icon: '🤝' },
   { href: '/seller/transactions', label: 'Transactions', icon: '📈' },
   { href: '/seller/documents', label: 'Documents', icon: '📄' },
-  { href: '/seller/profile', label: 'Profile', icon: '👤' },
+  { href: '/seller/notifications', label: 'Notifications', icon: '🔔' },
+  // `/settings`, not `/seller/profile` — that route never existed either, so
+  // this was the SECOND dead link in this nav (SCRUM-193 fixed the Settings
+  // one below). The seller's Profile IS the Settings Profile tab, which is
+  // what /settings opens on.
+  { href: '/settings', label: 'Profile', icon: '👤' },
 ];
 
 /**

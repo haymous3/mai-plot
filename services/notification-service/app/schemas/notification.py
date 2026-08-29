@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.repositories.notification_repo import NotificationRow
+
+# The inbox tabs (SCRUM-194). A Literal so an unknown tab is a 422 from FastAPI
+# rather than a silently empty list, which would look like "you have nothing"
+# instead of "that is not a tab".
+#
+# ⚠️ There is no "messages" category: this product has no messaging feature at
+# all, so the design's Messages tab was dropped rather than shipped as a
+# control that could never fill.
+NotificationCategory = Literal["deposits", "bids", "documents", "system"]
 
 
 class NotificationItem(BaseModel):

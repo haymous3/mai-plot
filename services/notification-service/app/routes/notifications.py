@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from app.dependencies import get_current_user, get_notification_centre_service
 from app.schemas.notification import (
     MarkAllReadResponse,
+    NotificationCategory,
     NotificationItem,
     NotificationListResponse,
 )
@@ -46,12 +47,27 @@ async def list_notifications(
     response: Response,
     limit: Annotated[int, Query(ge=1, le=_MAX_PAGE_SIZE)] = 20,
     cursor: str | None = None,
+    category: NotificationCategory | None = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> NotificationListResponse | JSONResponse:
     """Newest-first page of the caller's notifications. The opaque `cursor` (from
     a prior response's next_cursor) resumes the feed; a malformed one is 400. The
-    unread count is also surfaced in the X-Unread-Count header for badge UIs."""
+    unread count is also surfaced in the X-Unread-Count header for badge UIs.
+
+    `category` and `q` narrow the feed for the inbox tabs and its search box
+    (SCRUM-194); omitting `category` is the "All" tab. The unread count in the
+    header stays whole-inbox either way — see the service for why."""
     try:
-        page = await service.list_notifications(caller.user_id, limit=limit, cursor=cursor)
+        page = await service.list_notifications(
+            caller.user_id,
+            limit=limit,
+            cursor=cursor,
+            category=category,
+            # A blank or whitespace-only search means "no search", not "match
+            # the empty string" — otherwise clearing the box would filter to
+            # everything containing "", which is every row, at ILIKE cost.
+            query=q.strip() if q and q.strip() else None,
+        )
     except CursorInvalid:
         return _error(status.HTTP_400_BAD_REQUEST, "INVALID_CURSOR", "The cursor is malformed.")
     response.headers["X-Unread-Count"] = str(page.unread_count)

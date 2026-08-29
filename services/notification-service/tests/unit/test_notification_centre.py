@@ -19,11 +19,21 @@ class _StubNotifRepo:
         self.mark_read_result = True
         self.mark_all_result = 0
         self.last_after: Cursor | None = None
+        self.last_category: str | None = None
+        self.last_query: str | None = None
 
     async def list_for_user(
-        self, user_id: UUID, *, limit: int, after: Cursor | None = None
+        self,
+        user_id: UUID,
+        *,
+        limit: int,
+        after: Cursor | None = None,
+        category: str | None = None,
+        query: str | None = None,
     ) -> list[NotificationRow]:
         self.last_after = after
+        self.last_category = category
+        self.last_query = query
         return self._rows[:limit]
 
     async def unread_count(self, user_id: UUID) -> int:
@@ -111,3 +121,41 @@ async def test_mark_all_read_returns_count() -> None:
     repo = _StubNotifRepo([])
     repo.mark_all_result = 4
     assert await _service(repo).mark_all_read(uuid4()) == 4
+
+
+# --------------------------------------------------------------------------
+# SCRUM-194 — the filters reach the repository, and the badge does not move
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_category_and_query_are_passed_through_to_the_repository() -> None:
+    repo = _StubNotifRepo([])
+    page = await _service(repo).list_notifications(
+        uuid4(), limit=10, category="bids", query="lekki"
+    )
+
+    assert repo.last_category == "bids"
+    assert repo.last_query == "lekki"
+    assert page.items == []
+
+
+@pytest.mark.asyncio
+async def test_no_filters_reach_the_repository_as_none() -> None:
+    """ "All", with an empty search box, must not become a filter."""
+    repo = _StubNotifRepo([])
+    await _service(repo).list_notifications(uuid4(), limit=10)
+
+    assert repo.last_category is None
+    assert repo.last_query is None
+
+
+@pytest.mark.asyncio
+async def test_unread_count_is_the_whole_inbox_not_the_filtered_tab() -> None:
+    """The badge means "unread everywhere". If it tracked the open tab it would
+    be saying something false about the rest of the inbox."""
+    repo = _StubNotifRepo([], unread=7)
+    page = await _service(repo).list_notifications(uuid4(), limit=10, category="bids")
+
+    assert page.items == []
+    assert page.unread_count == 7

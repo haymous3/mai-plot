@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import categories
 from app.services.cursor import Cursor
 
 
@@ -40,9 +41,51 @@ class NotificationRow:
     created_at: datetime
 
 
+# Escape character for the inbox search's ILIKE (SCRUM-194). Not a backslash:
+# see the comment at the call site for why.
+_LIKE_ESCAPE = "!"
+
+
+def _escape_like(value: str) -> str:
+    """Neutralise LIKE wildcards in a user's search term.
+
+    The escape character itself goes first — escaping `%` before `!` would
+    double-escape the `!` introduced by that very step.
+    """
+    return (
+        value.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
+        .replace("%", f"{_LIKE_ESCAPE}%")
+        .replace("_", f"{_LIKE_ESCAPE}_")
+    )
+
+
 class NotificationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    @staticmethod
+    def _category_clause(
+        category: str | None, params: dict[str, object]
+    ) -> tuple[dict[str, object], str]:
+        """SQL for the category tab, plus the params it needs.
+
+        SYSTEM is the catch-all — an unmapped type belongs to it — so it cannot
+        be expressed as an inclusion list. It is the COMPLEMENT of every type
+        claimed by another tab, which also means a brand-new notification type
+        shows up under System without anyone editing this.
+
+        The type lists are interpolated as a bound `IN` via `ANY(:types)`
+        rather than string-joined into the SQL: they come from a closed
+        in-process mapping, but building SQL by concatenation is the habit that
+        eventually meets a value that did not come from there.
+        """
+        if category is None:
+            return params, ""
+        if category == categories.SYSTEM:
+            params["types"] = categories.types_outside_system()
+            return params, "AND NOT (type = ANY(:types))"
+        params["types"] = categories.types_in(category)
+        return params, "AND type = ANY(:types)"
 
     async def list_for_user(
         self,
@@ -50,16 +93,45 @@ class NotificationRepository:
         *,
         limit: int,
         after: Cursor | None = None,
+        category: str | None = None,
+        query: str | None = None,
     ) -> list[NotificationRow]:
         """Newest-first page of a user's notifications. `after` resumes strictly
         after a previously-seen (created_at, id) pair via keyset comparison.
-        Callers ask for limit+1 to detect whether another page exists."""
+        Callers ask for limit+1 to detect whether another page exists.
+
+        `category` and `query` narrow the same feed for the inbox tabs and its
+        search box (SCRUM-194). Both are applied in SQL rather than after the
+        fetch: filtering a page that has already been cut to `limit` would
+        return short pages and break the keyset cursor, which assumes the rows
+        it skips past are the rows the caller actually saw."""
         params: dict[str, object] = {"uid": user_id, "lim": limit}
         keyset = ""
         if after is not None:
             keyset = "AND (created_at, id) < (:cc, :ci)"
             params["cc"] = after.created_at
             params["ci"] = after.id
+
+        params, category_clause = self._category_clause(category, params)
+
+        search = ""
+        if query:
+            # ILIKE over title+body, with the user's own wildcards neutralised:
+            # an unescaped `%` or `_` would silently WIDEN their search to match
+            # rows they did not ask for, which is worse than matching none.
+            #
+            # `!` is the escape character rather than the conventional
+            # backslash, deliberately. A backslash has to survive a Python
+            # string literal AND Postgres's own string parsing, and getting it
+            # wrong is quiet: the first attempt here compiled to `ESCAPE ''`
+            # and a literal `\%`, which the tests below caught. `!` has no
+            # special meaning to either layer.
+            search = (
+                f"AND (COALESCE(title, '') ILIKE :q ESCAPE '{_LIKE_ESCAPE}' "
+                f"OR body ILIKE :q ESCAPE '{_LIKE_ESCAPE}')"
+            )
+            params["q"] = f"%{_escape_like(query)}%"
+
         rows = (
             await self._session.execute(
                 text(
@@ -68,7 +140,7 @@ class NotificationRepository:
                            reference_id, is_read, sent_at, read_at, created_at
                     FROM notifications
                     WHERE user_id = :uid AND channel = 'in_app'
-                          AND archived_at IS NULL {keyset}
+                          AND archived_at IS NULL {keyset} {category_clause} {search}
                     ORDER BY created_at DESC, id DESC
                     LIMIT :lim
                     """
