@@ -7,6 +7,7 @@ import {
   nextStep,
   onboardingExit,
   stepsFor,
+  welcomeGreeting,
 } from './onboarding-steps';
 
 describe('isOnboardingRole', () => {
@@ -28,7 +29,7 @@ describe('isOnboardingRole', () => {
 
 describe('stepsFor', () => {
   it('gives the buyer two collection steps then welcome', () => {
-    expect(stepsFor('buyer')).toEqual(['personal-details', 'buyer-profile', 'welcome']);
+    expect(stepsFor('buyer')).toEqual(['buyer-profile', 'welcome']);
   });
 
   it('gives the seller one verification step then welcome', () => {
@@ -53,7 +54,7 @@ describe('stepsFor', () => {
 
 describe('firstStep', () => {
   it('returns the role-specific entry point', () => {
-    expect(firstStep('buyer')).toBe('personal-details');
+    expect(firstStep('buyer')).toBe('buyer-profile');
     expect(firstStep('seller')).toBe('seller-verification');
     expect(firstStep('realtor')).toBe('realtor-profile');
   });
@@ -65,7 +66,7 @@ describe('firstStep', () => {
 
 describe('nextStep', () => {
   it('walks the buyer flow in order', () => {
-    expect(nextStep('buyer', 'personal-details')).toBe('buyer-profile');
+    expect(nextStep('buyer', 'buyer-profile')).toBe('welcome');
     expect(nextStep('buyer', 'buyer-profile')).toBe('welcome');
   });
 
@@ -79,7 +80,7 @@ describe('nextStep', () => {
   // that posts to an endpoint their role cannot use.
   it('returns null for a step that is not in the role flow', () => {
     expect(nextStep('buyer', 'seller-verification')).toBeNull();
-    expect(nextStep('seller', 'personal-details')).toBeNull();
+    expect(nextStep('seller', 'buyer-profile')).toBeNull();
     expect(nextStep('realtor', 'buyer-profile')).toBeNull();
   });
 
@@ -100,7 +101,7 @@ describe('isSkippable', () => {
   it('does not allow skipping the gating steps', () => {
     expect(isSkippable('seller-verification')).toBe(false);
     expect(isSkippable('realtor-profile')).toBe(false);
-    expect(isSkippable('personal-details')).toBe(false);
+    expect(isSkippable('seller-verification')).toBe(false);
     expect(isSkippable('welcome')).toBe(false);
   });
 });
@@ -110,5 +111,51 @@ describe('onboardingExit', () => {
     expect(onboardingExit('buyer')).toBe('/dashboard');
     expect(onboardingExit('seller')).toBe('/seller');
     expect(onboardingExit('realtor')).toBe('/realtor');
+  });
+});
+
+describe('SCRUM-197 — the name is collected at registration, not in a step', () => {
+  it('no role has a personal-details step any more', () => {
+    // Registration asks once, for every role. A buyer step would have asked a
+    // second time and shown an empty field for something already typed.
+    for (const role of ['buyer', 'seller', 'realtor']) {
+      expect(stepsFor(role)).not.toContain('personal-details');
+    }
+  });
+
+  it('every role still ends on the welcome screen', () => {
+    // That screen is where the greeting lands, so no role may skip it.
+    for (const role of ['buyer', 'seller', 'realtor']) {
+      const steps = stepsFor(role);
+      expect(steps[steps.length - 1]).toBe('welcome');
+    }
+  });
+});
+
+describe('welcomeGreeting', () => {
+  it('greets by given name', () => {
+    expect(welcomeGreeting('Ada Obi')).toBe('Welcome, Ada!');
+  });
+
+  it('uses only the first name, however long the full one is', () => {
+    // The design's greeting band is one line; a full name wraps it.
+    expect(welcomeGreeting('Kolawole Oluwaseun Adeyemi')).toBe('Welcome, Kolawole!');
+  });
+
+  it('falls back to a plain welcome when there is no name', () => {
+    expect(welcomeGreeting(null)).toBe('Welcome!');
+    expect(welcomeGreeting(undefined)).toBe('Welcome!');
+  });
+
+  it('treats an empty stored name as absent', () => {
+    // Accounts created before SCRUM-197 have full_name = "" rather than null,
+    // because registration stored `full_name or ""`. "Welcome, !" would be the
+    // visible cost of missing this.
+    expect(welcomeGreeting('')).toBe('Welcome!');
+    expect(welcomeGreeting('   ')).toBe('Welcome!');
+  });
+
+  it('tolerates leading whitespace rather than greeting nobody', () => {
+    expect(welcomeGreeting('  Ada Obi ')).toBe('Welcome, Ada!');
   });
 });

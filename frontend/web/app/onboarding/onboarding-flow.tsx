@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { BuyerProfileStep, PersonalDetailsStep } from '../_onboarding/buyer-steps';
+import { BuyerProfileStep } from '../_onboarding/buyer-steps';
 import { RealtorProfileStep, SellerVerificationStep } from '../_onboarding/seller-realtor-steps';
 import { OnboardingShell } from '../_onboarding/ui';
 import { Welcome } from '../_onboarding/welcome';
@@ -23,12 +23,21 @@ import {
  * point-of-need gates (NIN at loan-apply, PoA at listing creation) still in
  * place as the backstop they have always been.
  *
- * The first name is threaded through from the details step purely so the
- * welcome screen can greet by name — there is no GET /auth/me to read it back.
+ * The greeting name arrives from the SERVER (SCRUM-197). It used to be threaded
+ * out of the details step in React state, which meant it survived neither a
+ * reload nor a role whose flow never had that step — which was every role but
+ * buyer. `GET /auth/me` has existed since SCRUM-188; the page reads it and
+ * passes it in.
  */
-export function OnboardingFlow({ role }: { role: OnboardingRole }) {
+export function OnboardingFlow({
+  role,
+  fullName,
+}: {
+  role: OnboardingRole;
+  /** The account holder's name, from GET /auth/me. Null when never set. */
+  fullName?: string | null;
+}) {
   const [step, setStep] = useState<OnboardingStep>(() => firstStep(role) ?? 'welcome');
-  const [firstName, setFirstName] = useState<string | null>(null);
 
   function advance(from: OnboardingStep) {
     setStep(nextStep(role, from) ?? 'welcome');
@@ -36,15 +45,6 @@ export function OnboardingFlow({ role }: { role: OnboardingRole }) {
 
   return (
     <OnboardingShell>
-      {step === 'personal-details' && (
-        <PersonalDetailsStep
-          onDone={(fullName) => {
-            setFirstName(fullName.split(/\s+/)[0] ?? null);
-            advance('personal-details');
-          }}
-        />
-      )}
-
       {step === 'buyer-profile' && <BuyerProfileStep onDone={() => advance('buyer-profile')} />}
 
       {step === 'seller-verification' && (
@@ -55,7 +55,7 @@ export function OnboardingFlow({ role }: { role: OnboardingRole }) {
         <RealtorProfileStep onDone={() => advance('realtor-profile')} />
       )}
 
-      {step === 'welcome' && <Welcome role={role} firstName={firstName} />}
+      {step === 'welcome' && <Welcome role={role} fullName={fullName} />}
     </OnboardingShell>
   );
 }

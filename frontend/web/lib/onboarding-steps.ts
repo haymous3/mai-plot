@@ -14,8 +14,6 @@
 export type OnboardingRole = 'buyer' | 'seller' | 'realtor';
 
 export type OnboardingStep =
-  /** Buyer only: full name. Registration no longer collects it (SCRUM-185). */
-  | 'personal-details'
   /** Buyer only: NIN + buying capacity. All optional — the design has "Skip for now". */
   | 'buyer-profile'
   /** Seller only: NIN, selling authority, and a PoA document when not the owner. */
@@ -26,7 +24,10 @@ export type OnboardingStep =
   | 'welcome';
 
 const STEPS: Record<OnboardingRole, readonly OnboardingStep[]> = {
-  buyer: ['personal-details', 'buyer-profile', 'welcome'],
+  // No 'personal-details' step any more (SCRUM-197): registration collects the
+  // full name again, for every role, so asking a buyer a second time would
+  // show them an empty field for something they had already typed.
+  buyer: ['buyer-profile', 'welcome'],
   seller: ['seller-verification', 'welcome'],
   realtor: ['realtor-profile', 'welcome'],
 };
@@ -85,3 +86,19 @@ export function isSkippable(step: OnboardingStep): boolean {
  * drift out of sync.
  */
 export { roleHome as onboardingExit } from './session';
+
+/**
+ * The closing screen's greeting (SCRUM-197).
+ *
+ * Lives here rather than in the component because `vitest.config.ts` collects
+ * `lib/**` only — and this has more edge cases than it looks: an account that
+ * predates SCRUM-197 has `full_name = ""` (registration stored `full_name or
+ * ""`), not null, so "absent" has two spellings.
+ *
+ * Given name only. The design's greeting band is a single ~58px line, and a
+ * full Nigerian name with two given names and a surname wraps it.
+ */
+export function welcomeGreeting(fullName?: string | null): string {
+  const first = fullName?.trim().split(/\s+/)[0];
+  return first ? `Welcome, ${first}!` : 'Welcome!';
+}

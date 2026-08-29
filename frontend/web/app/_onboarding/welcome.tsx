@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { onboardingExit } from '@/lib/onboarding-steps';
+import { onboardingExit, welcomeGreeting } from '@/lib/onboarding-steps';
 
 /**
  * Closing screen, shared by all three roles — the `*-flow-after-email-
@@ -49,9 +49,11 @@ const STATS = [
   { value: 'Fast', label: 'Loans' },
 ];
 
-export function Welcome({ role, firstName }: { role: string; firstName?: string | null }) {
+export function Welcome({ role, fullName }: { role: string; fullName?: string | null }) {
   const copy = COPY[role] ?? COPY.buyer;
-  const greeting = firstName?.trim() ? `Welcome, ${firstName.trim()}!` : 'Welcome!';
+  // Derived in lib/ so it is testable — vitest collects lib/** only, and the
+  // empty-string case (accounts predating SCRUM-197) is easy to get wrong.
+  const greeting = welcomeGreeting(fullName);
 
   return (
     <div className="w-full text-center">
