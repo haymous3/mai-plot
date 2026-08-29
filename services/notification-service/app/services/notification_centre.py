@@ -36,14 +36,24 @@ class NotificationCentreService:
         *,
         limit: int,
         cursor: str | None = None,
+        category: str | None = None,
+        query: str | None = None,
     ) -> NotificationPage:
         """One page of the caller's feed plus their live unread count. Decoding
         the cursor is the caller's concern only in that a bad one raises
-        CursorInvalid (mapped to 400 at the route)."""
+        CursorInvalid (mapped to 400 at the route).
+
+        `category` and `query` narrow the feed for the inbox tabs and search
+        (SCRUM-194). ⚠️ `unread_count` is deliberately NOT narrowed with them:
+        it drives the badge, which has to mean "unread everywhere" — a badge
+        that shrank when you opened a tab would be telling you something false
+        about the rest of the inbox."""
         after: Cursor | None = decode_cursor(cursor) if cursor else None
         # Over-fetch by one to learn whether a further page exists without a
         # second COUNT query.
-        rows = await self._notifications.list_for_user(user_id, limit=limit + 1, after=after)
+        rows = await self._notifications.list_for_user(
+            user_id, limit=limit + 1, after=after, category=category, query=query
+        )
         next_cursor: str | None = None
         if len(rows) > limit:
             rows = rows[:limit]
