@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { MoneyInput } from '@/app/_components/money-input';
 import { formatNaira } from '@/lib/format';
+import { nairaToKobo } from '@/lib/money-input';
 
 type Modal = 'bid' | 'interest' | 'deposit' | null;
 
@@ -116,7 +118,7 @@ function BidModal({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const bidKobo = (Number(naira.replace(/\D/g, '')) || 0) * 100;
+  const bidKobo = nairaToKobo(naira);
   const vsAsking = askingPriceKobo > 0 ? ((bidKobo - askingPriceKobo) / askingPriceKobo) * 100 : 0;
 
   async function submit() {
@@ -171,10 +173,10 @@ function BidModal({
       ) : (
         <>
           <label className="block text-sm font-medium text-ink-700">Your Bid Amount (₦)</label>
-          <input
-            inputMode="numeric"
+          <MoneyInput
             value={naira}
-            onChange={(e) => setNaira(e.target.value.replace(/\D/g, ''))}
+            onChange={setNaira}
+            ariaLabel="Your bid amount in naira"
             className="mt-1.5 w-full rounded-md border border-ink-300/60 px-3.5 py-2.5 text-sm text-ink-buyer outline-none focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
           />
           <div className="mt-3 flex items-center justify-between rounded-lg bg-bone px-3 py-2 text-xs">

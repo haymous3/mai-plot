@@ -6,6 +6,8 @@ import { useRef, useState } from 'react';
 import type { BankPartner, FinancingSummary } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
 import { monthlyPaymentKobo } from '@/lib/loan-math';
+import { MoneyInput } from '@/app/_components/money-input';
+import { nairaToKobo } from '@/lib/money-input';
 
 const EMPLOYMENT_OPTIONS = [
   { value: 'employed', label: 'Employed' },
@@ -144,7 +146,7 @@ export function ApplicationWizard({
           idempotency_key: idempotencyKey.current,
           // Applicant details from step 1 (SCRUM-131) — now persisted.
           employment_status: employment || null,
-          monthly_income_kobo: income ? Number(income) * 100 : null,
+          monthly_income_kobo: nairaToKobo(income) || null,
         }),
       });
       const body = (await resp.json()) as { loan_id?: string; error_code?: string };
@@ -215,11 +217,11 @@ export function ApplicationWizard({
                 </select>
               </Field>
               <Field label="Monthly Income (₦)" error={step1Errors.income} hint="Used to assess loan eligibility">
-                <input
-                  inputMode="numeric"
+                <MoneyInput
                   value={income}
-                  onChange={(e) => setIncome(e.target.value.replace(/\D/g, ''))}
+                  onChange={setIncome}
                   placeholder="Enter your monthly income"
+                  ariaLabel="Monthly income in naira"
                   className={inputClass(!!step1Errors.income)}
                 />
               </Field>
@@ -270,7 +272,7 @@ export function ApplicationWizard({
                   rows={[
                     ['NIN', nin],
                     ['Employment Status', EMPLOYMENT_OPTIONS.find((o) => o.value === employment)?.label ?? '—'],
-                    ['Monthly Income', formatNaira(Number(income) * 100)],
+                    ['Monthly Income', formatNaira(nairaToKobo(income))],
                   ]}
                 />
               </ReviewBlock>

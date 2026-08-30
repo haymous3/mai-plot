@@ -41,7 +41,9 @@ export function FieldLabel({
   );
 }
 
-const CONTROL =
+/** Shared control styling, exported so a non-TextField input (the money
+ * field, SCRUM-202) matches the rest of the onboarding form exactly. */
+export const CONTROL =
   'mt-3 block h-[68px] w-full rounded-2xl border border-line/60 bg-neutral-50 px-6 text-base text-ink-buyer outline-none transition placeholder:text-ink-400 focus:border-emerald-deep focus:ring-2 focus:ring-emerald-deep/20 disabled:cursor-not-allowed disabled:opacity-60';
 
 export function TextField({

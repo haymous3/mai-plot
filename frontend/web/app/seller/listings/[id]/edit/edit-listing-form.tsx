@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { MoneyInput } from '@/app/_components/money-input';
+import { nairaToKobo } from '@/lib/money-input';
 
 type SaleType = 'normal' | 'distress';
 type UrgencyTag = '7_days' | '14_days' | '30_days';
@@ -38,7 +40,7 @@ export function EditListingForm({ listing }: { listing: EditableListing }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const priceKobo = Math.round(Number(priceNaira.replace(/[^0-9.]/g, '')) * 100);
+  const priceKobo = nairaToKobo(priceNaira);
 
   async function save() {
     setSaving(true);
@@ -89,7 +91,12 @@ export function EditListingForm({ listing }: { listing: EditableListing }) {
         </label>
         <label className="block space-y-1.5">
           <span className="block text-sm font-medium text-ink-700">Price (₦)</span>
-          <input className={inputCls} value={priceNaira} onChange={(e) => setPriceNaira(e.target.value)} inputMode="numeric" />
+          <MoneyInput
+            className={inputCls}
+            value={priceNaira}
+            onChange={setPriceNaira}
+            ariaLabel="Asking price in naira"
+          />
         </label>
         <div className="space-y-1.5">
           <span className="block text-sm font-medium text-ink-700">Sale Type</span>
