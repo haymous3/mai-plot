@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 
-import { FieldError, FieldLabel, SecureNote, SelectField, TextField } from './fields';
+import { CONTROL, FieldError, FieldLabel, SecureNote, SelectField, TextField } from './fields';
 import { OnboardingHeading, PrimaryButton } from './ui';
+import { MoneyInput } from '@/app/_components/money-input';
+import { nairaToKobo } from '@/lib/money-input';
 
 /**
  * The buyer profile step — `buyers-flow-after-email-verification-2.png`.
@@ -102,7 +104,7 @@ export function BuyerProfileStep({
 
       // Money as kobo, never a float (CLAUDE.md §4). Strip separators first so
       // "40,000,000" and "40000000" both work.
-      const naira = budget.replace(/[^\d]/g, '');
+      const budgetKobo = nairaToKobo(budget);
       // Address lives on user_pii (migration 0014) and so goes to the shared
       // profile endpoint, not buyer_profiles below — every role has one.
       const addr = await fetch('/api/auth/profile', {
@@ -121,7 +123,7 @@ export function BuyerProfileStep({
         body: JSON.stringify({
           employment_status: employment || null,
           preferred_location: location.trim() || null,
-          budget_kobo: naira ? Number(naira) * 100 : null,
+          budget_kobo: budgetKobo || null,
         }),
       });
       if (!resp.ok) {
@@ -195,13 +197,13 @@ export function BuyerProfileStep({
 
         <div className="mt-9">
           <FieldLabel htmlFor="budget">Budget</FieldLabel>
-          <TextField
+          <MoneyInput
             id="budget"
             value={budget}
             onChange={setBudget}
             placeholder="e.g., 40,000,000"
-            inputMode="numeric"
             disabled={busy}
+            className={CONTROL}
           />
         </div>
 

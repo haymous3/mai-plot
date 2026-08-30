@@ -5,6 +5,8 @@ import { useMemo, useState } from 'react';
 
 import type { SellerOffer } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { MoneyInput } from '@/app/_components/money-input';
+import { nairaToKobo } from '@/lib/money-input';
 
 type Tab = 'all' | 'pending' | 'accepted' | 'countered' | 'rejected';
 const TABS: { key: Tab; label: string }[] = [
@@ -48,7 +50,7 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
     try {
       const init: RequestInit = { method: 'POST' };
       if (action === 'counter') {
-        const kobo = Math.round(Number(counter.replace(/[^0-9.]/g, '')) * 100);
+        const kobo = nairaToKobo(counter);
         if (!(kobo > 0)) {
           setError('Enter a valid counter amount.');
           return;
@@ -166,11 +168,11 @@ export function OffersList({ offers }: { offers: SellerOffer[] }) {
                           </button>
                         </div>
                         <div className="mt-2 flex gap-2">
-                          <input
+                          <MoneyInput
                             value={counter}
-                            onChange={(e) => setCounter(e.target.value)}
-                            inputMode="numeric"
+                            onChange={setCounter}
                             placeholder="Enter counter offer amount (₦)"
+                            ariaLabel="Counter offer amount in naira"
                             className="flex-1 rounded-lg border border-ink-300/50 bg-white px-3.5 py-2 text-sm outline-none focus:border-emerald-accent"
                           />
                           <button

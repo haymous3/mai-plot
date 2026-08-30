@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import { MoneyInput } from '@/app/_components/money-input';
+import { nairaToKobo } from '@/lib/money-input';
 
 type Quick = 'all' | 'verified' | 'distress';
 
@@ -21,6 +23,15 @@ export function SearchFilterBar() {
   const params = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [q, setQ] = useState(params.get('q') ?? '');
+  // Price filters became CONTROLLED for SCRUM-202: grouping as you type needs
+  // the value in state. They still apply on blur, so a half-typed amount does
+  // not fire a search on every keystroke.
+  const [priceMin, setPriceMin] = useState(
+    params.get('price_min') ? String(Number(params.get('price_min')) / 100) : '',
+  );
+  const [priceMax, setPriceMax] = useState(
+    params.get('price_max') ? String(Number(params.get('price_max')) / 100) : '',
+  );
 
   const quick: Quick =
     params.get('sale_type') === 'distress'
@@ -125,27 +136,23 @@ export function SearchFilterBar() {
           </label>
           <label className="text-xs font-medium text-ink-700">
             Min Price (₦)
-            <input
-              inputMode="numeric"
-              defaultValue={params.get('price_min') ? String(Number(params.get('price_min')) / 100) : ''}
-              onBlur={(e) => {
-                const naira = e.target.value.replace(/\D/g, '');
-                apply({ price_min: naira ? String(Number(naira) * 100) : null });
-              }}
+            <MoneyInput
+              value={priceMin}
+              onChange={setPriceMin}
+              onBlur={() => apply({ price_min: priceMin ? String(nairaToKobo(priceMin)) : null })}
               placeholder="₦0"
+              ariaLabel="Minimum price in naira"
               className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             />
           </label>
           <label className="text-xs font-medium text-ink-700">
             Max Price (₦)
-            <input
-              inputMode="numeric"
-              defaultValue={params.get('price_max') ? String(Number(params.get('price_max')) / 100) : ''}
-              onBlur={(e) => {
-                const naira = e.target.value.replace(/\D/g, '');
-                apply({ price_max: naira ? String(Number(naira) * 100) : null });
-              }}
+            <MoneyInput
+              value={priceMax}
+              onChange={setPriceMax}
+              onBlur={() => apply({ price_max: priceMax ? String(nairaToKobo(priceMax)) : null })}
               placeholder="No limit"
+              ariaLabel="Maximum price in naira"
               className="mt-1 w-full rounded-md border border-ink-300/50 px-3 py-2 text-sm font-normal text-ink-buyer outline-none focus:border-emerald-accent"
             />
           </label>

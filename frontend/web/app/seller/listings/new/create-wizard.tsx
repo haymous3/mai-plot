@@ -5,7 +5,9 @@ import { useState } from 'react';
 
 import type { SellerPoaStatus } from '@/lib/api';
 import { projectedExpiry } from '@/lib/countdown';
+import { MoneyInput } from '@/app/_components/money-input';
 import { formatNaira } from '@/lib/format';
+import { nairaToKobo } from '@/lib/money-input';
 import { canJumpToStep } from '@/lib/wizard-nav';
 
 type PropertyType = 'residential' | 'commercial';
@@ -145,7 +147,7 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
   const [poaError, setPoaError] = useState<string | null>(null);
   const [poaUploaded, setPoaUploaded] = useState(false);
 
-  const priceKobo = Math.round(Number(priceNaira.replace(/[^0-9.]/g, '')) * 100);
+  const priceKobo = nairaToKobo(priceNaira);
   const expiry = saleType === 'distress' ? projectedExpiry(urgency) : null;
 
   /**
@@ -432,7 +434,13 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
         {step === 2 && (
           <Section title="Pricing">
             <Field label="Price (₦)">
-              <input className={inputCls} value={priceNaira} onChange={(e) => setPriceNaira(e.target.value)} placeholder="e.g., 45,000,000" inputMode="numeric" />
+              <MoneyInput
+                className={inputCls}
+                value={priceNaira}
+                onChange={setPriceNaira}
+                placeholder="e.g., 45,000,000"
+                ariaLabel="Asking price in naira"
+              />
             </Field>
             <label className="flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" checked={negotiable} onChange={(e) => setNegotiable(e.target.checked)} />
