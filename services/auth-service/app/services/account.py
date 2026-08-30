@@ -48,6 +48,8 @@ class Account:
     # The account holder's OWN location (SCRUM-193). Every role has one, unlike
     # preferred_location below, which is where a BUYER wants to buy.
     location: str | None
+    # Postal address (SCRUM-201). See migration 0014 for how it differs.
+    address: str | None
     # Buyer-only; None for every other role, and for a buyer who has not filled
     # in the optional buying-capacity step.
     employment_status: str | None
@@ -89,6 +91,7 @@ class AccountService:
             nin_verified=account.nin_verified,
             avatar_s3_key=account.avatar_s3_key,
             location=account.location,
+            address=account.address,
             employment_status=employment_status,
             preferred_location=preferred_location,
             budget_kobo=budget_kobo,

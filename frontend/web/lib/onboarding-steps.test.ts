@@ -90,10 +90,11 @@ describe('nextStep', () => {
 });
 
 describe('isSkippable', () => {
-  // The design draws "Skip for now" only on the buyer profile step, and every
-  // field on it is optional server-side.
-  it('allows skipping the buyer profile', () => {
-    expect(isSkippable('buyer-profile')).toBe(true);
+  // Nothing is skippable since SCRUM-201: NIN and address are required of every
+  // role, so the buyer step's "Skip for now" was removed rather than left
+  // offering something the submit path no longer honours.
+  it('no longer allows skipping the buyer profile', () => {
+    expect(isSkippable('buyer-profile')).toBe(false);
   });
 
   // These gate real capability: a seller cannot publish without a declared
@@ -101,7 +102,6 @@ describe('isSkippable', () => {
   it('does not allow skipping the gating steps', () => {
     expect(isSkippable('seller-verification')).toBe(false);
     expect(isSkippable('realtor-profile')).toBe(false);
-    expect(isSkippable('seller-verification')).toBe(false);
     expect(isSkippable('welcome')).toBe(false);
   });
 });

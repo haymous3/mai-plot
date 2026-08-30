@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { FieldError, FieldLabel, SecureNote, SelectField, TextField } from './fields';
-import { GhostButton, OnboardingHeading, PrimaryButton } from './ui';
+import { OnboardingHeading, PrimaryButton } from './ui';
 
 /**
  * The buyer profile step — `buyers-flow-after-email-verification-2.png`.
@@ -47,21 +47,37 @@ const EMPLOYMENT = [
 // full name again — for every role, not just buyers — so a second ask would
 // have shown an empty field for something already typed.
 
-export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void> }) {
+export function BuyerProfileStep({
+  onDone,
+  fullName,
+}: {
+  onDone: () => void | Promise<void>;
+  /**
+   * The name registration collected (SCRUM-197), passed down from the page's
+   * GET /auth/me. POST /auth/profile requires full_name, so saving an address
+   * means re-sending the name the account already has — sending nothing would
+   * be a 422 FULL_NAME_REQUIRED.
+   */
+  fullName?: string | null;
+}) {
   const [nin, setNin] = useState('');
   const [employment, setEmployment] = useState('');
   const [location, setLocation] = useState('');
+  const [address, setAddress] = useState('');
   const [budget, setBudget] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ninLooksValid = /^\d{11}$/.test(nin.trim());
+  const canSubmit = ninLooksValid && address.trim().length > 0;
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      if (nin.trim()) {
+      // NIN is REQUIRED for every role from SCRUM-201; it used to be optional
+      // here, with a "Skip for now" beside it. Both are gone.
+      {
         if (!ninLooksValid) {
           setError('NIN must be exactly 11 digits.');
           return;
@@ -78,7 +94,7 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
               ? 'NIN must be exactly 11 digits.'
               : b.error_code === 'NIN_ALREADY_VERIFIED'
                 ? 'This NIN has already been verified.'
-                : 'We could not verify that NIN. You can skip and add it later.',
+                : 'We could not verify that NIN. Please check it and retry.',
           );
           return;
         }
@@ -87,6 +103,18 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
       // Money as kobo, never a float (CLAUDE.md §4). Strip separators first so
       // "40,000,000" and "40000000" both work.
       const naira = budget.replace(/[^\d]/g, '');
+      // Address lives on user_pii (migration 0014) and so goes to the shared
+      // profile endpoint, not buyer_profiles below — every role has one.
+      const addr = await fetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+      });
+      if (!addr.ok) {
+        setError('We could not save your address. Please retry.');
+        return;
+      }
+
       const resp = await fetch('/api/auth/buyer/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -123,12 +151,25 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
           id="nin"
           value={nin}
           onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-          placeholder="12345678901"
+          placeholder="NIN should not be more than 11 digits"
           inputMode="numeric"
           maxLength={11}
           disabled={busy}
         />
         <SecureNote>Your data is encrypted and used only for verification</SecureNote>
+
+        <div className="mt-9">
+          <FieldLabel htmlFor="address" required>
+            Address
+          </FieldLabel>
+          <TextField
+            id="address"
+            value={address}
+            onChange={setAddress}
+            placeholder="e.g., 12 Admiralty Way, Lekki Phase 1, Lagos"
+            disabled={busy}
+          />
+        </div>
 
         <div className="mt-9">
           <FieldLabel htmlFor="employment">Employment Status</FieldLabel>
@@ -166,12 +207,14 @@ export function BuyerProfileStep({ onDone }: { onDone: () => void | Promise<void
 
         {error && <FieldError>{error}</FieldError>}
 
+        {/*
+          "Skip for now" is gone (SCRUM-201): NIN and address are now required
+          for every role, and a skip button beside required fields would be
+          offering something the submit path no longer honours.
+        */}
         <div className="mt-12 flex items-center justify-end gap-6">
-          <GhostButton onClick={() => void onDone()} disabled={busy}>
-            Skip for now
-          </GhostButton>
           <div className="w-[320px]">
-            <PrimaryButton disabled={busy} onClick={() => void submit()}>
+            <PrimaryButton disabled={busy || !canSubmit} onClick={() => void submit()}>
               {busy ? 'Saving…' : 'Complete Profile'}
             </PrimaryButton>
           </div>

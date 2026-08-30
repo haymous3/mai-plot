@@ -518,6 +518,7 @@ async def get_me(
             # S3 dependency.
             "avatar_url": avatars.presigned_url(account.avatar_s3_key),
             "location": account.location,
+            "address": account.address,
             "employment_status": account.employment_status,
             "preferred_location": account.preferred_location,
             "budget_kobo": account.budget_kobo,
@@ -598,6 +599,8 @@ async def update_profile(
             # stored one alone, an explicit null clears it. Only pydantic can
             # tell those apart, and only here, before the value is passed on.
             set_location="location" in body.model_fields_set,
+            address=body.address,
+            set_address="address" in body.model_fields_set,
         )
     except InvalidFullName:
         return _error(422, "FULL_NAME_REQUIRED", "Please enter your full name.")

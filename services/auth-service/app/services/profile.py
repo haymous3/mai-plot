@@ -35,6 +35,8 @@ class ProfileService:
         email: str | None,
         location: str | None = None,
         set_location: bool = False,
+        address: str | None = None,
+        set_address: bool = False,
     ) -> None:
         name = full_name.strip()
         if not name:
@@ -47,10 +49,13 @@ class ProfileService:
         # A whitespace-only location is a cleared one, not a stored blank —
         # "not said" has to stay distinguishable from "said nothing".
         normalised_location = location.strip() if location and location.strip() else None
+        normalised_address = address.strip() if address and address.strip() else None
         await self._users.update_profile(
             user_id,
             full_name=name,
             email=normalised_email,
             location=normalised_location,
             set_location=set_location,
+            address=normalised_address,
+            set_address=set_address,
         )

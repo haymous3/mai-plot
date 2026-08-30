@@ -49,6 +49,7 @@ class UserAccount:
     # pre-signed URL from it; the key itself never reaches the client.
     avatar_s3_key: str | None
     location: str | None
+    address: str | None
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,7 @@ class UserRepository:
                 UserPii.nin_hash.is_not(None).label("nin_verified"),
                 UserPii.avatar_s3_key,
                 UserPii.location,
+                UserPii.address,
             )
             .join(UserPii, UserPii.user_id == User.id)
             .where(
@@ -176,6 +178,7 @@ class UserRepository:
             nin_verified=row.nin_verified,
             avatar_s3_key=row.avatar_s3_key,
             location=row.location,
+            address=row.address,
         )
 
     async def set_avatar_key(self, user_id: UUID, *, key: str | None) -> tuple[bool, str | None]:
@@ -332,6 +335,8 @@ class UserRepository:
         email: str | None,
         location: str | None = None,
         set_location: bool = False,
+        address: str | None = None,
+        set_address: bool = False,
     ) -> None:
         """Set the caller's display name (user_pii) and, when supplied, email
         (users). Only touches the caller's own rows; email is left unchanged
@@ -347,6 +352,8 @@ class UserRepository:
             pii.full_name = full_name
             if set_location:
                 pii.location = location
+            if set_address:
+                pii.address = address
         if email is not None:
             user = await self._session.get(User, user_id)
             if user is not None:

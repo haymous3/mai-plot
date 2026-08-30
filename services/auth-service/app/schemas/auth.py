@@ -279,6 +279,8 @@ class AccountResponse(BaseModel):
     # The account holder's OWN location, for every role (SCRUM-193). Distinct
     # from preferred_location below, which is where a BUYER wants to buy.
     location: str | None
+    # The account holder's postal address (SCRUM-201), collected in onboarding.
+    address: str | None
     # Buyer-only; null for other roles and for buyers who skipped the step.
     employment_status: str | None
     preferred_location: str | None
@@ -344,6 +346,8 @@ class ProfileUpdateRequest(BaseModel):
     # once set. The route tells the two apart with pydantic's `model_fields_set`
     # rather than a sentinel default, so the annotation stays honest.
     location: str | None = Field(default=None, max_length=120)
+    # Same tri-state rule as `location` above.
+    address: str | None = Field(default=None, max_length=500)
 
 
 class ProfileUpdateResponse(BaseModel):

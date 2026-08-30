@@ -51,6 +51,10 @@ class UserPii(Base):
     # Not to be confused with buyer_profiles.preferred_location, which is
     # where a buyer wants to BUY — see that migration for why they differ.
     location: Mapped[str | None] = mapped_column(String(120), default=None)
+    # Postal address (SCRUM-201, migration 0014). TEXT, not VARCHAR: a
+    # Nigerian address with an estate name and landmarks runs long. See
+    # that migration for how this differs from `location` above.
+    address: Mapped[str | None] = mapped_column(Text, default=None)
     bvn_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     # Deterministic HMAC-SHA256(bvn, pepper) for cross-account dedup; unique.
     # bvn_hash (bcrypt) verifies, bvn_lookup (HMAC) is the queryable key.

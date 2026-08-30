@@ -187,3 +187,137 @@ async def test_location_is_rejected_when_too_long(
         headers=_auth(token),
     )
     assert resp.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# SCRUM-201 — the postal address, collected in onboarding for every role
+# --------------------------------------------------------------------------
+
+
+async def _address_of(http_client: AsyncClient, token: str) -> str | None:
+    resp = await http_client.get("/auth/me", headers=_auth(token))
+    assert resp.status_code == 200, resp.text
+    value: str | None = resp.json()["address"]
+    return value
+
+
+@pytest.mark.asyncio
+async def test_a_seller_can_set_an_address(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    token = await _seller_token(http_client, sms_fake)
+    assert await _address_of(http_client, token) is None
+
+    resp = await http_client.post(
+        "/auth/profile",
+        json={
+            "full_name": "Ada Obi",
+            "address": "12 Admiralty Way, Lekki Phase 1, Lagos",
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _address_of(http_client, token) == "12 Admiralty Way, Lekki Phase 1, Lagos"
+
+
+@pytest.mark.asyncio
+async def test_address_and_location_are_independent(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    """Three place-ish fields now exist and none may bleed into another.
+
+    address = where I live · location = where I am · preferred_location = where
+    a buyer wants to buy. Writing one must not disturb the others.
+    """
+    token = await _seller_token(http_client, sms_fake)
+
+    await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "address": "12 Admiralty Way", "location": "Lagos"},
+        headers=_auth(token),
+    )
+    assert await _address_of(http_client, token) == "12 Admiralty Way"
+    assert await _location_of(http_client, token) == "Lagos"
+
+    # Change only the location; the address must survive untouched.
+    await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "location": "Abuja"},
+        headers=_auth(token),
+    )
+    assert await _address_of(http_client, token) == "12 Admiralty Way"
+    assert await _location_of(http_client, token) == "Abuja"
+
+
+@pytest.mark.asyncio
+async def test_omitting_address_leaves_a_stored_one_alone(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    token = await _seller_token(http_client, sms_fake)
+    await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "address": "12 Admiralty Way"},
+        headers=_auth(token),
+    )
+
+    resp = await http_client.post(
+        "/auth/profile", json={"full_name": "Ada N. Obi"}, headers=_auth(token)
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _address_of(http_client, token) == "12 Admiralty Way"
+
+
+@pytest.mark.asyncio
+async def test_explicit_null_clears_the_address(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    token = await _seller_token(http_client, sms_fake)
+    await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "address": "12 Admiralty Way"},
+        headers=_auth(token),
+    )
+
+    resp = await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "address": None},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _address_of(http_client, token) is None
+
+
+@pytest.mark.asyncio
+async def test_a_long_nigerian_address_is_accepted(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+) -> None:
+    """TEXT, not VARCHAR(120) like `location` — an address with an estate name
+    and landmark directions runs well past a city name."""
+    token = await _seller_token(http_client, sms_fake)
+    long_address = (
+        "Flat 4B, Block C, Prime Water View Gardens Phase 2, "
+        "off Freedom Way, opposite the Lekki Phase 1 roundabout, Lekki, Lagos State"
+    )
+
+    resp = await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Ada Obi", "address": long_address},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _address_of(http_client, token) == long_address

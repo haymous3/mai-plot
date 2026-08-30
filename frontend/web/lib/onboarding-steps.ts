@@ -14,7 +14,7 @@
 export type OnboardingRole = 'buyer' | 'seller' | 'realtor';
 
 export type OnboardingStep =
-  /** Buyer only: NIN + buying capacity. All optional — the design has "Skip for now". */
+  /** Buyer only: NIN (required), address (required) and buying capacity. */
   | 'buyer-profile'
   /** Seller only: NIN, selling authority, and a PoA document when not the owner. */
   | 'seller-verification'
@@ -67,15 +67,20 @@ export function firstStep(role: string): OnboardingStep | null {
 /**
  * Steps a user may leave without completing.
  *
- * `buyer-profile` is skippable because the design draws a "Skip for now" beside
- * its CTA and every field on it is optional server-side. The seller and realtor
- * steps are NOT: they gate real capability (a seller cannot publish without a
- * declared authority, CLAUDE.md §8.1; a realtor row does not exist until
- * POST /realtors succeeds), so skipping them would strand the account in a
- * state the rest of the product does not expect.
+ * NONE, since SCRUM-201. `buyer-profile` used to be skippable — the design drew
+ * a "Skip for now" and every field on it was optional server-side — but NIN and
+ * address are now required of every role, so that button was removed rather
+ * than left offering something the submit path no longer honours.
+ *
+ * The seller and realtor steps were never skippable: they gate real capability
+ * (a seller cannot publish without a declared authority, CLAUDE.md §8.1; a
+ * realtor row does not exist until POST /realtors succeeds).
+ *
+ * Kept as a function rather than deleted: it is the one place that answers this
+ * question, and a later step may well be optional again.
  */
-export function isSkippable(step: OnboardingStep): boolean {
-  return step === 'buyer-profile';
+export function isSkippable(_step: OnboardingStep): boolean {
+  return false;
 }
 
 /**
