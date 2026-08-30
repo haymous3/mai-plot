@@ -29,6 +29,8 @@ class _StubUsers:
         email: str | None,
         location: str | None = None,
         set_location: bool = False,
+        address: str | None = None,
+        set_address: bool = False,
     ) -> None:
         self.updates.append(
             {
@@ -37,6 +39,8 @@ class _StubUsers:
                 "email": email,
                 "location": location,
                 "set_location": set_location,
+                "address": address,
+                "set_address": set_address,
             }
         )
 
@@ -58,6 +62,8 @@ async def test_saves_trimmed_name_and_normalised_email() -> None:
             # Not sent by this caller, so the stored location is left alone.
             "location": None,
             "set_location": False,
+            "address": None,
+            "set_address": False,
         }
     ]
     assert users.checked == ["ada@mai.ng"]  # uniqueness checked with the normalised value
@@ -127,3 +133,35 @@ async def test_blank_location_becomes_none_so_it_clears() -> None:
     assert users.updates[0]["location"] is None
     # Still an explicit write: the caller asked to end up with no location.
     assert users.updates[0]["set_location"] is True
+
+
+async def test_address_is_trimmed_and_passed_through() -> None:
+    users = _StubUsers()
+    await _service(users).update(
+        user_id=uuid4(),
+        full_name="Ada",
+        email=None,
+        address="  12 Admiralty Way  ",
+        set_address=True,
+    )
+
+    assert users.updates[0]["address"] == "12 Admiralty Way"
+    assert users.updates[0]["set_address"] is True
+
+
+async def test_address_is_not_written_when_omitted() -> None:
+    """Editing only a name must not wipe a stored address."""
+    users = _StubUsers()
+    await _service(users).update(user_id=uuid4(), full_name="Ada", email=None)
+
+    assert users.updates[0]["set_address"] is False
+
+
+async def test_blank_address_becomes_none_so_it_clears() -> None:
+    users = _StubUsers()
+    await _service(users).update(
+        user_id=uuid4(), full_name="Ada", email=None, address="   ", set_address=True
+    )
+
+    assert users.updates[0]["address"] is None
+    assert users.updates[0]["set_address"] is True

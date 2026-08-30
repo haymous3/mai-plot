@@ -45,14 +45,16 @@ export function OnboardingFlow({
 
   return (
     <OnboardingShell>
-      {step === 'buyer-profile' && <BuyerProfileStep onDone={() => advance('buyer-profile')} />}
+      {step === 'buyer-profile' && (
+        <BuyerProfileStep onDone={() => advance('buyer-profile')} fullName={fullName} />
+      )}
 
       {step === 'seller-verification' && (
-        <SellerVerificationStep onDone={() => advance('seller-verification')} />
+        <SellerVerificationStep onDone={() => advance('seller-verification')} fullName={fullName} />
       )}
 
       {step === 'realtor-profile' && (
-        <RealtorProfileStep onDone={() => advance('realtor-profile')} />
+        <RealtorProfileStep onDone={() => advance('realtor-profile')} fullName={fullName} />
       )}
 
       {step === 'welcome' && <Welcome role={role} fullName={fullName} />}

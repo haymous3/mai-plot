@@ -31,7 +31,17 @@ import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
  */
 const POA_ACCEPT = 'application/pdf,image/jpeg';
 const CREDENTIAL_ACCEPT = 'application/pdf,image/png,image/jpeg';
-const MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * 10MB, matching BOTH servers: auth-service `poa_max_upload_bytes` and
+ * realtor-service `gov_id_max_upload_bytes`.
+ *
+ * ⚠️ Was 5MB until SCRUM-201. SCRUM-199 corrected the visible subtitles to
+ * "max 10MB" but missed this check, so the screens promised 10 and the button
+ * refused at 5 — a file between the two was rejected for a reason the user had
+ * just been told was allowed.
+ */
+const MAX_MB = 10;
+const MAX_BYTES = MAX_MB * 1024 * 1024;
 
 /**
  * Seller Verification — NIN, selling authority, and a PoA document when the
@@ -47,8 +57,16 @@ const MAX_BYTES = 5 * 1024 * 1024;
  * document is verified (§8.1), so leaving without declaring an authority would
  * strand the account in a state the listing flow does not expect.
  */
-export function SellerVerificationStep({ onDone }: { onDone: () => void | Promise<void> }) {
+export function SellerVerificationStep({
+  onDone,
+  fullName,
+}: {
+  onDone: () => void | Promise<void>;
+  /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
+  fullName?: string | null;
+}) {
   const [nin, setNin] = useState('');
+  const [address, setAddress] = useState('');
   const [authority, setAuthority] = useState<'owner' | 'power_of_attorney' | ''>('');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,11 +74,12 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
 
   const needsDocument = authority === 'power_of_attorney';
   const ninOk = /^\d{11}$/.test(nin.trim());
-  const canSubmit = ninOk && authority !== '' && (!needsDocument || file !== null);
+  const canSubmit =
+    ninOk && address.trim().length > 0 && authority !== '' && (!needsDocument || file !== null);
 
   async function submit() {
     if (file && file.size > MAX_BYTES) {
-      setError('That document is larger than 5MB. Please upload a smaller file.');
+      setError(`That document is larger than ${MAX_MB}MB. Please upload a smaller file.`);
       return;
     }
     setBusy(true);
@@ -79,7 +98,12 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
         return;
       }
 
-      if (authority === 'owner') {
+      // ⚠️ This used to run only for `authority === 'owner'` — a leftover from
+      // when /auth/verify/nin was hard-gated to owner-sellers and 403'd anyone
+      // else. SCRUM-189 removed that gate, but this condition stayed, so a PoA
+      // seller typed a NIN the form REQUIRED and it was silently discarded.
+      // Every seller's NIN is verified now (SCRUM-201).
+      {
         const ninResp = await fetch('/api/auth/seller/nin', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -96,6 +120,17 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
           );
           return;
         }
+      }
+
+      // Address goes to the shared profile endpoint — user_pii, every role.
+      const addrResp = await fetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+      });
+      if (!addrResp.ok) {
+        setError('We could not save your address. Please retry.');
+        return;
       }
 
       if (needsDocument && file) {
@@ -131,12 +166,25 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
           id="nin"
           value={nin}
           onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-          placeholder="12345678901"
+          placeholder="NIN should not be more than 11 digits"
           inputMode="numeric"
           maxLength={11}
           disabled={busy}
         />
         <SecureNote>Your data is encrypted and used only for verification</SecureNote>
+
+        <div className="mt-9">
+          <FieldLabel htmlFor="address" required>
+            Address
+          </FieldLabel>
+          <TextField
+            id="address"
+            value={address}
+            onChange={setAddress}
+            placeholder="e.g., 12 Admiralty Way, Lekki Phase 1, Lagos"
+            disabled={busy}
+          />
+        </div>
 
         <div className="mt-9">
           <FieldLabel htmlFor="authority-owner" required>
@@ -204,23 +252,70 @@ export function SellerVerificationStep({ onDone }: { onDone: () => void | Promis
  * "e.g., Lagos, Lekki, Victoria Island", and is split into the repeated
  * `coverage_states` parts the service expects.
  */
-export function RealtorProfileStep({ onDone }: { onDone: () => void | Promise<void> }) {
+export function RealtorProfileStep({
+  onDone,
+  fullName,
+}: {
+  onDone: () => void | Promise<void>;
+  /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
+  fullName?: string | null;
+}) {
+  // ⚠️ NIN was collected nowhere in the realtor flow before SCRUM-201: this
+  // step asked for an ESVARBON licence, coverage and credentials, and the
+  // platform-wide identity check was simply absent for the role.
+  const [nin, setNin] = useState('');
+  const [address, setAddress] = useState('');
   const [esvarbon, setEsvarbon] = useState('');
   const [coverage, setCoverage] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = esvarbon.trim() !== '' && coverage.trim() !== '' && file !== null;
+  const ninOk = /^\d{11}$/.test(nin.trim());
+  const canSubmit =
+    ninOk &&
+    address.trim().length > 0 &&
+    esvarbon.trim() !== '' &&
+    coverage.trim() !== '' &&
+    file !== null;
 
   async function submit() {
     if (file && file.size > MAX_BYTES) {
-      setError('That document is larger than 5MB. Please upload a smaller file.');
+      setError(`That document is larger than ${MAX_MB}MB. Please upload a smaller file.`);
       return;
     }
     setBusy(true);
     setError(null);
     try {
+      // Identity first, then the professional credentials: a realtor row that
+      // exists without a verified NIN is the state SCRUM-201 set out to remove.
+      const ninResp = await fetch('/api/auth/nin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ nin: nin.trim() }),
+      });
+      if (!ninResp.ok) {
+        const b = (await ninResp.json().catch(() => ({}))) as { error_code?: string };
+        setError(
+          b.error_code === 'NIN_FORMAT_INVALID'
+            ? 'NIN must be exactly 11 digits.'
+            : b.error_code === 'NIN_ALREADY_VERIFIED'
+              ? 'This NIN has already been verified.'
+              : 'We could not verify that NIN. Please retry.',
+        );
+        return;
+      }
+
+      const addrResp = await fetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+      });
+      if (!addrResp.ok) {
+        setError('We could not save your address. Please retry.');
+        return;
+      }
+
       const form = new FormData();
       form.append('esvarbon_number', esvarbon.trim());
       coverage
@@ -235,7 +330,7 @@ export function RealtorProfileStep({ onDone }: { onDone: () => void | Promise<vo
         const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
         setError(
           (b.error_code ?? '').startsWith('CREDENTIAL')
-            ? 'That document was not accepted. Use a PDF, PNG or JPG under 5MB.'
+            ? `That document was not accepted. Use a PDF, PNG or JPG under ${MAX_MB}MB.`
             : 'Could not submit your credentials. Please retry.',
         );
         return;
@@ -253,18 +348,50 @@ export function RealtorProfileStep({ onDone }: { onDone: () => void | Promise<vo
       <OnboardingHeading title="Realtor Profile" subtitle="Complete your professional profile" />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        {/* Not on the export — see the note above. Required by POST /realtors
-            and by CLAUDE.md §9. */}
-        <FieldLabel htmlFor="esvarbon" required>
-          ESVARBON Licence Number
+        {/* NIN and Address are not on the export either (SCRUM-201): the
+            realtor flow collected no identity document at all, and no role
+            collected an address. */}
+        <FieldLabel htmlFor="realtor-nin" required>
+          NIN
         </FieldLabel>
         <TextField
-          id="esvarbon"
-          value={esvarbon}
-          onChange={setEsvarbon}
-          placeholder="ESV/2024/12345"
+          id="realtor-nin"
+          value={nin}
+          onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
+          placeholder="NIN should not be more than 11 digits"
+          inputMode="numeric"
+          maxLength={11}
           disabled={busy}
         />
+        <SecureNote>Your data is encrypted and used only for verification</SecureNote>
+
+        <div className="mt-9">
+          <FieldLabel htmlFor="realtor-address" required>
+            Address
+          </FieldLabel>
+          <TextField
+            id="realtor-address"
+            value={address}
+            onChange={setAddress}
+            placeholder="e.g., 12 Admiralty Way, Lekki Phase 1, Lagos"
+            disabled={busy}
+          />
+        </div>
+
+        <div className="mt-9">
+          {/* Not on the export — see the note above. Required by POST /realtors
+              and by CLAUDE.md §9. */}
+          <FieldLabel htmlFor="esvarbon" required>
+            ESVARBON Licence Number
+          </FieldLabel>
+          <TextField
+            id="esvarbon"
+            value={esvarbon}
+            onChange={setEsvarbon}
+            placeholder="ESV/2024/12345"
+            disabled={busy}
+          />
+        </div>
 
         <div className="mt-9">
           <FieldLabel htmlFor="credentials" required>

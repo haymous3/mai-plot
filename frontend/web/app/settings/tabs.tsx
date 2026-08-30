@@ -275,13 +275,17 @@ function storedLocation(account: Account): string {
 export function ProfileTab({ account }: { account: Account }) {
   const [fullName, setFullName] = useState(account.full_name ?? '');
   const [location, setLocation] = useState(storedLocation(account));
+  const [address, setAddress] = useState(account.address ?? '');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{
     tone: 'ok' | 'error';
     text: string;
   } | null>(null);
 
-  const dirty = fullName !== (account.full_name ?? '') || location !== storedLocation(account);
+  const dirty =
+    fullName !== (account.full_name ?? '') ||
+    location !== storedLocation(account) ||
+    address !== (account.address ?? '');
 
   async function save() {
     setBusy(true);
@@ -296,6 +300,9 @@ export function ProfileTab({ account }: { account: Account }) {
         // the endpoint distinguishes "sent null" from "not sent".
         body: JSON.stringify({
           full_name: fullName.trim(),
+          // Address is on user_pii for every role (SCRUM-201), unlike the
+          // location box above, which forks by role.
+          address: address.trim() || null,
           ...(account.role === 'buyer' ? {} : { location: location.trim() || null }),
         }),
       });
@@ -380,6 +387,16 @@ export function ProfileTab({ account }: { account: Account }) {
           <TextInput id="phone" value={account.phone} icon={<PhoneIcon />} />
         </Field>
 
+        <Field id="address" label="Address">
+          <TextInput
+            id="address"
+            value={address}
+            onChange={setAddress}
+            placeholder="12 Admiralty Way, Lekki Phase 1, Lagos"
+            icon={<PinIcon />}
+          />
+        </Field>
+
         <Field id="location" label="Location">
           <TextInput
             id="location"
@@ -398,6 +415,7 @@ export function ProfileTab({ account }: { account: Account }) {
           onClick={() => {
             setFullName(account.full_name ?? '');
             setLocation(storedLocation(account));
+            setAddress(account.address ?? '');
             setNote(null);
           }}
         >
@@ -520,7 +538,7 @@ export function FinancialTab({
             id="nin"
             value={nin}
             onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-            placeholder="12345678901"
+            placeholder="NIN should not be more than 11 digits"
             inputMode="numeric"
             maxLength={11}
           />

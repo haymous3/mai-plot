@@ -29,6 +29,12 @@ export type Account = {
    * buyer-only and means where they want to BUY.
    */
   location: string | null;
+  /**
+   * Postal address (SCRUM-201, `user_pii.address`). Every role, and distinct
+   * from both `location` above and `preferred_location` below — see auth
+   * migration 0014 for why all three exist.
+   */
+  address: string | null;
   /** Buyer-only; null for other roles and for buyers who skipped the step. */
   employment_status: string | null;
   preferred_location: string | null;
