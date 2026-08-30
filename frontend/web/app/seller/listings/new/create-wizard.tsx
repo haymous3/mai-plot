@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { SellerPoaStatus } from '@/lib/api';
 import { projectedExpiry } from '@/lib/countdown';
 import { formatNaira } from '@/lib/format';
+import { canJumpToStep } from '@/lib/wizard-nav';
 
 type PropertyType = 'residential' | 'commercial';
 type SaleType = 'normal' | 'distress';
@@ -32,19 +33,6 @@ const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
 ];
 
 /**
- * Media limits, mirrored from listing-service `app/config.py` (SCRUM-199).
- *
- * These are shown to the seller AND checked before upload, so an over-size file
- * is refused here with a sentence rather than after a 200MB round trip that
- * ends in MEDIA_TOO_LARGE. The server remains the authority — this is a
- * courtesy, not the guard.
- *
- * ⚠️ The accept lists are narrower than the `image/*` and `video/*` they
- * replace, and deliberately so: listing-service validates by MAGIC BYTES and
- * accepts only JPEG, PNG and MP4. `image/*` let a seller pick a GIF or a HEIC
- * the server was always going to reject.
- */
-/**
  * PoA document limits, mirrored from auth-service (SCRUM-199).
  *
  * ⚠️ PDF and JPEG only — NOT PNG. `poa.detect_document_type()` reads magic
@@ -63,6 +51,19 @@ const POA_ERRORS: Record<string, string> = {
   NO_SESSION: 'Your session expired — please sign in again.',
 };
 
+/**
+ * Media limits, mirrored from listing-service `app/config.py` (SCRUM-199).
+ *
+ * These are shown to the seller AND checked before upload, so an over-size file
+ * is refused here with a sentence rather than after a 200MB round trip that
+ * ends in MEDIA_TOO_LARGE. The server remains the authority — this is a
+ * courtesy, not the guard.
+ *
+ * ⚠️ The accept lists are narrower than the `image/*` and `video/*` they
+ * replace, and deliberately so: listing-service validates by MAGIC BYTES and
+ * accepts only JPEG, PNG and MP4. `image/*` let a seller pick a GIF or a HEIC
+ * the server was always going to reject.
+ */
 const MAX_PHOTO_MB = 5;
 const MAX_VIDEO_MB = 200;
 const MAX_PHOTOS = 15;
@@ -103,6 +104,11 @@ const DEFAULT_LOCATION = { lat: 6.5244, lng: 3.3792 };
 export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  // The furthest step reached, so the stepper knows which numbers are
+  // navigable. Distinct from `step`: going back must not shrink it, or the
+  // seller would lose the ability to jump forward again to work they had
+  // already completed.
+  const [maxVisited, setMaxVisited] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -142,11 +148,39 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
   const priceKobo = Math.round(Number(priceNaira.replace(/[^0-9.]/g, '')) * 100);
   const expiry = saleType === 'distress' ? projectedExpiry(urgency) : null;
 
-  function canAdvance(): boolean {
-    if (step === 0) return title.trim().length > 0 && sizeSqm.trim().length > 0;
-    if (step === 1) return address.trim().length > 0 && lga.trim().length > 0 && state.trim().length > 0;
-    if (step === 2) return Number.isFinite(priceKobo) && priceKobo > 0;
+  /**
+   * Whether a given step's own requirements are currently met.
+   *
+   * Addressed BY INDEX rather than reading `step` (SCRUM-200), because the
+   * stepper now has to ask about steps the seller is not standing on — "can I
+   * jump from 1 to 5?" means checking 1 through 4, not just the current one.
+   */
+  function stepValid(i: number): boolean {
+    if (i === 0) return title.trim().length > 0 && sizeSqm.trim().length > 0;
+    if (i === 1) return address.trim().length > 0 && lga.trim().length > 0 && state.trim().length > 0;
+    if (i === 2) return Number.isFinite(priceKobo) && priceKobo > 0;
     return true;
+  }
+
+  function canAdvance(): boolean {
+    return stepValid(step);
+  }
+
+  /** Rules live in lib/wizard-nav so they can be tested (SCRUM-200). */
+  function canJumpTo(target: number): boolean {
+    return canJumpToStep({
+      target,
+      current: step,
+      maxVisited,
+      isValid: stepValid,
+      busy: submitting,
+    });
+  }
+
+  function goToStep(target: number) {
+    if (!canJumpTo(target)) return;
+    setStep(target);
+    setMaxVisited((m) => Math.max(m, target));
   }
 
   async function uploadMedia(listingId: string, file: File, mediaType: 'photo' | 'video', order: number) {
@@ -273,6 +307,7 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
       if (!resp.ok || !body.listing_id) {
         setError(CREATE_ERRORS[body.error_code ?? ''] ?? 'Could not create the listing. Please retry.');
         setStep(6);
+        setMaxVisited(6);
         return;
       }
 
@@ -313,22 +348,44 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
 
       {/* Stepper */}
       <ol className="mt-6 flex flex-wrap gap-y-4 rounded-2xl border border-line bg-surface-card px-4 py-5">
-        {STEPS.map((label, i) => (
-          <li key={label} className="flex flex-1 min-w-[120px] flex-col items-center gap-1.5 text-center">
-            <span
-              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium ${
-                i < step
-                  ? 'bg-emerald-deep text-bone'
-                  : i === step
-                    ? 'bg-emerald-deep text-bone'
-                    : 'border border-ink-300/50 text-ink-500'
-              }`}
-            >
-              {i < step ? '✓' : i + 1}
-            </span>
-            <span className={`text-xs ${i === step ? 'text-ink-900' : 'text-ink-500'}`}>{label}</span>
-          </li>
-        ))}
+        {STEPS.map((label, i) => {
+          const reachable = canJumpTo(i);
+          const done = i < step;
+          return (
+            <li key={label} className="flex flex-1 min-w-[120px] flex-col items-center gap-1.5 text-center">
+              {/*
+                A real button, not a clickable span (SCRUM-200): the stepper is
+                now navigation, so it has to be reachable by keyboard and
+                announced as a control. `aria-current` marks the step the seller
+                is on; a step they cannot reach yet is disabled rather than
+                silently inert, so the cursor and the screen reader agree.
+              */}
+              <button
+                type="button"
+                onClick={() => goToStep(i)}
+                disabled={!reachable}
+                aria-current={i === step ? 'step' : undefined}
+                aria-label={`Step ${i + 1}: ${label}${i === step ? ' (current)' : ''}`}
+                className={`flex flex-col items-center gap-1.5 rounded-lg px-2 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-deep focus-visible:ring-offset-2 ${
+                  reachable ? 'cursor-pointer hover:bg-ink-900/5' : 'cursor-default'
+                }`}
+              >
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium ${
+                    i <= step
+                      ? 'bg-emerald-deep text-bone'
+                      : 'border border-ink-300/50 text-ink-500'
+                  }`}
+                >
+                  {done ? '✓' : i + 1}
+                </span>
+                <span className={`text-xs ${i === step ? 'text-ink-900' : 'text-ink-500'}`}>
+                  {label}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface-card p-6 sm:p-8">
@@ -584,7 +641,13 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
           <button
             type="button"
             disabled={!canAdvance()}
-            onClick={() => setStep((s) => Math.min(6, s + 1))}
+            onClick={() =>
+              setStep((s) => {
+                const next = Math.min(6, s + 1);
+                setMaxVisited((m) => Math.max(m, next));
+                return next;
+              })
+            }
             className="rounded-lg bg-emerald-deep px-6 py-2.5 text-sm font-semibold text-bone transition hover:bg-emerald-accent disabled:opacity-50"
           >
             Next →
