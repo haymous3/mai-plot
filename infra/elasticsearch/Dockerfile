@@ -24,5 +24,14 @@ RUN chmod 0755 /usr/local/bin/railway-entrypoint.sh
 
 EXPOSE 9200
 
-ENTRYPOINT ["/usr/local/bin/railway-entrypoint.sh"]
-CMD ["eswrapper"]
+# Deliberately CMD-only, with no ENTRYPOINT.
+#
+# Railway does not always preserve an image's ENTRYPOINT: once this service
+# had ever been given a start command, it ran the image's CMD as the command
+# directly and dropped the ENTRYPOINT — so an ENTRYPOINT/CMD split lost the
+# wrapper and tried to exec the bare sentinel `eswrapper`, which is not a
+# binary ("The executable `eswrapper` could not be found").
+#
+# Putting the whole argv in CMD is correct under both interpretations, and
+# behaves identically under plain `docker run`.
+CMD ["/usr/local/bin/railway-entrypoint.sh", "eswrapper"]
