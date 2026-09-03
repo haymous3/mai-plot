@@ -265,6 +265,26 @@ services:
               claims_to_verify:
                 - exp
               key_claim_name: iss
+      # Seller payout account (SCRUM-145) — the Settings > Financial tab.
+      # Self-scoped GET/PUT, so it needs the same JWT gate as /wallet.
+      # This route was missing until SCRUM-203: the frontend has called
+      # /payout-account since SCRUM-188, but nothing had driven that tab
+      # through the gateway, so the 404 only appeared on a real deploy.
+      - name: payout-account
+        paths:
+          - /payout-account
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       # Seller Transactions / sales (SCRUM-98).
       - name: sales
         paths:
