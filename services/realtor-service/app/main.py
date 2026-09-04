@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.admin import router as admin_router
+from app.routes.admin_reports import router as admin_reports_router
 from app.routes.inspections import router as inspections_router
 from app.routes.realtors import router as realtors_router
 from app.security import AdminAccessError, AuthenticationError
@@ -22,6 +23,7 @@ app = FastAPI(title="Maiplot Realtor Service", version="0.1.0")
 setup_telemetry(SERVICE_NAME, app)
 app.include_router(realtors_router)
 app.include_router(admin_router)
+app.include_router(admin_reports_router)
 app.include_router(inspections_router)
 
 

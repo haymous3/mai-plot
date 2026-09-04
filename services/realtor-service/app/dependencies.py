@@ -24,6 +24,7 @@ from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.realtor_notifier import RealtorNotifier, build_realtor_notifier
 from app.services.realtor_onboarding import RealtorOnboardingService
 from app.services.realtor_review import RealtorReviewService
+from app.services.report_review_service import ReportReviewService
 from app.services.report_service import ReportService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -180,6 +181,14 @@ def get_report_service(
         video_max_bytes=settings.inspection_video_max_bytes,
         presign_ttl_seconds=settings.gov_id_presign_ttl_seconds,
     )
+
+
+def get_report_review_service(
+    inspections: Annotated[InspectionRepository, Depends(_inspection_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    notifier: Annotated[RealtorNotifier, Depends(get_realtor_notifier)],
+) -> ReportReviewService:
+    return ReportReviewService(inspections=inspections, audit=audit, notifier=notifier)
 
 
 async def get_current_user(

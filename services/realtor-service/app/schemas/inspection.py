@@ -122,6 +122,11 @@ class RealtorInspectionItem(BaseModel):
     seller_authority_type: str | None
     seller_name: str | None
     seller_phone_masked: str | None
+    # Review state (SCRUM-205) — drives the realtor's Report History cards.
+    report_review_status: str
+    report_reviewed_at: datetime | None
+    report_review_note: str | None
+    report_revision: int
 
     @classmethod
     def from_row(cls, row: RealtorInspectionRow) -> RealtorInspectionItem:
@@ -149,6 +154,10 @@ class RealtorInspectionItem(BaseModel):
             seller_authority_type=row.seller_authority_type,
             seller_name=row.seller_name,
             seller_phone_masked=mask_phone(row.seller_phone),
+            report_review_status=row.report_review_status,
+            report_reviewed_at=row.report_reviewed_at,
+            report_review_note=row.report_review_note,
+            report_revision=row.report_revision,
         )
 
 

@@ -38,6 +38,10 @@ def _row(**overrides: object) -> RealtorInspectionRow:
         "seller_authority_type": "owner",
         "seller_name": "Mr. Adebayo",
         "seller_phone": "+2348012345824",
+        "report_review_status": "not_submitted",
+        "report_reviewed_at": None,
+        "report_review_note": None,
+        "report_revision": 1,
     }
     fields.update(overrides)
     return RealtorInspectionRow(**fields)  # type: ignore[arg-type]
