@@ -520,6 +520,7 @@ services:
 
   # =========================================================================
   # Realtor service — /realtors/*  +  /inspections/*  +  /admin/realtors/*
+  #                 +  /admin/inspections/* (report review, SCRUM-205)
   # =========================================================================
   - name: realtor-service
     url: http://realtor-service:8000
@@ -529,6 +530,34 @@ services:
       - name: admin-realtors
         paths:
           - /admin/realtors
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+      # Admin inspection-report review (SCRUM-205) — realtor-service mounts
+      # this at prefix="/admin/inspections": the queue and the approve/reject
+      # decision. A SEPARATE route from `realtors` below, because Kong matches
+      # path PREFIXES: "/admin/inspections/..." does not start with
+      # "/inspections", so the existing route never sees it. It also needs the
+      # ip-restriction that the non-admin route must not have.
+      - name: admin-inspections
+        paths:
+          - /admin/inspections
         strip_path: false
         plugins:
           - name: rate-limiting
