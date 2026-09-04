@@ -185,9 +185,14 @@ const config: Config = {
           100: '#dcfce7',
           200: '#b9f8cf',
           700: '#008236',
+          // Heading ink inside the wizard's Progress card (Figma 278:3927).
+          800: '#0d542b',
         },
-        /** Distress-sale marker on a property row — fill + text only, no border. */
+        /** Distress-sale marker, and the negative selected state on the report
+         * wizard's option cards. `50` is the wizard's fill; `100` is the row
+         * badge's (Figma 278:3764). */
         distress: {
+          50: '#fef2f2',
           100: '#ffe2e2',
           700: '#c10007',
         },
