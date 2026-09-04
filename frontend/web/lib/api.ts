@@ -427,6 +427,34 @@ export interface RealtorInspectionsResponse {
   data: RealtorInspection[];
 }
 
+/** One row of the admin inspection-report review queue
+ * (GET /admin/inspections/reports/queue, SCRUM-205). The realtor is identity
+ * only — name + ESVARBON licence, never contact details (CLAUDE.md §10). */
+export interface ReportReviewItem {
+  inspection_id: string;
+  transaction_id: string;
+  realtor_id: string;
+  realtor_name: string | null;
+  esvarbon_number: string | null;
+  report_submitted_at: string | null;
+  report_review_status: string;
+  report_reviewed_at: string | null;
+  report_review_note: string | null;
+  report_revision: number;
+  property_title: string | null;
+  address_text: string | null;
+  lga: string | null;
+  state: string | null;
+}
+
+export interface ReportReviewQueueResponse {
+  data: ReportReviewItem[];
+}
+
+/** The review filter the queue page exposes. `all` shows every submitted
+ * report regardless of decision. */
+export type ReportReviewFilter = 'pending' | 'approved' | 'rejected' | 'all';
+
 /** A submitted inspection report (GET /inspections/{id}/report, SCRUM-73).
  * `photo_urls` are short-TTL pre-signed S3 URLs. */
 export interface InspectionReport {
