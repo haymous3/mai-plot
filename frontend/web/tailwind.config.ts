@@ -173,6 +173,10 @@ const config: Config = {
           100: '#fef3c6', // pill fill
           200: '#fee685', // border, both
           700: '#bb4d00', // text, both
+          // The dashboard's "How Reports Help" card (Figma 276:332) sits on the
+          // -50 fill and needs darker ink than -700 to stay readable.
+          800: '#973c00', // list items
+          900: '#7b3306', // heading
         },
         scheduled: {
           50: '#eff6ff',

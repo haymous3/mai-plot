@@ -74,6 +74,13 @@ describe('emptyReportForm', () => {
     expect(f.photos).toEqual([]);
     expect(f.video).toBeNull();
     expect(f.gps).toBeNull();
+    expect(f.amenities).toEqual([]);
+  });
+
+  it('keeps amenities — the design omits the picker, the field is still captured', () => {
+    // Product owner call (SCRUM-204): dropping it would silently reduce what
+    // the platform records, and the report detail page already renders it.
+    expect(emptyReportForm().amenities).toEqual([]);
   });
 });
 

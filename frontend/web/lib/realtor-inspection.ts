@@ -169,6 +169,56 @@ export function isSameMonth(iso: string | null, now: number = Date.now()): boole
   return d.getUTCFullYear() === ref.getUTCFullYear() && d.getUTCMonth() === ref.getUTCMonth();
 }
 
+/** The market's timezone. "Today" has to mean the realtor's calendar day, and
+ * this tile is computed in a Server Component — so it cannot use the runtime's
+ * local time, which is the server's clock (UTC on Railway, UTC+2 in
+ * af-south-1), not the realtor's. Nigeria is UTC+1 and does not observe DST.
+ * Same determinism reason `formatDateTime` pins UTC. */
+const MARKET_TIME_ZONE = 'Africa/Lagos';
+
+/** Calendar day in the market's timezone as YYYY-MM-DD. en-CA gives ISO order. */
+function marketDay(value: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: MARKET_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+}
+
+/** Inspections scheduled to happen today — the dashboard's "Upcoming Today"
+ * tile (SCRUM-204). Counts by the confirmed date where one exists, since that
+ * is the date the realtor will actually turn up on, and only for assignments
+ * still live (a submitted report is not something upcoming). */
+export function upcomingTodayCount(items: RealtorInspection[], now: number = Date.now()): number {
+  const today = marketDay(new Date(now));
+  return items.filter((i) => {
+    if (inspectionStatusMeta(i.status).bucket === 'completed') return false;
+    const d = new Date(i.confirmed_date ?? i.proposed_date);
+    if (Number.isNaN(d.getTime())) return false;
+    return marketDay(d) === today;
+  }).length;
+}
+
+/** Relative time for the activity feed, e.g. "2 hours ago" (Figma 276:4).
+ * Coarse on purpose — the feed is a glance, not an audit trail. */
+export function relativeTime(iso: string, now: number = Date.now()): string {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return '—';
+  const secs = Math.max(0, Math.floor((now - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  const years = Math.floor(months / 12);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+}
+
 export interface AcceptanceWindow {
   expired: boolean;
   /** Live remaining-time label, e.g. "1h 23m left" or "4m 07s left". */
