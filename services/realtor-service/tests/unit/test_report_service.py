@@ -39,6 +39,7 @@ def _inspection(
     status: str = "accepted",
     confirmed_offset_h: float = -1,
     submitted: bool = False,
+    review_status: str | None = None,
 ) -> InspectionRow:
     now = datetime.now(UTC)
     return InspectionRow(
@@ -58,6 +59,11 @@ def _inspection(
             if submitted
             else None
         ),
+        report_review_status=review_status or ("pending" if submitted else "not_submitted"),
+        report_reviewed_at=None,
+        report_reviewed_by=None,
+        report_review_note="Photos too dark." if review_status == "rejected" else None,
+        report_revision=1,
     )
 
 
@@ -66,14 +72,22 @@ class _StubInspectionRepo:
         self._row = row
         self._within = within
         self.submitted: dict[str, Any] | None = None
+        self.was_resubmission: bool = False
 
     async def get(self, inspection_id: UUID) -> InspectionRow | None:
         return self._row
 
     async def submit_report(
-        self, inspection_id: UUID, *, gps_lat: float, gps_lng: float, report_data: dict[str, Any]
+        self,
+        inspection_id: UUID,
+        *,
+        gps_lat: float,
+        gps_lng: float,
+        report_data: dict[str, Any],
+        is_resubmission: bool = False,
     ) -> bool:
         self.submitted = report_data
+        self.was_resubmission = is_resubmission
         return True
 
     async def is_point_within_property(
@@ -256,3 +270,73 @@ async def test_view_happy_returns_photo_urls() -> None:
 
     assert view.property_condition == "good"
     assert len(view.photo_urls) == 3
+
+
+# -- SCRUM-205: resubmitting a rejected report -------------------------------
+
+
+async def test_rejected_report_can_be_resubmitted_though_status_is_completed() -> None:
+    # The inspection stays 'completed' after a rejection (product decision), so
+    # the first-submission status guard must not block the redo.
+    row = _inspection(submitted=True, review_status="rejected")
+    svc, repo, _ = _service(row=row, txn=_txn(row))
+
+    await _submit(svc, inspection_id=row.id)
+
+    assert repo.was_resubmission is True
+    assert repo.submitted is not None
+
+
+async def test_resubmission_skips_the_confirmed_date_guard() -> None:
+    # The date guard already passed on the original submission; re-checking it
+    # would reject work the realtor was explicitly told to redo.
+    row = _inspection(submitted=True, review_status="rejected", confirmed_offset_h=+48)
+    svc, repo, _ = _service(row=row, txn=_txn(row))
+
+    await _submit(svc, inspection_id=row.id)
+
+    assert repo.was_resubmission is True
+
+
+async def test_resubmission_supersedes_the_previous_photos_without_destroying_them() -> None:
+    row = _inspection(submitted=True, review_status="rejected")
+    svc, repo, _ = _service(row=row, txn=_txn(row))
+
+    await _submit(svc, inspection_id=row.id)
+
+    assert repo.submitted is not None
+    superseded = repo.submitted["superseded"]
+    assert len(superseded) == 1
+    # The old keys are still addressable, tagged with the revision they belonged to.
+    assert superseded[0]["revision"] == 1
+    assert superseded[0]["photo_keys"] == ["k1", "k2", "k3"]
+    assert superseded[0]["review_note"] == "Photos too dark."
+    # And the live photo_keys are the NEW ones, not the old.
+    assert repo.submitted["photo_keys"] != superseded[0]["photo_keys"]
+
+
+async def test_an_approved_report_cannot_be_resubmitted() -> None:
+    row = _inspection(submitted=True, review_status="approved")
+    svc, _, _ = _service(row=row, txn=_txn(row))
+    with pytest.raises(ReportNotSubmittable):
+        await _submit(svc, inspection_id=row.id)
+
+
+async def test_a_pending_report_cannot_be_resubmitted() -> None:
+    # Still awaiting review — resubmitting would let a realtor swap the report
+    # out from under the admin looking at it.
+    row = _inspection(submitted=True, review_status="pending")
+    svc, _, _ = _service(row=row, txn=_txn(row))
+    with pytest.raises(ReportNotSubmittable):
+        await _submit(svc, inspection_id=row.id)
+
+
+async def test_first_submission_is_not_flagged_as_a_resubmission() -> None:
+    row = _inspection(status="accepted")
+    svc, repo, _ = _service(row=row, txn=_txn(row))
+
+    await _submit(svc, inspection_id=row.id)
+
+    assert repo.was_resubmission is False
+    assert repo.submitted is not None
+    assert "superseded" not in repo.submitted

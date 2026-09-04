@@ -60,6 +60,11 @@ def _inspection(
         gps_lng=None,
         report_submitted_at=None,
         report_data=None,
+        report_review_status="not_submitted",
+        report_reviewed_at=None,
+        report_reviewed_by=None,
+        report_review_note=None,
+        report_revision=1,
     )
 
 
@@ -382,6 +387,10 @@ def _realtor_inspection() -> RealtorInspectionRow:
         seller_authority_type="owner",
         seller_name="Mr. Adebayo",
         seller_phone="+2348012345824",
+        report_review_status="not_submitted",
+        report_reviewed_at=None,
+        report_review_note=None,
+        report_revision=1,
     )
 
 

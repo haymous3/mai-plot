@@ -42,6 +42,10 @@ function insp(overrides: Partial<RealtorInspection> = {}): RealtorInspection {
     seller_authority_type: 'owner',
     seller_name: 'Mr. Adebayo',
     seller_phone_masked: '+234 *** **** 824',
+    report_review_status: 'not_submitted',
+    report_reviewed_at: null,
+    report_review_note: null,
+    report_revision: 1,
     ...overrides,
   };
 }

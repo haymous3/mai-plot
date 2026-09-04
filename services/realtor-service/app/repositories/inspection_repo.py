@@ -41,11 +41,18 @@ class InspectionRow:
     gps_lng: Decimal | None
     report_submitted_at: datetime | None
     report_data: dict[str, Any] | None
+    report_review_status: str
+    report_reviewed_at: datetime | None
+    report_reviewed_by: UUID | None
+    report_review_note: str | None
+    report_revision: int
 
 
 _COLUMNS = (
     "id, transaction_id, realtor_id, proposed_date, confirmed_date, status, "
-    "assignment_expires_at, created_at, gps_lat, gps_lng, report_submitted_at, report_data"
+    "assignment_expires_at, created_at, gps_lat, gps_lng, report_submitted_at, report_data, "
+    "report_review_status, report_reviewed_at, report_reviewed_by, report_review_note, "
+    "report_revision"
 )
 
 
@@ -96,6 +103,32 @@ class RealtorInspectionRow:
     seller_authority_type: str | None
     seller_name: str | None
     seller_phone: str | None
+    report_review_status: str
+    report_reviewed_at: datetime | None
+    report_review_note: str | None
+    report_revision: int
+
+
+@dataclass(frozen=True)
+class ReportReviewRow:
+    """One submitted report awaiting (or carrying) an admin decision — the
+    review queue (SCRUM-205). Joined to its property and the realtor who filed
+    it. Identity only for the realtor: name + licence, never contact details."""
+
+    inspection_id: UUID
+    transaction_id: UUID
+    realtor_id: UUID
+    realtor_name: str | None
+    esvarbon_number: str | None
+    report_submitted_at: datetime | None
+    report_review_status: str
+    report_reviewed_at: datetime | None
+    report_review_note: str | None
+    report_revision: int
+    property_title: str | None
+    address_text: str | None
+    lga: str | None
+    state: str | None
 
 
 @dataclass(frozen=True)
@@ -192,6 +225,8 @@ class InspectionRepository:
                     SELECT i.id AS inspection_id, i.transaction_id, i.status,
                            i.proposed_date, i.confirmed_date, i.assignment_expires_at,
                            i.created_at, i.report_submitted_at, t.buyer_id,
+                           i.report_review_status, i.report_reviewed_at,
+                           i.report_review_note, i.report_revision,
                            pl.title AS property_title, pl.address_text, pl.lga, pl.state,
                            pl.property_type, pl.sale_type, pl.size_sqm, pl.asking_price_kobo,
                            cover.cdn_url AS cover_photo_url,
@@ -240,6 +275,10 @@ class InspectionRepository:
                 seller_authority_type=r.seller_authority_type,
                 seller_name=_blank_to_none(r.seller_name),
                 seller_phone=_blank_to_none(r.seller_phone),
+                report_review_status=r.report_review_status,
+                report_reviewed_at=r.report_reviewed_at,
+                report_review_note=r.report_review_note,
+                report_revision=r.report_revision,
             )
             for r in rows
         ]
@@ -316,24 +355,134 @@ class InspectionRepository:
         gps_lat: float,
         gps_lng: float,
         report_data: dict[str, Any],
+        is_resubmission: bool = False,
     ) -> bool:
         """Store the report: status -> completed, report_submitted_at = now, GPS +
-        report_data persisted. Guarded on status in ('accepted','rescheduled') so
-        it can only be submitted once, on a confirmed inspection (a rescheduled one
-        is confirmed at the new time — SCRUM-141)."""
+        report_data persisted, and the report enters the review queue as 'pending'.
+
+        Two ways in, and the guard differs (SCRUM-205):
+
+        * First submission — status must be 'accepted'/'rescheduled', i.e. a
+          confirmed inspection that has not been reported (a rescheduled one is
+          confirmed at its new time, SCRUM-141).
+        * Resubmission after a rejection — status is already 'completed' and
+          stays that way (product decision: the review status carries the
+          meaning, reverting would fight the confirmed-date guard), so the guard
+          is on report_review_status = 'rejected' instead. The revision bumps and
+          the previous decision is cleared so the row re-enters the queue clean.
+
+        `is_resubmission` is decided by the caller, which has already read the
+        row; both branches stay a single guarded UPDATE so two concurrent
+        submissions cannot both win.
+        """
+        if is_resubmission:
+            guard = "report_review_status = 'rejected'"
+            revision = "report_revision + 1"
+        else:
+            guard = "status IN ('accepted', 'rescheduled')"
+            revision = "report_revision"
         row = (
             await self._session.execute(
                 text(
                     "UPDATE inspections SET status = 'completed', "
                     "report_submitted_at = NOW(), gps_lat = :lat, gps_lng = :lng, "
-                    "report_data = CAST(:data AS jsonb), updated_at = NOW() "
-                    "WHERE id = :id AND status IN ('accepted', 'rescheduled') RETURNING id"
+                    "report_data = CAST(:data AS jsonb), "
+                    "report_review_status = 'pending', report_reviewed_at = NULL, "
+                    "report_reviewed_by = NULL, report_review_note = NULL, "
+                    f"report_revision = {revision}, updated_at = NOW() "
+                    f"WHERE id = :id AND {guard} RETURNING id"
                 ),
                 {
                     "id": inspection_id,
                     "lat": gps_lat,
                     "lng": gps_lng,
                     "data": json.dumps(report_data),
+                },
+            )
+        ).first()
+        return row is not None
+
+    async def list_report_reviews(
+        self, *, status: str | None = "pending", limit: int = 100
+    ) -> list[ReportReviewRow]:
+        """Submitted reports for the admin review queue (SCRUM-205), oldest
+        first so the longest-waiting realtor is served first.
+
+        Reads across every realtor, which is why 0007 adds
+        idx_inspections_report_review — every other index on this table leads
+        with realtor_id and would make this a seq scan + sort. `status=None`
+        returns every submitted report regardless of decision."""
+        clause = "i.report_submitted_at IS NOT NULL"
+        params: dict[str, Any] = {"limit": limit}
+        if status is not None:
+            clause += " AND i.report_review_status = :status"
+            params["status"] = status
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT i.id AS inspection_id, i.transaction_id, i.realtor_id,
+                           i.report_submitted_at, i.report_review_status,
+                           i.report_reviewed_at, i.report_review_note, i.report_revision,
+                           p.full_name AS realtor_name, r.esvarbon_number,
+                           pl.title AS property_title, pl.address_text, pl.lga, pl.state
+                    FROM inspections i
+                    JOIN transactions t ON t.id = i.transaction_id
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    LEFT JOIN user_pii p ON p.user_id = i.realtor_id
+                    LEFT JOIN realtors r ON r.id = i.realtor_id
+                    WHERE {clause}
+                    ORDER BY i.report_submitted_at
+                    LIMIT :limit
+                    """
+                ),
+                params,
+            )
+        ).all()
+        return [
+            ReportReviewRow(
+                inspection_id=r.inspection_id,
+                transaction_id=r.transaction_id,
+                realtor_id=r.realtor_id,
+                realtor_name=_blank_to_none(r.realtor_name),
+                esvarbon_number=r.esvarbon_number,
+                report_submitted_at=r.report_submitted_at,
+                report_review_status=r.report_review_status,
+                report_reviewed_at=r.report_reviewed_at,
+                report_review_note=r.report_review_note,
+                report_revision=r.report_revision,
+                property_title=r.property_title,
+                address_text=r.address_text,
+                lga=r.lga,
+                state=r.state,
+            )
+            for r in rows
+        ]
+
+    async def record_report_review(
+        self,
+        inspection_id: UUID,
+        *,
+        decision: str,
+        reviewer_id: UUID,
+        note: str | None,
+    ) -> bool:
+        """Write an admin decision onto a report. Guarded on the report still
+        being 'pending', so two admins deciding at once cannot both win and the
+        loser gets a clean 409 rather than silently overwriting the first."""
+        row = (
+            await self._session.execute(
+                text(
+                    "UPDATE inspections SET report_review_status = :decision, "
+                    "report_reviewed_at = NOW(), report_reviewed_by = :reviewer, "
+                    "report_review_note = :note, updated_at = NOW() "
+                    "WHERE id = :id AND report_review_status = 'pending' RETURNING id"
+                ),
+                {
+                    "id": inspection_id,
+                    "decision": decision,
+                    "reviewer": reviewer_id,
+                    "note": note,
                 },
             )
         ).first()
@@ -446,4 +595,9 @@ class InspectionRepository:
             gps_lng=r.gps_lng,
             report_submitted_at=r.report_submitted_at,
             report_data=r.report_data,
+            report_review_status=r.report_review_status,
+            report_reviewed_at=r.report_reviewed_at,
+            report_reviewed_by=r.report_reviewed_by,
+            report_review_note=r.report_review_note,
+            report_revision=r.report_revision,
         )

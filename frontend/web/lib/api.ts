@@ -412,6 +412,15 @@ export interface RealtorInspection {
    * the raw number never leaves realtor-service (§10). */
   seller_name: string | null;
   seller_phone_masked: string | null;
+  /** Admin review of the submitted report (SCRUM-205).
+   * `not_submitted` until a report is filed, then `pending` until an admin
+   * decides. `report_review_note` is the admin's feedback — required on a
+   * rejection, and the only thing telling the realtor what to fix. */
+  report_review_status: string;
+  report_reviewed_at: string | null;
+  report_review_note: string | null;
+  /** Bumps on each resubmission; 1 for a report never sent back. */
+  report_revision: number;
 }
 
 export interface RealtorInspectionsResponse {

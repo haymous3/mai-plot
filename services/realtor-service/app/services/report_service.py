@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from app.adapters.document_storage import DocumentStorage, DocumentStorageError
@@ -117,12 +118,19 @@ class ReportService:
             raise InspectionNotFound()
         if inspection.realtor_id != caller.user_id:
             raise NotAssignedRealtor()
-        # A rescheduled inspection is confirmed at its new time (SCRUM-141), so it
-        # is reportable just like an accepted one.
-        if inspection.status not in ("accepted", "rescheduled"):
-            raise ReportNotSubmittable()
-        if inspection.confirmed_date is None or datetime.now(UTC) < inspection.confirmed_date:
-            raise ReportTooEarly()
+        # A rejected report may be resubmitted (SCRUM-205). The inspection stays
+        # 'completed' by product decision, so the first-submission guards would
+        # block it — skip them for a resubmission. Both date and status guards
+        # already passed on the original submission, so re-checking them would
+        # only reject work the realtor was told to redo.
+        is_resubmission = inspection.report_review_status == "rejected"
+        if not is_resubmission:
+            # A rescheduled inspection is confirmed at its new time (SCRUM-141),
+            # so it is reportable just like an accepted one.
+            if inspection.status not in ("accepted", "rescheduled"):
+                raise ReportNotSubmittable()
+            if inspection.confirmed_date is None or datetime.now(UTC) < inspection.confirmed_date:
+                raise ReportTooEarly()
 
         # Validate the checklist + photos (InvalidCredential -> 422).
         if property_condition not in _VALID_CONDITIONS:
@@ -171,7 +179,7 @@ class ReportService:
                 )
                 raise ReportError("video storage failed") from exc
 
-        report_data = {
+        report_data: dict[str, Any] = {
             "property_condition": property_condition,
             "amenities": amenities,
             "discrepancies": discrepancies,
@@ -179,16 +187,49 @@ class ReportService:
             "photo_keys": photo_keys,
             "video_key": video_key,
         }
+        if is_resubmission:
+            # Product decision: a resubmission REPLACES the photos. The old keys
+            # are kept addressable by revision rather than deleted — the objects
+            # stay in the bucket, they are simply superseded.
+            previous = dict(inspection.report_data or {})
+            superseded = list(previous.pop("superseded", []) or [])
+            superseded.append(
+                {
+                    "revision": inspection.report_revision,
+                    "photo_keys": previous.get("photo_keys", []),
+                    "video_key": previous.get("video_key"),
+                    "submitted_at": (
+                        inspection.report_submitted_at.isoformat()
+                        if inspection.report_submitted_at
+                        else None
+                    ),
+                    "review_note": inspection.report_review_note,
+                }
+            )
+            report_data["superseded"] = superseded
+
         await self._inspections.submit_report(
-            inspection_id, gps_lat=gps_lat, gps_lng=gps_lng, report_data=report_data
+            inspection_id,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            report_data=report_data,
+            is_resubmission=is_resubmission,
         )
         await self._audit.record(
             actor_id=caller.user_id,
             actor_role=caller.role,
-            action="inspection.report_submitted",
+            action=(
+                "inspection.report_resubmitted"
+                if is_resubmission
+                else "inspection.report_submitted"
+            ),
             entity_type="inspection",
             entity_id=inspection_id,
-            new_value={"photo_count": len(photo_keys), "transaction_id": str(txn.id)},
+            new_value={
+                "photo_count": len(photo_keys),
+                "transaction_id": str(txn.id),
+                "revision": inspection.report_revision + (1 if is_resubmission else 0),
+            },
             ip_address=ip_address,
             user_agent=user_agent,
         )
