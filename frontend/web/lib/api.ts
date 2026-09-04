@@ -381,8 +381,10 @@ export interface RealtorQueueResponse {
 }
 
 /** One inspection assigned to the calling realtor (GET /inspections/mine,
- * SCRUM-140). Property fields are the location being inspected — no party
- * contact details (masking, CLAUDE.md §10). */
+ * SCRUM-140, widened by SCRUM-204). Carries the property context the designed
+ * inspection cards need. The buyer stays a short reference and the seller's
+ * phone arrives masked — the realtor sees only what site access requires
+ * (CLAUDE.md §10). */
 export interface RealtorInspection {
   inspection_id: string;
   transaction_id: string;
@@ -392,10 +394,24 @@ export interface RealtorInspection {
   assignment_expires_at: string;
   created_at: string;
   report_submitted_at: string | null;
+  /** Short references for display — the full ids are never surfaced (§10). */
+  buyer_ref: string;
+  inspection_ref: string;
   property_title: string | null;
   address_text: string | null;
   lga: string | null;
   state: string | null;
+  property_type: string | null;
+  sale_type: string | null;
+  size_sqm: number | null;
+  /** BIGINT kobo, or null when the listing has been removed. */
+  asking_price_kobo: number | null;
+  cover_photo_url: string | null;
+  seller_authority_type: string | null;
+  /** The on-site contact. The phone arrives already masked by the backend —
+   * the raw number never leaves realtor-service (§10). */
+  seller_name: string | null;
+  seller_phone_masked: string | null;
 }
 
 export interface RealtorInspectionsResponse {

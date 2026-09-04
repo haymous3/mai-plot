@@ -22,6 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _ACTIVE_STATUSES = ("pending", "accepted", "rescheduled")
 
 
+def _blank_to_none(value: str | None) -> str | None:
+    """A whitespace-only joined name/phone reads as "no value" to the caller."""
+    return value if value and value.strip() else None
+
+
 @dataclass(frozen=True)
 class InspectionRow:
     id: UUID
@@ -62,8 +67,13 @@ class AssignedRealtorRow:
 @dataclass(frozen=True)
 class RealtorInspectionRow:
     """An inspection assigned to a realtor, joined with its property, for the
-    realtor portal's dashboard + assigned-inspections list (SCRUM-140). Property
-    fields are the location the realtor is inspecting — no party contact details."""
+    realtor portal's dashboard + assigned-inspections list (SCRUM-140, widened by
+    SCRUM-204 for the designed inspection cards).
+
+    `seller_phone` is raw PII read straight from user_pii — the schema layer masks
+    it to the last three digits before it leaves the service, and it must never be
+    logged. The realtor sees the seller's name + a masked line only because they
+    need site access on an assignment they have accepted (CLAUDE.md §10)."""
 
     inspection_id: UUID
     transaction_id: UUID
@@ -73,10 +83,19 @@ class RealtorInspectionRow:
     assignment_expires_at: datetime
     created_at: datetime
     report_submitted_at: datetime | None
+    buyer_id: UUID
     property_title: str | None
     address_text: str | None
     lga: str | None
     state: str | None
+    property_type: str | None
+    sale_type: str | None
+    size_sqm: Decimal | None
+    asking_price_kobo: int | None
+    cover_photo_url: str | None
+    seller_authority_type: str | None
+    seller_name: str | None
+    seller_phone: str | None
 
 
 @dataclass(frozen=True)
@@ -143,7 +162,7 @@ class InspectionRepository:
         ).first()
         if row is None:
             return None
-        name = row.realtor_name if row.realtor_name and str(row.realtor_name).strip() else None
+        name = _blank_to_none(row.realtor_name)
         return AssignedRealtorRow(
             inspection_id=row.inspection_id,
             realtor_id=row.realtor_id,
@@ -158,19 +177,38 @@ class InspectionRepository:
         self, realtor_id: UUID, *, limit: int = 100
     ) -> list[RealtorInspectionRow]:
         """Every inspection assigned to a realtor, newest first, joined to its
-        property (title/address for the card) — the realtor portal's dashboard +
-        assigned-inspections feed (SCRUM-140)."""
+        property and the seller the realtor meets on site — the realtor portal's
+        dashboard, assigned-inspections table and report header (SCRUM-140,
+        widened by SCRUM-204).
+
+        The cover photo is the listing's first photo by sort_order, picked by a
+        LATERAL so one listing's many media rows can't fan the result out;
+        idx_media_listing(listing_id, sort_order) serves it. The seller join is
+        via transactions.seller_id (the deal's seller), not the listing owner."""
         rows = (
             await self._session.execute(
                 text(
                     """
                     SELECT i.id AS inspection_id, i.transaction_id, i.status,
                            i.proposed_date, i.confirmed_date, i.assignment_expires_at,
-                           i.created_at, i.report_submitted_at,
-                           pl.title AS property_title, pl.address_text, pl.lga, pl.state
+                           i.created_at, i.report_submitted_at, t.buyer_id,
+                           pl.title AS property_title, pl.address_text, pl.lga, pl.state,
+                           pl.property_type, pl.sale_type, pl.size_sqm, pl.asking_price_kobo,
+                           cover.cdn_url AS cover_photo_url,
+                           su.seller_authority_type,
+                           sp.full_name AS seller_name, sp.phone AS seller_phone
                     FROM inspections i
                     JOIN transactions t ON t.id = i.transaction_id
                     LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    LEFT JOIN LATERAL (
+                        SELECT m.cdn_url
+                        FROM listing_media m
+                        WHERE m.listing_id = t.listing_id AND m.media_type = 'photo'
+                        ORDER BY m.sort_order, m.created_at
+                        LIMIT 1
+                    ) cover ON TRUE
+                    LEFT JOIN users su ON su.id = t.seller_id
+                    LEFT JOIN user_pii sp ON sp.user_id = t.seller_id
                     WHERE i.realtor_id = :realtor
                     ORDER BY i.created_at DESC
                     LIMIT :limit
@@ -189,10 +227,19 @@ class InspectionRepository:
                 assignment_expires_at=r.assignment_expires_at,
                 created_at=r.created_at,
                 report_submitted_at=r.report_submitted_at,
+                buyer_id=r.buyer_id,
                 property_title=r.property_title,
                 address_text=r.address_text,
                 lga=r.lga,
                 state=r.state,
+                property_type=r.property_type,
+                sale_type=r.sale_type,
+                size_sqm=r.size_sqm,
+                asking_price_kobo=r.asking_price_kobo,
+                cover_photo_url=r.cover_photo_url,
+                seller_authority_type=r.seller_authority_type,
+                seller_name=_blank_to_none(r.seller_name),
+                seller_phone=_blank_to_none(r.seller_phone),
             )
             for r in rows
         ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
@@ -368,10 +369,19 @@ def _realtor_inspection() -> RealtorInspectionRow:
         assignment_expires_at=now + timedelta(hours=2),
         created_at=now,
         report_submitted_at=None,
+        buyer_id=uuid4(),
         property_title="Plot 5, Lekki",
         address_text="1 Admiralty Way",
         lga="Eti-Osa",
         state="Lagos",
+        property_type="land",
+        sale_type="distress",
+        size_sqm=Decimal("1000.00"),
+        asking_price_kobo=1_500_000_000,
+        cover_photo_url="https://cdn.maiplot.ng/photo.jpg",
+        seller_authority_type="owner",
+        seller_name="Mr. Adebayo",
+        seller_phone="+2348012345824",
     )
 
 
