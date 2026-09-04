@@ -1,88 +1,137 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
-import { RealtorHeader } from '../realtor-header';
-import type { CommissionHistoryItem, CommissionHistoryResponse, CommissionSummary } from '@/lib/api';
+import { TransactionHistory } from './transaction-history';
+import {
+  ArrowLeftIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  TrendingUpIcon,
+  WalletIcon,
+} from '../_icons';
+import type {
+  CommissionHistoryResponse,
+  CommissionSummary,
+  RealtorInspectionsResponse,
+} from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
-import { formatDate, formatNaira } from '@/lib/format';
+import { formatNaira } from '@/lib/format';
+import { commissionRateLabel, earningsBalances } from '@/lib/realtor-earnings';
+import { countInspections } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
 export const metadata: Metadata = { title: 'Earnings · Maihomme Realtor' };
 
-const STATUS_META: Record<string, { label: string; pill: string }> = {
-  pending: { label: 'Pending', pill: 'bg-amber-100 text-amber-700' },
-  available: { label: 'Available', pill: 'bg-blue-100 text-blue-700' },
-  withdrawn: { label: 'Paid', pill: 'bg-emerald-deep/10 text-emerald-deep' },
-};
+const PAYMENT_INFORMATION = [
+  'Commission accrues when a deal you inspected completes',
+  'It is held for 3 business days, then becomes available for payout',
+  'Payouts are made by bank transfer to your registered account',
+];
 
-/** Realtor Earnings (SCRUM-140, PR5). Balance tiles from the commission summary
- * + a transaction history table from the per-commission list. Commission is 2%
- * of the deal value, accrued on completed deals (SCRUM-74); no money moves here
- * — this is read-only. */
+/** Realtor Earnings (SCRUM-140, redesigned in SCRUM-204 from Figma 287:2).
+ * Read-only — no money moves here.
+ *
+ * ⚠️ The design is drawn against a fixed ₦50,000-per-inspection fee. The
+ * shipped model is 2% of each completed deal held for 3 business days
+ * (CLAUDE.md §8 rule 7). Product owner's call: keep the real model, take the
+ * design's visual treatment. The copy therefore describes what happens, not
+ * what the artboard says. */
 export default async function RealtorEarningsPage() {
-  const [summaryRes, historyRes] = await Promise.all([
+  const [summaryRes, historyRes, inspRes] = await Promise.all([
     sessionBackendGet<CommissionSummary>(`${realtorServiceUrl()}/realtors/me/commission`),
     sessionBackendGet<CommissionHistoryResponse>(`${realtorServiceUrl()}/realtors/me/commissions`),
+    sessionBackendGet<RealtorInspectionsResponse>(`${realtorServiceUrl()}/inspections/mine`),
   ]);
 
   const summary = summaryRes.ok ? summaryRes.data : null;
   const history = historyRes.ok ? historyRes.data.data : [];
-  const total = summary
-    ? summary.pending_kobo + summary.available_kobo + summary.withdrawn_kobo
-    : 0;
+  const completed = inspRes.ok ? countInspections(inspRes.data.data).completed : 0;
+  const balances = earningsBalances(summary, history);
 
   return (
-    <main className="mx-auto max-w-4xl px-8 py-8">
-      <RealtorHeader title="Earnings" subtitle="Your commission balance and payout history" />
+    <main className="mx-auto max-w-[1088px] px-8 py-8">
+      <Link
+        href="/realtor"
+        className="inline-flex items-center gap-2 text-sm font-medium text-ink-600 transition hover:text-ink-900"
+      >
+        <ArrowLeftIcon className="h-4 w-4" />
+        Back to Dashboard
+      </Link>
+      <h1 className="mt-3 text-3xl font-bold leading-9 text-ink-900">Earnings</h1>
+      <p className="mt-2 text-base leading-6 text-ink-600">
+        Track your commission payments and transaction history
+      </p>
 
       {!summaryRes.ok ? (
-        <div className="mt-8 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
+        <div className="mt-8 rounded-card-sm border border-status-danger/30 bg-distress-50 px-6 py-10 text-center text-sm text-distress-700">
           Could not load your earnings. Please retry.
         </div>
       ) : (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Tile icon="💰" value={formatNaira(total)} label="Total Earned" />
-            <Tile
-              icon="✅"
-              value={formatNaira(summary?.available_kobo ?? 0)}
-              label="Available"
-              accent
-            />
-            <Tile icon="⏳" value={formatNaira(summary?.pending_kobo ?? 0)} label="Pending" />
-            <Tile icon="🏦" value={formatNaira(summary?.withdrawn_kobo ?? 0)} label="Paid Out" />
-          </div>
-
-          <div className="mt-4 rounded-xl border border-emerald-deep/15 bg-emerald-deep/5 px-4 py-3 text-xs text-ink-700">
-            Commission is 2% of each completed deal&apos;s value, held for 3 business days before it
-            becomes available. Payouts are made by our team once available.
-          </div>
-
-          <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
-            <h2 className="font-display text-lg text-ink-900">Transaction History</h2>
-            {history.length === 0 ? (
-              <p className="py-8 text-center text-sm text-ink-500">
-                No commissions yet. You earn 2% once a deal you inspected completes.
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_260px_260px]">
+            <div
+              className="rounded-card-sm p-6"
+              style={{ backgroundImage: 'linear-gradient(165deg, #0f3d2e 0%, #0a2d21 100%)' }}
+            >
+              <p className="flex items-center gap-2 text-sm leading-5 text-white/90">
+                <WalletIcon className="h-6 w-6 flex-none" />
+                Total Earnings
               </p>
-            ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-xs text-ink-500">
-                      <th className="pb-2 pr-4 font-medium">Property</th>
-                      <th className="pb-2 pr-4 font-medium">Date</th>
-                      <th className="pb-2 pr-4 font-medium">Rate</th>
-                      <th className="pb-2 pr-4 font-medium">Amount</th>
-                      <th className="pb-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {history.map((c) => (
-                      <Row key={c.commission_id} c={c} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              <p className="mt-2 text-4xl font-bold leading-10 text-white">
+                {formatNaira(balances.totalKobo)}
+              </p>
+              <p className="mt-3 flex items-center gap-2 text-sm leading-5 text-white/90">
+                <TrendingUpIcon className="h-4 w-4 flex-none" />
+                {completed} inspection{completed === 1 ? '' : 's'} completed
+              </p>
+            </div>
+
+            <BalanceCard
+              tone="done"
+              label="Paid"
+              value={formatNaira(balances.paidKobo)}
+              sub={`${balances.paidCount} payment${balances.paidCount === 1 ? '' : 's'}`}
+            />
+            <BalanceCard
+              tone="pending"
+              label="Pending"
+              value={formatNaira(balances.outstandingKobo)}
+              sub={
+                balances.availableKobo > 0
+                  ? `${formatNaira(balances.availableKobo)} ready for payout`
+                  : `${balances.outstandingCount} awaiting payout`
+              }
+            />
+          </div>
+
+          <section className="mt-6 flex gap-4 rounded-card-sm border border-status-gold/20 bg-surface-warm p-6">
+            <span className="flex h-12 w-12 flex-none items-center justify-center rounded-[10px] bg-status-gold/20">
+              <WalletIcon className="h-6 w-6 text-status-gold" />
+            </span>
+            <div>
+              <h2 className="text-lg font-bold text-ink-900">Commission Per Deal</h2>
+              <p className="mt-2 text-3xl font-bold leading-9 text-emerald-deep">
+                {commissionRateLabel(history)}
+              </p>
+              <p className="mt-2 text-sm leading-5 text-ink-600">
+                You earn a percentage of each completed deal you inspected. Commission is held for
+                3 business days after the deal closes, then becomes available for payout.
+              </p>
+            </div>
+          </section>
+
+          <TransactionHistory items={history} />
+
+          <section className="mt-6 rounded-card-sm border border-scheduled-200 bg-scheduled-50 p-6">
+            <h2 className="text-sm font-semibold text-scheduled-900">Payment Information</h2>
+            <ul className="mt-3 space-y-2">
+              {PAYMENT_INFORMATION.map((line) => (
+                <li key={line} className="flex items-start gap-2 text-sm text-scheduled-800">
+                  <CheckCircleIcon className="mt-0.5 h-4 w-4 flex-none" strokeWidth={2} />
+                  {line}
+                </li>
+              ))}
+            </ul>
           </section>
         </>
       )}
@@ -90,45 +139,28 @@ export default async function RealtorEarningsPage() {
   );
 }
 
-function Row({ c }: { c: CommissionHistoryItem }) {
-  const meta = STATUS_META[c.status] ?? { label: c.status, pill: 'bg-ink-300/20 text-ink-500' };
-  return (
-    <tr>
-      <td className="py-3 pr-4 text-ink-900">{c.property_title ?? 'Property deal'}</td>
-      <td className="py-3 pr-4 text-ink-600">{formatDate(c.created_at)}</td>
-      <td className="py-3 pr-4 text-ink-600">{(c.rate_bps / 100).toFixed(0)}%</td>
-      <td className="py-3 pr-4 font-medium text-ink-900">{formatNaira(c.amount_kobo)}</td>
-      <td className="py-3">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${meta.pill}`}>
-          {meta.label}
-        </span>
-      </td>
-    </tr>
-  );
-}
-
-function Tile({
-  icon,
-  value,
+/** Balance card beside the hero (Figma 287:26 / 287:37): 144px tall, 14px
+ * radius, a tinted 20px glyph beside the label. */
+function BalanceCard({
+  tone,
   label,
-  accent = false,
+  value,
+  sub,
 }: {
-  icon: string;
-  value: string;
+  tone: 'done' | 'pending';
   label: string;
-  accent?: boolean;
+  value: string;
+  sub: string;
 }) {
+  const Icon = tone === 'done' ? CheckCircleIcon : ClockIcon;
   return (
-    <div
-      className={`rounded-2xl border p-5 ${
-        accent ? 'border-emerald-deep/30 bg-emerald-deep/5' : 'border-ink-300/25 bg-white'
-      }`}
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">
-        {icon}
-      </span>
-      <p className="mt-3 font-display text-2xl text-ink-900">{value}</p>
-      <p className="text-sm text-ink-600">{label}</p>
+    <div className="rounded-card-sm border border-line bg-surface-card p-6">
+      <p className="flex items-center gap-2 text-sm leading-5 text-ink-600">
+        <Icon className={`h-5 w-5 flex-none ${tone === 'done' ? 'text-done-700' : 'text-pending-700'}`} />
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-bold leading-8 text-ink-900">{value}</p>
+      <p className="mt-2 text-xs leading-4 text-ink-500">{sub}</p>
     </div>
   );
 }

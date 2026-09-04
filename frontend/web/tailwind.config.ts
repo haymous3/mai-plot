@@ -183,6 +183,10 @@ const config: Config = {
           100: '#dbeafe',
           200: '#bedbff',
           700: '#1447e6',
+          // Earnings' "Payment Information" card (Figma 287:210) sits on the
+          // -50 fill and needs darker ink than -700, same as How Reports Help.
+          800: '#193cb8', // list items
+          900: '#1c398e', // heading
         },
         done: {
           50: '#f0fdf4',
@@ -198,6 +202,7 @@ const config: Config = {
         distress: {
           50: '#fef2f2',
           100: '#ffe2e2',
+          200: '#ffc9c9',
           700: '#c10007',
         },
       },
