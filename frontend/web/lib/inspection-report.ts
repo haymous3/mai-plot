@@ -231,23 +231,31 @@ export function reportSummary(form: ReportForm): SummaryRow[] {
 }
 
 export type SubmittableCheck =
-  | { ok: true }
+  | { ok: true; resubmission: boolean }
   | { ok: false; reason: 'not_accepted' | 'too_early'; opensAt?: string };
 
-/** Whether a report can be submitted for this inspection right now — it must be
- * accepted and on/after the confirmed inspection date (mirrors the backend
- * guards so the UI can explain the gate instead of surprising the realtor with a
- * 409/422). */
+/** Whether a report can be filed for this inspection right now. Mirrors the
+ * backend guards so the UI can explain the gate instead of surprising the
+ * realtor with a 409/422.
+ *
+ * Two ways through, and they check different things (SCRUM-205):
+ *
+ * * A REJECTED report can be redone. The inspection is already 'completed' and
+ *   stays that way by product decision, so the status and date guards below
+ *   would wrongly block the very correction the admin asked for — the backend
+ *   skips them for a resubmission and so does this.
+ * * Otherwise it must be an accepted/rescheduled inspection on or after its
+ *   confirmed date. */
 export function reportSubmittable(
   insp: RealtorInspection,
   now: number = Date.now(),
 ): SubmittableCheck {
-  if (insp.status === 'completed') return { ok: false, reason: 'not_accepted' };
+  if (insp.report_review_status === 'rejected') return { ok: true, resubmission: true };
   if (insp.status !== 'accepted' && insp.status !== 'rescheduled') {
     return { ok: false, reason: 'not_accepted' };
   }
   if (insp.confirmed_date && now < Date.parse(insp.confirmed_date)) {
     return { ok: false, reason: 'too_early', opensAt: insp.confirmed_date };
   }
-  return { ok: true };
+  return { ok: true, resubmission: false };
 }

@@ -208,9 +208,9 @@ function approvalLabel(status: string): string {
 /** Recent activity derived from the realtor's inspections and commissions,
  * newest first. There is no activity feed endpoint.
  *
- * The design also draws an "Inspection report approved" event. No service has a
- * report-review workflow, so that row would have to be invented — it is left
- * out rather than faked. */
+ * The design's "Inspection report approved" row is live as of SCRUM-205.
+ * Rejections are surfaced too, carrying the admin's note, because a realtor
+ * needs to know a report came back at least as much as that one passed. */
 function buildActivity(
   inspections: RealtorInspection[],
   commissions: CommissionHistoryItem[],
@@ -231,6 +231,24 @@ function buildActivity(
         title: 'Report submitted successfully',
         detail: property,
         ts: i.report_submitted_at,
+      });
+    }
+    // The admin's decision (SCRUM-205). Timestamped by when it was reviewed, so
+    // it sorts after the submission it decided rather than alongside it.
+    if (i.report_reviewed_at && i.report_review_status === 'approved') {
+      events.push({
+        kind: 'approved',
+        title: 'Inspection report approved',
+        detail: property,
+        ts: i.report_reviewed_at,
+      });
+    }
+    if (i.report_reviewed_at && i.report_review_status === 'rejected') {
+      events.push({
+        kind: 'rejected',
+        title: 'Report needs changes',
+        detail: i.report_review_note ?? property,
+        ts: i.report_reviewed_at,
       });
     }
   }

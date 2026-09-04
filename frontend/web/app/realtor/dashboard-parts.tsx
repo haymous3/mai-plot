@@ -104,7 +104,7 @@ export function UpcomingRow({ insp }: { insp: RealtorInspection }) {
   );
 }
 
-export type ActivityKind = 'assigned' | 'submitted' | 'payment';
+export type ActivityKind = 'assigned' | 'submitted' | 'approved' | 'rejected' | 'payment';
 
 export interface ActivityItem {
   kind: ActivityKind;
@@ -116,19 +116,23 @@ export interface ActivityItem {
 const ACTIVITY_CHIP: Record<ActivityKind, string> = {
   assigned: 'bg-scheduled-100 text-scheduled-700',
   submitted: 'bg-pending-100 text-pending-700',
+  approved: 'bg-done-100 text-done-700',
+  rejected: 'bg-distress-100 text-distress-700',
   payment: 'bg-done-100 text-done-700',
 };
 
 const ACTIVITY_ICON = {
   assigned: FileTextIcon,
   submitted: FileTextIcon,
+  approved: CheckCircleIcon,
+  rejected: AlertCircleIcon,
   payment: WalletIcon,
 } as const;
 
-/** Recent Activity feed (Figma 276:4). The design also draws an "Inspection
- * report approved" event; there is no report-review workflow in any service
- * yet, so that row is not invented — this feed carries only events with real
- * backing: assignment, report submission, and commission disbursement. */
+/** Recent Activity feed (Figma 276:4). The design's "Inspection report
+ * approved" row is live as of SCRUM-205 — it was omitted while no service
+ * reviewed a report rather than being faked. Rejections appear too: a realtor
+ * needs to know a report came back at least as much as that one passed. */
 export function ActivityRow({ item }: { item: ActivityItem }) {
   const Icon = ACTIVITY_ICON[item.kind];
   return (

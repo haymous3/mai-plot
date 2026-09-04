@@ -163,6 +163,20 @@ export function ReportWizard({ insp }: { insp: RealtorInspection }) {
           </Link>
 
           <div className="mt-6 space-y-6">
+            {insp.report_review_status === 'rejected' && (
+              <section className="rounded-card-sm border border-distress-200 bg-distress-50 p-6">
+                <p className="text-sm font-semibold text-distress-700">
+                  This report was sent back for changes
+                </p>
+                {insp.report_review_note && (
+                  <p className="mt-2 text-sm text-ink-700">{insp.report_review_note}</p>
+                )}
+                <p className="mt-2 text-xs text-ink-600">
+                  Filing this replaces your previous photos and puts the report back in the review
+                  queue as revision {insp.report_revision + 1}.
+                </p>
+              </section>
+            )}
             <PropertyHeader insp={insp} />
             <Stepper step={step} done={done} />
 

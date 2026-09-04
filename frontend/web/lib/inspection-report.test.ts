@@ -238,7 +238,47 @@ describe('reportSubmittable', () => {
   const now = Date.parse('2026-07-11T00:00:00Z');
 
   it('allows an accepted inspection on/after the confirmed date', () => {
-    expect(reportSubmittable(insp(), now)).toEqual({ ok: true });
+    expect(reportSubmittable(insp(), now)).toEqual({ ok: true, resubmission: false });
+  });
+
+  // -- SCRUM-205: resubmitting a rejected report --------------------------
+
+  it('lets a REJECTED report be redone even though the inspection is completed', () => {
+    // The inspection stays 'completed' after a rejection by product decision,
+    // so the status guard would otherwise block the very correction the admin
+    // asked for.
+    const r = reportSubmittable(
+      insp({ status: 'completed', report_review_status: 'rejected' }),
+      now,
+    );
+    expect(r).toEqual({ ok: true, resubmission: true });
+  });
+
+  it('lets a rejected report be redone regardless of the confirmed date', () => {
+    // The date guard already passed on the original submission.
+    const r = reportSubmittable(
+      insp({
+        status: 'completed',
+        report_review_status: 'rejected',
+        confirmed_date: '2026-07-20T09:00:00Z',
+      }),
+      now,
+    );
+    expect(r).toEqual({ ok: true, resubmission: true });
+  });
+
+  it('does NOT let an approved report be redone', () => {
+    expect(
+      reportSubmittable(insp({ status: 'completed', report_review_status: 'approved' }), now).ok,
+    ).toBe(false);
+  });
+
+  it('does NOT let a report still awaiting review be redone', () => {
+    // That would let a realtor swap the report out from under the admin
+    // reading it.
+    expect(
+      reportSubmittable(insp({ status: 'completed', report_review_status: 'pending' }), now).ok,
+    ).toBe(false);
   });
 
   it('blocks before the confirmed date as too_early', () => {

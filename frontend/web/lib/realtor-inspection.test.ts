@@ -10,10 +10,13 @@ import {
   inspectionMatchesQuery,
   inspectionStatusMeta,
   isAwaitingAcceptance,
+  countReports,
+  filterReports,
   isDistressSale,
   isSameMonth,
   propertyTypeLabel,
   relativeTime,
+  reportReviewMeta,
   upcomingInspections,
   upcomingTodayCount,
 } from './realtor-inspection';
@@ -355,5 +358,84 @@ describe('relativeTime', () => {
 
   it('is an em-dash for an unparseable timestamp', () => {
     expect(relativeTime('nonsense', now)).toBe('—');
+  });
+});
+
+
+// -- SCRUM-205: report review vocabulary ------------------------------------
+
+describe('reportReviewMeta', () => {
+  it('labels the three reachable states as the design writes them', () => {
+    expect(reportReviewMeta('pending').label).toBe('Pending Review');
+    expect(reportReviewMeta('approved').label).toBe('Approved');
+    expect(reportReviewMeta('rejected').label).toBe('Rejected');
+  });
+
+  it('marks only a rejection as something the realtor can redo', () => {
+    expect(reportReviewMeta('rejected').resubmittable).toBe(true);
+    expect(reportReviewMeta('approved').resubmittable).toBe(false);
+    expect(reportReviewMeta('pending').resubmittable).toBe(false);
+  });
+
+  it('falls back rather than rendering an unknown status as a raw slug', () => {
+    expect(reportReviewMeta('nonsense').label).toBe('Not submitted');
+    expect(reportReviewMeta('nonsense').resubmittable).toBe(false);
+  });
+
+  it('never emits a stock amber/blue/green class', () => {
+    for (const s of ['pending', 'approved', 'rejected', 'nonsense']) {
+      expect(reportReviewMeta(s).pill).not.toMatch(/\b(amber|blue|green)-\d/);
+    }
+  });
+});
+
+describe('countReports', () => {
+  const reports = [
+    insp({ report_review_status: 'pending' }),
+    insp({ report_review_status: 'pending' }),
+    insp({ report_review_status: 'approved' }),
+    insp({ report_review_status: 'rejected' }),
+  ];
+
+  it('counts each review state and the total', () => {
+    expect(countReports(reports)).toEqual({ total: 4, pending: 2, approved: 1, rejected: 1 });
+  });
+
+  it('is all zeroes for an empty history', () => {
+    expect(countReports([])).toEqual({ total: 0, pending: 0, approved: 0, rejected: 0 });
+  });
+
+  it('counts an unexpected status in the total only', () => {
+    expect(countReports([insp({ report_review_status: 'nonsense' })])).toEqual({
+      total: 1,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+    });
+  });
+});
+
+describe('filterReports', () => {
+  const reports = [
+    insp({ report_review_status: 'pending', property_title: 'Plot A' }),
+    insp({ report_review_status: 'approved', property_title: 'Plot B' }),
+    insp({ report_review_status: 'rejected', property_title: 'Villa C' }),
+  ];
+
+  it('returns everything by default', () => {
+    expect(filterReports(reports, { query: '', status: 'all' })).toHaveLength(3);
+  });
+
+  it('selects a single review state', () => {
+    expect(
+      filterReports(reports, { query: '', status: 'rejected' }).map((r) => r.property_title),
+    ).toEqual(['Villa C']);
+  });
+
+  it('applies the query and the status together', () => {
+    expect(filterReports(reports, { query: 'plot', status: 'rejected' })).toEqual([]);
+    expect(
+      filterReports(reports, { query: 'plot', status: 'approved' }).map((r) => r.property_title),
+    ).toEqual(['Plot B']);
   });
 });
