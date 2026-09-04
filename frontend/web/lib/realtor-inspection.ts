@@ -141,6 +141,86 @@ export function filterInspections(
   );
 }
 
+/** Admin review state of a submitted report (SCRUM-205).
+ *
+ * `not_submitted` never reaches Report History — that list is built from
+ * inspections that HAVE a report — but it is mapped so an unexpected value can
+ * never render as a raw slug. */
+interface ReportReviewMeta {
+  label: string;
+  /** -100 fill inside a -200 border, matching the inspection status pills. */
+  pill: string;
+  /** Whether the realtor can file a corrected report (SCRUM-205). */
+  resubmittable: boolean;
+}
+
+const REPORT_REVIEW_META: Record<string, ReportReviewMeta> = {
+  pending: {
+    label: 'Pending Review',
+    pill: 'border-pending-200 bg-pending-100 text-pending-700',
+    resubmittable: false,
+  },
+  approved: {
+    label: 'Approved',
+    pill: 'border-done-200 bg-done-100 text-done-700',
+    resubmittable: false,
+  },
+  rejected: {
+    label: 'Rejected',
+    pill: 'border-distress-200 bg-distress-100 text-distress-700',
+    resubmittable: true,
+  },
+  not_submitted: {
+    label: 'Not submitted',
+    pill: 'border-line bg-surface-muted text-ink-500',
+    resubmittable: false,
+  },
+};
+
+export function reportReviewMeta(status: string): ReportReviewMeta {
+  return REPORT_REVIEW_META[status] ?? REPORT_REVIEW_META.not_submitted;
+}
+
+export type ReportFilter = 'all' | 'pending' | 'approved' | 'rejected';
+
+export const REPORT_FILTERS: { value: ReportFilter; label: string }[] = [
+  { value: 'all', label: 'All reports' },
+  { value: 'pending', label: 'Pending review' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+];
+
+export interface ReportCounts {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+}
+
+/** Tile counts for Report History. Real counts now that review exists — they
+ * were hard zeros while there was nothing to count (SCRUM-204 PR5). */
+export function countReports(items: RealtorInspection[]): ReportCounts {
+  const counts: ReportCounts = { total: items.length, pending: 0, approved: 0, rejected: 0 };
+  for (const i of items) {
+    if (i.report_review_status === 'pending') counts.pending += 1;
+    else if (i.report_review_status === 'approved') counts.approved += 1;
+    else if (i.report_review_status === 'rejected') counts.rejected += 1;
+  }
+  return counts;
+}
+
+/** Search + review-status filter applied together, preserving caller order. */
+export function filterReports(
+  items: RealtorInspection[],
+  { query, status }: { query: string; status: ReportFilter },
+): RealtorInspection[] {
+  return items.filter(
+    (i) =>
+      inspectionMatchesQuery(i, query) &&
+      (status === 'all' || i.report_review_status === status),
+  );
+}
+
 /** Case-insensitive match of a search query against an inspection's property
  * title, location and reference ids — the placeholder promises "property,
  * location, or ID", so the ids have to be searchable (SCRUM-204). An empty
