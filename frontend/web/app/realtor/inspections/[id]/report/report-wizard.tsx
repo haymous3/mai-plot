@@ -9,6 +9,7 @@ import {
   ArrowRightIcon,
   CameraIcon,
   CheckCircleIcon,
+  CheckIcon,
   EyeIcon,
   HouseIcon,
   MapIcon,
@@ -18,6 +19,7 @@ import {
 import type { RealtorInspection } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
 import {
+  AMENITY_OPTIONS,
   completedSteps,
   composeDiscrepancies,
   composeRemarks,
@@ -118,6 +120,7 @@ export function ReportWizard({ insp }: { insp: RealtorInspection }) {
     fd.append('gps_lat', String(form.gps.lat));
     fd.append('gps_lng', String(form.gps.lng));
     fd.append('property_condition', form.condition);
+    for (const a of form.amenities) fd.append('amenities', a);
     const discrepancies = composeDiscrepancies(form);
     if (discrepancies) fd.append('discrepancies', discrepancies);
     const remarks = composeRemarks(form);
@@ -400,6 +403,35 @@ function SectionCondition({ form, patch }: { form: ReportForm; patch: PatchFn })
               >
                 <span className="text-base font-bold">{o.label}</span>
                 <span className={`text-xs ${selected ? '' : 'text-ink-600'}`}>{o.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Question>
+      <Question label="Amenities Present">
+        <div className="flex flex-wrap gap-2">
+          {AMENITY_OPTIONS.map((a) => {
+            const selected = form.amenities.includes(a);
+            return (
+              <button
+                key={a}
+                type="button"
+                aria-pressed={selected}
+                onClick={() =>
+                  patch({
+                    amenities: selected
+                      ? form.amenities.filter((x) => x !== a)
+                      : [...form.amenities, a],
+                  })
+                }
+                className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition ${
+                  selected
+                    ? 'border-done-700 bg-done-50 text-done-700'
+                    : 'border-line-strong text-ink-700 hover:border-ink-500'
+                }`}
+              >
+                {selected && <CheckIcon className="h-3.5 w-3.5 flex-none" strokeWidth={2.4} />}
+                {a}
               </button>
             );
           })}

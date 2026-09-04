@@ -47,6 +47,23 @@ export const DOCUMENT_CHECKS = [
 
 export type DocumentCheckKey = (typeof DOCUMENT_CHECKS)[number]['key'];
 
+/** Amenities the realtor confirms on site → the backend's `amenities[]`.
+ *
+ * The design has no amenities picker — it gives Section 2 to the condition
+ * rating plus two free-text fields. Kept at the product owner's direction
+ * (SCRUM-204): dropping it would silently reduce what the platform captures,
+ * and the field is already stored, returned by GET /inspections/{id}/report and
+ * rendered on the report detail page. It sits under the condition rating, which
+ * is the section it belongs to. */
+export const AMENITY_OPTIONS = [
+  'Water',
+  'Electricity',
+  'Road access',
+  'Fenced / Walled',
+  'Security',
+  'Drainage',
+] as const;
+
 export interface ReportForm {
   // Section 1 — Property Verification
   propertyExists: YesNo | null;
@@ -54,6 +71,7 @@ export interface ReportForm {
   propertyNotes: string;
   // Section 2 — Condition Assessment
   condition: string;
+  amenities: string[];
   environmentalNotes: string;
   accessibility: string;
   // Section 3 — Document Cross-Check
@@ -74,6 +92,7 @@ export function emptyReportForm(): ReportForm {
     descriptionMatches: null,
     propertyNotes: '',
     condition: '',
+    amenities: [],
     environmentalNotes: '',
     accessibility: '',
     surveyPlan: null,
