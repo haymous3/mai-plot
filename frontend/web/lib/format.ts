@@ -35,6 +35,21 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/** Format an ISO timestamp as a 12-hour time of day, e.g. "10:00 AM" — the
+ * inspection schedule column (SCRUM-204), where the realtor needs the arrival
+ * time and not just the date. Fixed to UTC for the same determinism reason as
+ * formatDateTime. */
+export function formatTimeOfDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  });
+}
+
 /** Human label for a loans.status value (SCRUM-94). Unknown values are
  * title-cased as a fallback so a new backend status never renders as a raw slug. */
 const LOAN_STATUS_LABELS: Record<string, string> = {
