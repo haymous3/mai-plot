@@ -77,9 +77,28 @@ class AssignedRealtorResponse(BaseModel):
         )
 
 
+def mask_phone(phone: str | None) -> str | None:
+    """A Nigerian MSISDN reduced to a recognisable-but-unusable line for the
+    realtor's on-site contact panel — dialling code, stars, last three digits
+    (e.g. "+234 *** **** 824"). The full number never leaves the service
+    (CLAUDE.md §10). A number too short to mask meaningfully returns None rather
+    than leaking most of itself."""
+    if phone is None:
+        return None
+    digits = "".join(c for c in phone if c.isdigit())
+    if len(digits) < 7:
+        return None
+    prefix = f"+{digits[:3]}" if phone.strip().startswith("+") else digits[:3]
+    return f"{prefix} *** **** {digits[-3:]}"
+
+
 class RealtorInspectionItem(BaseModel):
     """One inspection assigned to the calling realtor, with its property, for the
-    realtor portal (SCRUM-140)."""
+    realtor portal (SCRUM-140, widened by SCRUM-204).
+
+    Money is BIGINT kobo. The buyer is a short reference only, and the seller is
+    a name plus a masked phone — enough to reach the person unlocking the gate,
+    never the raw contact details (CLAUDE.md §10)."""
 
     inspection_id: UUID
     transaction_id: UUID
@@ -89,10 +108,20 @@ class RealtorInspectionItem(BaseModel):
     assignment_expires_at: datetime
     created_at: datetime
     report_submitted_at: datetime | None
+    buyer_ref: str
+    inspection_ref: str
     property_title: str | None
     address_text: str | None
     lga: str | None
     state: str | None
+    property_type: str | None
+    sale_type: str | None
+    size_sqm: float | None
+    asking_price_kobo: int | None
+    cover_photo_url: str | None
+    seller_authority_type: str | None
+    seller_name: str | None
+    seller_phone_masked: str | None
 
     @classmethod
     def from_row(cls, row: RealtorInspectionRow) -> RealtorInspectionItem:
@@ -105,10 +134,21 @@ class RealtorInspectionItem(BaseModel):
             assignment_expires_at=row.assignment_expires_at,
             created_at=row.created_at,
             report_submitted_at=row.report_submitted_at,
+            # Same short-reference convention as the seller's offer/deal views.
+            buyer_ref=str(row.buyer_id)[:8],
+            inspection_ref=str(row.inspection_id)[:8],
             property_title=row.property_title,
             address_text=row.address_text,
             lga=row.lga,
             state=row.state,
+            property_type=row.property_type,
+            sale_type=row.sale_type,
+            size_sqm=float(row.size_sqm) if row.size_sqm is not None else None,
+            asking_price_kobo=row.asking_price_kobo,
+            cover_photo_url=row.cover_photo_url,
+            seller_authority_type=row.seller_authority_type,
+            seller_name=row.seller_name,
+            seller_phone_masked=mask_phone(row.seller_phone),
         )
 
 

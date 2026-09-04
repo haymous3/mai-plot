@@ -42,6 +42,29 @@ def _seed_listing(conn: object, seller_id: UUID) -> UUID:
     return listing_id
 
 
+def _seed_listing_photo(conn: object, listing_id: UUID, *, url: str, sort_order: int) -> None:
+    conn.execute(  # type: ignore[attr-defined]
+        text(
+            "INSERT INTO listing_media (listing_id, media_type, s3_key, cdn_url, sort_order) "
+            "VALUES (:lid, 'photo', :key, :url, :sort)"
+        ),
+        {"lid": listing_id, "key": f"media/{uuid4()}.jpg", "url": url, "sort": sort_order},
+    )
+
+
+def _seed_seller_identity(conn: object, seller_id: UUID, *, name: str, phone: str) -> None:
+    """The seller's name/phone + authority — what the realtor's inspection card
+    shows as the on-site contact (masked at the schema layer)."""
+    conn.execute(  # type: ignore[attr-defined]
+        text("UPDATE users SET seller_authority_type = 'owner' WHERE id = :id"),
+        {"id": seller_id},
+    )
+    conn.execute(  # type: ignore[attr-defined]
+        text("INSERT INTO user_pii (user_id, phone, full_name) VALUES (:id, :phone, :name)"),
+        {"id": seller_id, "phone": phone, "name": name},
+    )
+
+
 def _seed_transaction(conn: object, *, listing_id: UUID, buyer_id: UUID, seller_id: UUID) -> UUID:
     tx_id = uuid4()
     conn.execute(  # type: ignore[attr-defined]
@@ -310,6 +333,11 @@ async def test_mine_lists_assigned_inspection_with_property(
     seller = seed_user(role="seller")
     with db_engine.begin() as conn:
         listing_id = _seed_listing(conn, seller)
+        # Two photos out of order — the card must take sort_order 0, and the
+        # join must not fan the inspection out into one row per photo.
+        _seed_listing_photo(conn, listing_id, url="https://cdn/second.jpg", sort_order=1)
+        _seed_listing_photo(conn, listing_id, url="https://cdn/cover.jpg", sort_order=0)
+        _seed_seller_identity(conn, seller, name="Mr. Adebayo", phone="+2348012345824")
         tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
         realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
 
@@ -334,6 +362,57 @@ async def test_mine_lists_assigned_inspection_with_property(
     assert item["property_title"] == "Plot"
     assert item["address_text"] == "1 St"
     assert item["state"] == "Lagos"
+
+    # SCRUM-204 property context.
+    assert item["property_type"] == "land"
+    assert item["sale_type"] == "normal"
+    assert item["asking_price_kobo"] == 5000000000
+    assert item["cover_photo_url"] == "https://cdn/cover.jpg"
+    assert item["seller_authority_type"] == "owner"
+    assert item["seller_name"] == "Mr. Adebayo"
+
+    # §10: the seller's phone is masked and the buyer is a short reference.
+    assert item["seller_phone_masked"] == "+234 *** **** 824"
+    assert item["buyer_ref"] == str(buyer)[:8]
+    assert item["inspection_ref"] == inspection_id[:8]
+    assert "8012345824" not in resp.text
+    assert str(buyer) not in resp.text
+
+
+async def test_mine_degrades_when_listing_has_no_photo_or_seller_pii(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """A listing with no media and a seller with no user_pii row still lists —
+    the added joins are all LEFT, so an incomplete property must not drop the
+    realtor's assignment off their own dashboard (SCRUM-204)."""
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    with db_engine.begin() as conn:
+        listing_id = _seed_listing(conn, seller)
+        tx_id = _seed_transaction(conn, listing_id=listing_id, buyer_id=buyer, seller_id=seller)
+        realtor, _ = _seed_approved_realtor(conn, lng=_PROP_LNG, lat=_PROP_LAT)
+
+    await http_client.post(
+        "/inspections",
+        json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
+        headers=auth_header(mint_token(buyer, "buyer")),
+    )
+
+    resp = await http_client.get(
+        "/inspections/mine", headers=auth_header(mint_token(realtor, "realtor"))
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert len(items) == 1
+    assert items[0]["cover_photo_url"] is None
+    assert items[0]["seller_name"] is None
+    assert items[0]["seller_phone_masked"] is None
+    assert items[0]["seller_authority_type"] is None
 
 
 async def test_mine_empty_for_realtor_without_assignments(
