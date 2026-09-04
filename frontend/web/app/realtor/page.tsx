@@ -2,33 +2,51 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { RealtorHeader } from './realtor-header';
+import {
+  ActivityRow,
+  ImpactCard,
+  StatCard,
+  UpcomingRow,
+  VerificationImpactCard,
+  type ActivityItem,
+} from './dashboard-parts';
+import { BellIcon, CheckCircleIcon, ClipboardIcon, UploadIcon } from './_icons';
 import type {
+  CommissionHistoryItem,
+  CommissionHistoryResponse,
   CommissionSummary,
   RealtorInspection,
   RealtorInspectionsResponse,
   RealtorProfile,
 } from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
-import { formatDate, formatDateTime, formatNaira } from '@/lib/format';
+import { formatNaira } from '@/lib/format';
+import { reportSubmittable } from '@/lib/inspection-report';
 import {
   countInspections,
-  inspectionLocation,
-  inspectionStatusMeta,
-  isAwaitingAcceptance,
+  isSameMonth,
   upcomingInspections,
+  upcomingTodayCount,
 } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
 export const metadata: Metadata = { title: 'Dashboard · Maihomme Realtor' };
 
-/** Realtor Dashboard Overview (SCRUM-140). Stats + upcoming inspections + recent
- * activity are all derived from the realtor's assigned inspections + commission
- * summary — there is no dedicated dashboard stats source. */
+const HOW_REPORTS_HELP = [
+  'Validates property for buyers',
+  'Increases listing credibility',
+  'Powers trust indicators',
+  'Appears in deal tracker',
+];
+
+/** Realtor Dashboard Overview (SCRUM-140, redesigned in SCRUM-204 from Figma
+ * 276:4). Every figure is derived from the realtor's own assignments and
+ * commission summary — there is no dedicated dashboard stats endpoint. */
 export default async function RealtorOverviewPage() {
-  const [inspRes, commissionRes, profileRes] = await Promise.all([
+  const [inspRes, commissionRes, historyRes, profileRes] = await Promise.all([
     sessionBackendGet<RealtorInspectionsResponse>(`${realtorServiceUrl()}/inspections/mine`),
     sessionBackendGet<CommissionSummary>(`${realtorServiceUrl()}/realtors/me/commission`),
+    sessionBackendGet<CommissionHistoryResponse>(`${realtorServiceUrl()}/realtors/me/commissions`),
     sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`),
   ]);
 
@@ -39,184 +57,137 @@ export default async function RealtorOverviewPage() {
 
   const inspections = inspRes.ok ? inspRes.data.data : [];
   const commission = commissionRes.ok ? commissionRes.data : null;
+  const commissions = historyRes.ok ? historyRes.data.data : [];
   const profile = profileRes.ok ? profileRes.data : null;
 
   const counts = countInspections(inspections);
-  const upcoming = upcomingInspections(inspections).slice(0, 5);
-  const activity = buildActivity(inspections).slice(0, 6);
-  const availableKobo = commission?.available_kobo ?? 0;
-  const pendingKobo = commission?.pending_kobo ?? 0;
-  const completedDeals = profile?.completed_deals ?? counts.completed;
+  const upcoming = upcomingInspections(inspections).slice(0, 3);
+  const activity = buildActivity(inspections, commissions).slice(0, 5);
+  const totalEarnings = commission
+    ? commission.pending_kobo + commission.available_kobo + commission.withdrawn_kobo
+    : 0;
+  const verifiedThisMonth = inspections.filter((i) => isSameMonth(i.report_submitted_at)).length;
+
+  // "Upload Report" goes to the assignment that is actually reportable right
+  // now, rather than being a second link to the same list as View Inspections.
+  const reportable = inspections.find((i) => reportSubmittable(i).ok);
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
-      <RealtorHeader title="Dashboard Overview" subtitle="Welcome back" />
-
-      {profile && profile.approval_status !== 'approved' && (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-          <p className="font-medium">
-            Your realtor account is {approvalLabel(profile.approval_status)}.
+    <div className="flex items-start">
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto max-w-[896px] px-8 py-8">
+          <h1 className="text-3xl font-bold leading-9 text-ink-900">Dashboard Overview</h1>
+          <p className="mt-2 text-base leading-6 text-ink-600">
+            Manage inspections, verify properties, and track your earnings
           </p>
-          <p className="mt-1 text-amber-700">
-            You&apos;ll start receiving inspection assignments once our team approves your ESVARBON
-            credentials.
-          </p>
-        </div>
-      )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_300px]">
-        <div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Stat
-              icon="📥"
-              value={String(counts.awaiting)}
-              label="Awaiting Acceptance"
-              hint={counts.awaiting > 0 ? 'Needs your response' : undefined}
+          {profile && profile.approval_status !== 'approved' && (
+            <div className="mt-6 rounded-card-sm border border-pending-200 bg-pending-50 px-5 py-4 text-sm text-pending-700">
+              <p className="font-semibold">
+                Your realtor account is {approvalLabel(profile.approval_status)}.
+              </p>
+              <p className="mt-1">
+                You&apos;ll start receiving inspection assignments once our team approves your
+                ESVARBON credentials.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard tone="pending" value={String(counts.awaiting)} label="Pending Inspections" />
+            <StatCard tone="done" value={String(counts.completed)} label="Completed Inspections" />
+            <StatCard
+              tone="scheduled"
+              value={String(upcomingTodayCount(inspections))}
+              label="Upcoming Today"
             />
-            <Stat icon="📅" value={String(counts.scheduled)} label="Scheduled" />
-            <Stat icon="✓" value={String(counts.completed)} label="Reports Submitted" />
-            <Stat
-              icon="💰"
-              value={formatNaira(availableKobo)}
-              label="Available Earnings"
-              hint={pendingKobo > 0 ? `${formatNaira(pendingKobo)} pending` : undefined}
-            />
+            <StatCard tone="neutral" value={formatNaira(totalEarnings)} label="Total Earnings" />
           </div>
 
           <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg text-ink-900">Upcoming Inspections</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-bold text-ink-900">Upcoming Inspections</h2>
               <Link
                 href="/realtor/inspections"
-                className="text-sm text-emerald-deep hover:underline"
+                className="text-sm font-medium text-ink-600 transition hover:text-ink-900"
               >
-                View all →
+                View All →
               </Link>
             </div>
             <div className="mt-4 space-y-3">
               {upcoming.length === 0 ? (
-                <p className="py-8 text-center text-sm text-ink-500">
+                <p className="py-10 text-center text-sm text-ink-500">
                   No inspections assigned to you yet.
                 </p>
               ) : (
-                upcoming.map((insp) => <UpcomingRow key={insp.inspection_id} insp={insp} />)
+                upcoming.map((i) => <UpcomingRow key={i.inspection_id} insp={i} />)
               )}
             </div>
           </section>
 
           <section className="mt-6 rounded-card-sm border border-line bg-surface-card p-6">
-            <h2 className="font-display text-lg text-ink-900">Recent Activity</h2>
-            <ul className="mt-3 divide-y divide-line">
+            <h2 className="text-lg font-bold text-ink-900">Recent Activity</h2>
+            <ul className="mt-2">
               {activity.length === 0 ? (
-                <li className="py-8 text-center text-sm text-ink-500">No recent activity yet.</li>
+                <li className="py-10 text-center text-sm text-ink-500">No recent activity yet.</li>
               ) : (
-                activity.map((a, i) => (
-                  <li key={i} className="flex items-start gap-3 py-3">
-                    <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-bone text-sm">
-                      {a.icon}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-ink-900">{a.title}</p>
-                      <p className="truncate text-sm text-ink-500">{a.detail}</p>
-                      <p className="text-xs text-ink-300">{formatDate(a.ts)}</p>
-                    </div>
-                  </li>
-                ))
+                activity.map((a, i) => <ActivityRow key={`${a.kind}-${a.ts}-${i}`} item={a} />)
               )}
             </ul>
           </section>
         </div>
+      </main>
 
-        <aside className="space-y-4">
+      <aside className="hidden w-80 flex-none self-stretch space-y-6 border-l border-line bg-surface-card p-6 xl:block">
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-ink-900">Your Impact</h2>
+          <ImpactCard value={String(verifiedThisMonth)} label="Properties Verified" />
+          <VerificationImpactCard body="Your inspection reports directly contribute to buyer trust and help validate property authenticity across the platform." />
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-ink-900">Quick Actions</h2>
           <div className="space-y-2">
             <Link
               href="/realtor/inspections"
-              className="block rounded-xl bg-emerald-deep px-4 py-3 text-center text-sm font-semibold text-bone transition hover:bg-emerald-accent"
+              className="flex h-11 items-center gap-3 rounded-[10px] bg-emerald-deep px-4 text-sm font-medium text-white transition hover:bg-emerald-accent"
             >
-              View Assigned Inspections ({counts.awaiting})
+              <ClipboardIcon className="h-5 w-5 flex-none" />
+              View Inspections
             </Link>
             <Link
-              href="/realtor/earnings"
-              className="block rounded-xl border border-emerald-deep/40 px-4 py-3 text-center text-sm font-semibold text-emerald-deep transition hover:bg-emerald-deep/5"
+              href={
+                reportable
+                  ? `/realtor/inspections/${reportable.inspection_id}/report`
+                  : '/realtor/inspections'
+              }
+              className="flex h-11 items-center gap-3 rounded-[10px] border border-line px-4 text-sm font-medium text-ink-700 transition hover:border-ink-500"
             >
-              View Earnings
+              <UploadIcon className="h-5 w-5 flex-none" />
+              Upload Report
             </Link>
+            <a
+              href="mailto:hello@maihomme.com"
+              className="flex h-11 items-center gap-3 rounded-[10px] border border-line px-4 text-sm font-medium text-ink-700 transition hover:border-ink-500"
+            >
+              <BellIcon className="h-5 w-5 flex-none" />
+              Contact Support
+            </a>
           </div>
+        </div>
 
-          <div className="rounded-2xl bg-bone/70 p-5">
-            <p className="text-sm font-medium text-ink-800">Your Impact</p>
-            <Insight label="Completed Deals" value={String(completedDeals)} />
-            <Insight label="Total Assigned" value={String(counts.total)} />
-            <Insight label="Pending Payout" value={formatNaira(pendingKobo)} />
-          </div>
-
-          <div className="rounded-2xl border border-emerald-deep/15 bg-emerald-deep/5 p-5">
-            <p className="text-sm font-medium text-emerald-deep">Tip</p>
-            <p className="mt-1 text-xs text-ink-700">
-              Accept assignments within the 2-hour window — a lapsed window is reassigned to another
-              realtor in range.
-            </p>
-          </div>
-        </aside>
-      </div>
-    </main>
-  );
-}
-
-function UpcomingRow({ insp }: { insp: RealtorInspection }) {
-  const meta = inspectionStatusMeta(insp.status);
-  return (
-    <Link
-      href="/realtor/inspections"
-      className="flex items-start justify-between gap-3 rounded-[10px] border border-line p-3 transition hover:border-ink-500/40"
-    >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-ink-900">
-          {insp.property_title ?? 'Property inspection'}
-        </p>
-        <p className="truncate text-xs text-ink-500">📍 {inspectionLocation(insp)}</p>
-        <p className="mt-1 text-xs text-ink-600">🗓 {formatDate(insp.proposed_date)}</p>
-        {isAwaitingAcceptance(insp) && (
-          <p className="mt-0.5 text-xs font-medium text-amber-700">
-            Respond by {formatDateTime(insp.assignment_expires_at)}
-          </p>
-        )}
-      </div>
-      <span className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ${meta.pill}`}>
-        {meta.label}
-      </span>
-    </Link>
-  );
-}
-
-function Stat({
-  icon,
-  value,
-  label,
-  hint,
-}: {
-  icon: string;
-  value: string;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-card-sm border border-line bg-surface-card p-6">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-bone text-lg">
-        {icon}
-      </span>
-      <p className="mt-3 font-display text-3xl text-ink-900">{value}</p>
-      <p className="text-sm text-ink-600">{label}</p>
-      {hint && <p className="mt-0.5 text-xs text-emerald-deep">↗ {hint}</p>}
-    </div>
-  );
-}
-
-function Insight({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="mt-3 flex items-center justify-between border-t border-line pt-2 first:border-0 first:pt-0">
-      <span className="text-xs text-ink-600">{label}</span>
-      <span className="text-sm font-semibold text-ink-900">{value}</span>
+        <div className="rounded-card-sm border border-pending-200 bg-pending-50 p-[17px]">
+          <p className="text-sm font-semibold text-pending-900">How Reports Help</p>
+          <ul className="mt-2 space-y-2">
+            {HOW_REPORTS_HELP.map((item) => (
+              <li key={item} className="flex items-center gap-2 text-xs text-pending-800">
+                <CheckCircleIcon className="h-3 w-3 flex-none" strokeWidth={2.4} />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -234,29 +205,46 @@ function approvalLabel(status: string): string {
   }
 }
 
-interface Activity {
-  icon: string;
-  title: string;
-  detail: string;
-  ts: string;
-}
+/** Recent activity derived from the realtor's inspections and commissions,
+ * newest first. There is no activity feed endpoint.
+ *
+ * The design also draws an "Inspection report approved" event. No service has a
+ * report-review workflow, so that row would have to be invented — it is left
+ * out rather than faked. */
+function buildActivity(
+  inspections: RealtorInspection[],
+  commissions: CommissionHistoryItem[],
+): ActivityItem[] {
+  const events: ActivityItem[] = [];
 
-/** Recent activity derived from the realtor's inspections — an "assigned" event
- * per inspection, plus a "report submitted" event where one exists — newest
- * first. There is no dedicated activity feed. */
-function buildActivity(items: RealtorInspection[]): Activity[] {
-  const events: Activity[] = [];
-  for (const i of items) {
+  for (const i of inspections) {
     const property = i.property_title ?? 'a property';
-    events.push({ icon: '📋', title: 'Inspection assigned', detail: property, ts: i.created_at });
+    events.push({
+      kind: 'assigned',
+      title: 'New inspection assigned',
+      detail: property,
+      ts: i.created_at,
+    });
     if (i.report_submitted_at) {
       events.push({
-        icon: '✓',
-        title: 'Report submitted',
+        kind: 'submitted',
+        title: 'Report submitted successfully',
         detail: property,
         ts: i.report_submitted_at,
       });
     }
   }
+
+  for (const c of commissions) {
+    if (c.disbursed_at) {
+      events.push({
+        kind: 'payment',
+        title: `Payment received: ${formatNaira(c.amount_kobo)}`,
+        detail: c.property_title ?? 'Commission payout',
+        ts: c.disbursed_at,
+      });
+    }
+  }
+
   return events.sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
 }

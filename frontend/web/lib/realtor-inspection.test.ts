@@ -13,7 +13,9 @@ import {
   isDistressSale,
   isSameMonth,
   propertyTypeLabel,
+  relativeTime,
   upcomingInspections,
+  upcomingTodayCount,
 } from './realtor-inspection';
 
 function insp(overrides: Partial<RealtorInspection> = {}): RealtorInspection {
@@ -272,5 +274,82 @@ describe('filterInspections', () => {
   it('preserves the caller ordering', () => {
     const rows = filterInspections(items, { query: 'plot', status: 'all' });
     expect(rows.map((r) => r.property_title)).toEqual(['Plot A', 'Plot B', 'Plot C']);
+  });
+});
+
+
+// -- SCRUM-204 PR4: dashboard helpers ---------------------------------------
+
+describe('upcomingTodayCount', () => {
+  const now = Date.parse('2026-07-10T12:00:00Z');
+
+  it('counts only inspections scheduled today', () => {
+    const items = [
+      insp({ status: 'accepted', confirmed_date: '2026-07-10T09:00:00Z' }),
+      insp({ status: 'accepted', confirmed_date: '2026-07-10T16:00:00Z' }),
+      insp({ status: 'accepted', confirmed_date: '2026-07-11T09:00:00Z' }),
+    ];
+    expect(upcomingTodayCount(items, now)).toBe(2);
+  });
+
+  it('uses the market day, not the runtime timezone', () => {
+    // 23:30 UTC on the 10th is already 00:30 on the 11th in Lagos (UTC+1), so
+    // it is tomorrow for the realtor no matter where the server runs.
+    const i = insp({ status: 'accepted', confirmed_date: '2026-07-10T23:30:00Z' });
+    expect(upcomingTodayCount([i], now)).toBe(0);
+
+    // And 23:30 UTC on the 9th is 00:30 on the 10th in Lagos — today.
+    const j = insp({ status: 'accepted', confirmed_date: '2026-07-09T23:30:00Z' });
+    expect(upcomingTodayCount([j], now)).toBe(1);
+  });
+
+  it('prefers the confirmed date over the proposed one', () => {
+    // Proposed today but confirmed for tomorrow — the realtor turns up tomorrow.
+    const i = insp({
+      status: 'accepted',
+      proposed_date: '2026-07-10T09:00:00Z',
+      confirmed_date: '2026-07-11T09:00:00Z',
+    });
+    expect(upcomingTodayCount([i], now)).toBe(0);
+  });
+
+  it('falls back to the proposed date when nothing is confirmed', () => {
+    const i = insp({ status: 'pending', proposed_date: '2026-07-10T09:00:00Z', confirmed_date: null });
+    expect(upcomingTodayCount([i], now)).toBe(1);
+  });
+
+  it('excludes an inspection already reported — that is not upcoming', () => {
+    const i = insp({ status: 'completed', confirmed_date: '2026-07-10T09:00:00Z' });
+    expect(upcomingTodayCount([i], now)).toBe(0);
+  });
+
+  it('ignores an unparseable date rather than counting it', () => {
+    const i = insp({ status: 'accepted', confirmed_date: 'nonsense' });
+    expect(upcomingTodayCount([i], now)).toBe(0);
+  });
+});
+
+describe('relativeTime', () => {
+  const now = Date.parse('2026-07-10T12:00:00Z');
+
+  it('describes recent moments in the units the feed uses', () => {
+    expect(relativeTime('2026-07-10T11:59:30Z', now)).toBe('just now');
+    expect(relativeTime('2026-07-10T11:59:00Z', now)).toBe('1 minute ago');
+    expect(relativeTime('2026-07-10T11:30:00Z', now)).toBe('30 minutes ago');
+    expect(relativeTime('2026-07-10T10:00:00Z', now)).toBe('2 hours ago');
+    expect(relativeTime('2026-07-07T12:00:00Z', now)).toBe('3 days ago');
+  });
+
+  it('rolls up to months and years', () => {
+    expect(relativeTime('2026-05-10T12:00:00Z', now)).toBe('2 months ago');
+    expect(relativeTime('2024-07-10T12:00:00Z', now)).toBe('2 years ago');
+  });
+
+  it('never renders a negative age for a clock-skewed future timestamp', () => {
+    expect(relativeTime('2026-07-10T12:05:00Z', now)).toBe('just now');
+  });
+
+  it('is an em-dash for an unparseable timestamp', () => {
+    expect(relativeTime('nonsense', now)).toBe('—');
   });
 });
