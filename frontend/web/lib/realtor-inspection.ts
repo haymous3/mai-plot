@@ -11,37 +11,43 @@ export type InspectionBucket = 'awaiting' | 'scheduled' | 'completed';
 interface StatusMeta {
   label: string;
   bucket: InspectionBucket;
-  /** Tailwind classes for the status pill (tokens only — no gold/ink-400). */
+  /** Tailwind classes for the status pill — the -100 fill + -200 border pairing
+   * measured on Figma 280:5555. Stock amber/blue/green would render Tailwind
+   * v3.4's values, which are visibly off-design (see tailwind.config.ts). */
   pill: string;
 }
 
 const STATUS_META: Record<string, StatusMeta> = {
   pending: {
-    label: 'Awaiting acceptance',
+    label: 'Pending',
     bucket: 'awaiting',
-    pill: 'bg-amber-100 text-amber-700',
+    pill: 'border-pending-200 bg-pending-100 text-pending-700',
   },
   accepted: {
     label: 'Scheduled',
     bucket: 'scheduled',
-    pill: 'bg-blue-100 text-blue-700',
+    pill: 'border-scheduled-200 bg-scheduled-100 text-scheduled-700',
   },
+  // The design draws only three states. "Rescheduled" is kept as its own label
+  // — it is a real backend state and a realtor whose proposed time was taken
+  // needs to see that — but it wears the Scheduled treatment and counts in the
+  // Scheduled bucket, so the tiles still add up to the designed four.
   rescheduled: {
     label: 'Rescheduled',
     bucket: 'scheduled',
-    pill: 'bg-blue-100 text-blue-700',
+    pill: 'border-scheduled-200 bg-scheduled-100 text-scheduled-700',
   },
   completed: {
-    label: 'Report submitted',
+    label: 'Completed',
     bucket: 'completed',
-    pill: 'bg-emerald-deep/10 text-emerald-deep',
+    pill: 'border-done-200 bg-done-100 text-done-700',
   },
 };
 
 const FALLBACK: StatusMeta = {
   label: 'Unknown',
   bucket: 'scheduled',
-  pill: 'bg-ink-300/20 text-ink-500',
+  pill: 'border-line bg-surface-muted text-ink-500',
 };
 
 export function inspectionStatusMeta(status: string): StatusMeta {
@@ -81,13 +87,75 @@ export function inspectionLocation(insp: RealtorInspection): string {
   return parts.length > 0 ? parts.join(', ') : 'Location unavailable';
 }
 
+/** The two-line location the designed table row uses (Figma 280:5555): the
+ * street address above, then "LGA, State" beneath it. Either line can be empty
+ * when the listing is incomplete, so callers render only what comes back. */
+export function inspectionLocationLines(insp: RealtorInspection): {
+  primary: string;
+  secondary: string;
+} {
+  const secondary = [insp.lga, insp.state].filter(Boolean).join(', ');
+  const primary = insp.address_text ?? (secondary ? '' : 'Location unavailable');
+  return { primary, secondary };
+}
+
+/** Listing `property_type` as the design writes it. The backend vocabulary is
+ * only land | residential | commercial — the design's richer labels ("Villa",
+ * "Office Space") have no backing field, so they are not invented. */
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  land: 'Land',
+  residential: 'House',
+  commercial: 'Commercial',
+};
+
+export function propertyTypeLabel(type: string | null): string | null {
+  if (!type) return null;
+  return PROPERTY_TYPE_LABELS[type] ?? type;
+}
+
+/** Distress listings carry the red marker on their table row (§8 rule 2). */
+export function isDistressSale(insp: RealtorInspection): boolean {
+  return insp.sale_type === 'distress';
+}
+
+/** The Status filter behind the table's dropdown. `all` is the default and
+ * matches everything; the rest select a single bucket. */
+export type InspectionFilter = 'all' | InspectionBucket;
+
+export const INSPECTION_FILTERS: { value: InspectionFilter; label: string }[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'awaiting', label: 'Pending' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'completed', label: 'Completed' },
+];
+
+/** Search + status filter applied together, preserving the caller's order. */
+export function filterInspections(
+  items: RealtorInspection[],
+  { query, status }: { query: string; status: InspectionFilter },
+): RealtorInspection[] {
+  return items.filter(
+    (i) =>
+      inspectionMatchesQuery(i, query) &&
+      (status === 'all' || inspectionStatusMeta(i.status).bucket === status),
+  );
+}
+
 /** Case-insensitive match of a search query against an inspection's property
- * title + location — the Report History search (SCRUM-140, PR4). An empty query
- * matches everything. */
+ * title, location and reference ids — the placeholder promises "property,
+ * location, or ID", so the ids have to be searchable (SCRUM-204). An empty
+ * query matches everything. */
 export function inspectionMatchesQuery(insp: RealtorInspection, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const haystack = `${insp.property_title ?? ''} ${inspectionLocation(insp)}`.toLowerCase();
+  const haystack = [
+    insp.property_title ?? '',
+    inspectionLocation(insp),
+    insp.inspection_ref,
+    insp.buyer_ref,
+  ]
+    .join(' ')
+    .toLowerCase();
   return haystack.includes(q);
 }
 

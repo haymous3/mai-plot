@@ -4,11 +4,15 @@ import type { RealtorInspection } from './api';
 import {
   acceptanceWindow,
   countInspections,
+  filterInspections,
   inspectionLocation,
+  inspectionLocationLines,
   inspectionMatchesQuery,
   inspectionStatusMeta,
   isAwaitingAcceptance,
+  isDistressSale,
   isSameMonth,
+  propertyTypeLabel,
   upcomingInspections,
 } from './realtor-inspection';
 
@@ -145,5 +149,128 @@ describe('acceptanceWindow', () => {
       label: 'Window elapsed',
       urgent: true,
     });
+  });
+});
+
+
+// -- SCRUM-204: the designed table's helpers ---------------------------------
+
+describe('inspectionStatusMeta labels (SCRUM-204)', () => {
+  it('uses the three labels the design draws', () => {
+    expect(inspectionStatusMeta('pending').label).toBe('Pending');
+    expect(inspectionStatusMeta('accepted').label).toBe('Scheduled');
+    expect(inspectionStatusMeta('completed').label).toBe('Completed');
+  });
+
+  it('keeps Rescheduled distinct but counts it as Scheduled', () => {
+    const meta = inspectionStatusMeta('rescheduled');
+    expect(meta.label).toBe('Rescheduled');
+    expect(meta.bucket).toBe('scheduled');
+    // Same treatment as accepted, so the tiles still read as four states.
+    expect(meta.pill).toBe(inspectionStatusMeta('accepted').pill);
+  });
+
+  it('never emits a stock amber/blue/green class', () => {
+    // Those render Tailwind v3.4 values; the design is drawn against v4.
+    for (const s of ['pending', 'accepted', 'rescheduled', 'completed', 'nonsense']) {
+      expect(inspectionStatusMeta(s).pill).not.toMatch(/\b(amber|blue|green)-\d/);
+    }
+  });
+});
+
+describe('inspectionLocationLines', () => {
+  it('splits the address from the LGA + state', () => {
+    expect(inspectionLocationLines(insp())).toEqual({
+      primary: '1 Admiralty Way',
+      secondary: 'Eti-Osa, Lagos',
+    });
+  });
+
+  it('omits an absent secondary line rather than trailing a comma', () => {
+    expect(inspectionLocationLines(insp({ lga: null, state: null }))).toEqual({
+      primary: '1 Admiralty Way',
+      secondary: '',
+    });
+  });
+
+  it('falls back only when the listing has no location at all', () => {
+    expect(
+      inspectionLocationLines(insp({ address_text: null, lga: null, state: null })),
+    ).toEqual({ primary: 'Location unavailable', secondary: '' });
+  });
+
+  it('leaves the primary blank when only the LGA is known', () => {
+    // The row still reads correctly — it just shows one line, not a placeholder.
+    expect(inspectionLocationLines(insp({ address_text: null }))).toEqual({
+      primary: '',
+      secondary: 'Eti-Osa, Lagos',
+    });
+  });
+});
+
+describe('propertyTypeLabel', () => {
+  it('maps the backend vocabulary', () => {
+    expect(propertyTypeLabel('land')).toBe('Land');
+    expect(propertyTypeLabel('residential')).toBe('House');
+    expect(propertyTypeLabel('commercial')).toBe('Commercial');
+  });
+
+  it('passes an unknown type through instead of inventing one', () => {
+    expect(propertyTypeLabel('villa')).toBe('villa');
+  });
+
+  it('is null when the listing is gone', () => {
+    expect(propertyTypeLabel(null)).toBeNull();
+  });
+});
+
+describe('isDistressSale', () => {
+  it('is true only for a distress listing', () => {
+    expect(isDistressSale(insp({ sale_type: 'distress' }))).toBe(true);
+    expect(isDistressSale(insp({ sale_type: 'normal' }))).toBe(false);
+    expect(isDistressSale(insp({ sale_type: null }))).toBe(false);
+  });
+});
+
+describe('inspectionMatchesQuery covers the reference ids', () => {
+  it('matches on inspection ref, buyer ref, title and location', () => {
+    const i = insp({ inspection_ref: 'a1b2c3d4', buyer_ref: '9f8e7d6c' });
+    expect(inspectionMatchesQuery(i, 'a1b2')).toBe(true);
+    expect(inspectionMatchesQuery(i, '9F8E')).toBe(true);
+    expect(inspectionMatchesQuery(i, 'lekki')).toBe(true);
+    expect(inspectionMatchesQuery(i, 'admiralty')).toBe(true);
+    expect(inspectionMatchesQuery(i, 'zzz')).toBe(false);
+  });
+});
+
+describe('filterInspections', () => {
+  const items = [
+    insp({ status: 'pending', property_title: 'Plot A' }),
+    insp({ status: 'accepted', property_title: 'Plot B' }),
+    insp({ status: 'rescheduled', property_title: 'Plot C' }),
+    insp({ status: 'completed', property_title: 'Villa D' }),
+  ];
+
+  it('returns everything by default', () => {
+    expect(filterInspections(items, { query: '', status: 'all' })).toHaveLength(4);
+  });
+
+  it('groups rescheduled with scheduled', () => {
+    const rows = filterInspections(items, { query: '', status: 'scheduled' });
+    expect(rows.map((r) => r.property_title)).toEqual(['Plot B', 'Plot C']);
+  });
+
+  it('applies the query and the status together', () => {
+    expect(filterInspections(items, { query: 'plot', status: 'completed' })).toEqual([]);
+    expect(
+      filterInspections(items, { query: 'villa', status: 'completed' }).map(
+        (r) => r.property_title,
+      ),
+    ).toEqual(['Villa D']);
+  });
+
+  it('preserves the caller ordering', () => {
+    const rows = filterInspections(items, { query: 'plot', status: 'all' });
+    expect(rows.map((r) => r.property_title)).toEqual(['Plot A', 'Plot B', 'Plot C']);
   });
 });

@@ -14,7 +14,29 @@ import type { Config } from 'tailwindcss';
  * names, so remapping fixes ~1000 usages without touching a single component.
  */
 const config: Config = {
-  content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx,mdx}'],
+  /**
+   * ⚠️ `lib/` is in this list on purpose (added SCRUM-204).
+   *
+   * Several lib modules hold Tailwind class strings that components render
+   * verbatim — `realtor-inspection.ts`'s status pills, `notification-inbox.ts`'s
+   * channel badges. Tailwind only emits a class it can SEE in a scanned file,
+   * so a class that exists nowhere but `lib/` compiles to nothing and the
+   * element silently renders unstyled.
+   *
+   * That was already true before this ticket; it just hadn't bitten yet,
+   * because every such class happened to also appear somewhere under `app/`.
+   * The SCRUM-204 status pills were the first to be defined only in lib, and
+   * `bg-pending-100` / `bg-scheduled-100` / `bg-done-100` were dropped from the
+   * bundle until this glob was widened.
+   *
+   * Fourth instance of the silent-no-op-class family (`ink-400`, `h-4.5`,
+   * `sm:text-6xl`) — verify against the BUILT CSS, never against the source.
+   */
+  content: [
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
   theme: {
     extend: {
       fontFamily: {
@@ -127,6 +149,47 @@ const config: Config = {
           danger: '#e7000b',
           urgent: '#fb2c36', // discount / urgency badge
           gold: '#c9a646', // deal-time icon, premium marker
+        },
+
+        /**
+         * Inspection / report state chrome, measured from Figma node 280:5555
+         * (realtor Assigned Inspections, SCRUM-204).
+         *
+         * ⚠️ These are NOT stock Tailwind. The design is drawn against Tailwind
+         * v4's palette and this app is on v3.4, so `bg-amber-100 text-amber-700`
+         * renders v3.4's values — visibly off-design on the -700 text in
+         * particular (#b45309 vs #bb4d00, #15803d vs #008236, #1d4ed8 vs
+         * #1447e6). Same class of bug as SCRUM-166's red-500 (#ef4444 vs
+         * #fb2c36), which became `status-urgent` for exactly this reason.
+         *
+         * The -50/-100 split is deliberate and measured, not drift: the summary
+         * TILES use the -50 fill and the row STATUS PILLS use -100, and both
+         * share the same -200 border. That is consistent with the "realtor
+         * badges are -100" finding in SCRUM-171/172 — the tiles are simply new
+         * UI drawn one step lighter.
+         */
+        pending: {
+          50: '#fffbeb', // tile fill
+          100: '#fef3c6', // pill fill
+          200: '#fee685', // border, both
+          700: '#bb4d00', // text, both
+        },
+        scheduled: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bedbff',
+          700: '#1447e6',
+        },
+        done: {
+          50: '#f0fdf4',
+          100: '#dcfce7',
+          200: '#b9f8cf',
+          700: '#008236',
+        },
+        /** Distress-sale marker on a property row — fill + text only, no border. */
+        distress: {
+          100: '#ffe2e2',
+          700: '#c10007',
         },
       },
 
