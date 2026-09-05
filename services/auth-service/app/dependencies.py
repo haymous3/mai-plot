@@ -30,6 +30,7 @@ from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.buyer_profile_repo import BuyerProfileRepository
 from app.repositories.email_verification_repo import EmailVerificationRepository
 from app.repositories.otp_repo import OtpRepository
+from app.repositories.realtor_registration_repo import RealtorRegistrationRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
@@ -59,6 +60,7 @@ from app.services.poa_review import PoaReviewService
 from app.services.poa_upload import PoaUploadService
 from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
+from app.services.realtor_registration import RealtorRegistrationService
 from app.services.registration import RegistrationService
 from app.services.resend_verification import ResendVerificationService
 from app.services.seller_authority import SellerAuthorityService
@@ -219,6 +221,10 @@ def _buyer_profile_repo(session: SessionDep) -> BuyerProfileRepository:
     return BuyerProfileRepository(session)
 
 
+def _realtor_registration_repo(session: SessionDep) -> RealtorRegistrationRepository:
+    return RealtorRegistrationRepository(session)
+
+
 def _jwt_service(settings: SettingsDep) -> JwtService:
     return JwtService(
         secret=settings.jwt_secret,
@@ -339,12 +345,16 @@ def get_login_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    registration_numbers: Annotated[
+        RealtorRegistrationRepository, Depends(_realtor_registration_repo)
+    ],
     jwt_service: Annotated[JwtService, Depends(_jwt_service)],
 ) -> LoginService:
     return LoginService(
         users=users,
         credentials=credentials,
         refresh_tokens=refresh_tokens,
+        registration_numbers=registration_numbers,
         jwt=jwt_service,
     )
 
@@ -358,8 +368,13 @@ def get_set_password_service(
 def get_account_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     buyer_profiles: Annotated[BuyerProfileRepository, Depends(_buyer_profile_repo)],
+    registration_numbers: Annotated[
+        RealtorRegistrationRepository, Depends(_realtor_registration_repo)
+    ],
 ) -> AccountService:
-    return AccountService(users=users, buyer_profiles=buyer_profiles)
+    return AccountService(
+        users=users, buyer_profiles=buyer_profiles, registration_numbers=registration_numbers
+    )
 
 
 def get_change_password_service(
@@ -568,6 +583,41 @@ async def require_legal_team(
                 "LEGAL_TEAM_IP_FORBIDDEN", "Your IP is not permitted for legal-team access."
             )
     return caller
+
+
+async def require_admin(
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
+    """Admin gate for the /internal endpoints (SCRUM-207).
+
+    Role only — deliberately NO IP allowlist, unlike require_legal_team above.
+    These endpoints are called by a SIBLING SERVICE forwarding the admin's own
+    bearer token (realtor-service, when an admin approves a realtor), so the
+    request arrives from realtor-service's address and never from the admin's
+    browser. An allowlist here would check the wrong machine and reject every
+    legitimate call.
+
+    What replaces it, per CLAUDE.md §4's "admin endpoints need JWT + IP
+    whitelist": the /internal prefix is absent from infra/kong/kong.yml, and
+    auth-service is a private service reachable only through Kong. There is no
+    route from the internet to these paths at all — the network boundary does
+    the job the allowlist would have done, and does it for every caller rather
+    than a listed few.
+
+    ⚠️ If /internal is ever added to kong.yml, this gate becomes the ONLY
+    protection and an allowlist has to come back with it. Do not add it.
+    """
+    if caller.role != "admin":
+        raise AuthorizationError("ADMIN_FORBIDDEN", "Admin access required.")
+    return caller
+
+
+def get_realtor_registration_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    numbers: Annotated[RealtorRegistrationRepository, Depends(_realtor_registration_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> RealtorRegistrationService:
+    return RealtorRegistrationService(users=users, numbers=numbers, audit=audit)
 
 
 def get_otp_resend_service(

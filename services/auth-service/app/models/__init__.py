@@ -11,6 +11,7 @@ from app.models.auth_credential import AuthCredential
 from app.models.buyer_profile import BuyerProfile
 from app.models.email_verification_token import EmailVerificationToken
 from app.models.otp_code import OtpCode
+from app.models.realtor_registration_number import RealtorRegistrationNumber
 from app.models.refresh_token import RefreshToken
 from app.models.user import Base, User
 from app.models.user_pii import UserPii
@@ -23,6 +24,7 @@ __all__ = [
     "EmailVerificationToken",
     "RefreshToken",
     "AuthCredential",
+    "RealtorRegistrationNumber",
     "AuditLog",
     "BuyerProfile",
 ]

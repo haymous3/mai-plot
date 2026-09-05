@@ -239,10 +239,32 @@ class ResetPasswordResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    """Email/password or registration-number/password login (SCRUM-207).
+
+    `identifier` carries either an email address or an approved realtor's
+    Maihomme registration number; the service decides which by shape. `email`
+    is kept as an accepted alias so clients written against the original
+    contract keep working — the admin sign-in proxy is one of them. Exactly one
+    of the two must be present, and `identifier` wins if both are.
+    """
+
     model_config = ConfigDict(extra="ignore")
 
-    email: str = Field(min_length=3, max_length=254)
+    identifier: str | None = Field(default=None, min_length=3, max_length=254)
+    email: str | None = Field(default=None, min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def _require_identifier(self) -> LoginRequest:
+        if not (self.identifier or self.email):
+            raise ValueError("Either identifier or email is required.")
+        return self
+
+    @property
+    def login_identifier(self) -> str:
+        """The identifier to authenticate with. Never None — the validator above
+        has already rejected a request carrying neither field."""
+        return self.identifier or self.email or ""
 
 
 class LoginResponse(BaseModel):
@@ -281,6 +303,11 @@ class AccountResponse(BaseModel):
     location: str | None
     # The account holder's postal address (SCRUM-201), collected in onboarding.
     address: str | None
+    # Realtor-only (SCRUM-207): the Maihomme number an approved realtor signs in
+    # with. Null for every other role, and for a realtor whose application has
+    # not been approved yet — the portal shows that as "issued once verified"
+    # rather than inventing a placeholder.
+    registration_number: str | None
     # Buyer-only; null for other roles and for buyers who skipped the step.
     employment_status: str | None
     preferred_location: str | None
