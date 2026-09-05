@@ -7,8 +7,13 @@ import { ACCESS_COOKIE } from '@/lib/auth';
  * Proxy for the realtor review decision (SCRUM-62). Attaches the access token
  * from the httpOnly cookie and calls realtor-service POST
  * /admin/realtors/{id}/review, passing its status + error code back so the UI can
- * message 404/409/422. Only approve/reject are offered in the queue (suspend
+ * message 404/409/422/503. Only approve/reject are offered in the queue (suspend
  * applies to already-approved realtors, which never appear here).
+ *
+ * The success BODY is forwarded rather than replaced with {ok:true} (SCRUM-207):
+ * an approval carries the Maihomme registration number just issued, and if the
+ * email to the realtor never arrives the reviewer is the only person who can
+ * hand it over. Dropping it here would make it unrecoverable.
  */
 export async function POST(
   request: NextRequest,
@@ -55,5 +60,6 @@ export async function POST(
     return NextResponse.json({ error: code }, { status: resp.status });
   }
 
-  return NextResponse.json({ ok: true });
+  const body = (await resp.json().catch(() => ({}))) as { registration_number?: string | null };
+  return NextResponse.json({ ok: true, registration_number: body.registration_number ?? null });
 }

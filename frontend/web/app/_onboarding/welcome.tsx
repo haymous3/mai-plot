@@ -39,7 +39,14 @@ const COPY: Record<string, { profile: string; subtitle: string }> = {
   },
   realtor: {
     profile: 'Realtor',
-    subtitle: 'Access your professional dashboard and manage listings',
+    // Not the export's "Access your professional dashboard and manage listings"
+    // (SCRUM-207). A realtor reaching this screen is PENDING — they cannot take
+    // an assignment until an admin approves them, and the sign-in identifier
+    // they will need arrives in that approval email. Sending them off with the
+    // export's copy would leave them expecting a working dashboard and, next
+    // session, unable to explain why their email no longer signs them in.
+    subtitle:
+      'We’re reviewing your credentials. We’ll email your Maihomme registration number once you’re verified — that’s what you’ll sign in with.',
   },
 };
 
