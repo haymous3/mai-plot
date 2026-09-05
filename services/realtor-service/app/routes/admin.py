@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.responses import JSONResponse
 
+from app.adapters.registration_number import RegistrationNumberUnavailable
 from app.dependencies import (
     get_credential_service,
     get_realtor_repo,
@@ -27,7 +28,7 @@ from app.schemas.realtor import (
     RealtorReviewRequest,
     RealtorReviewResponse,
 )
-from app.security import CurrentUser
+from app.security import CurrentUser, parse_bearer
 from app.services.credential_service import CredentialAccessService, CredentialUnavailable
 from app.services.realtor_review import (
     RealtorNotActionable,
@@ -65,14 +66,23 @@ async def review_realtor(
     request: Request,
     admin: AdminDep,
     service: ReviewServiceDep,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> RealtorReviewResponse | JSONResponse:
-    """Approve / reject / suspend a realtor. Reject + suspend require a reason."""
+    """Approve / reject / suspend a realtor. Reject + suspend require a reason.
+
+    An approval also issues the realtor's Maihomme registration number from
+    auth-service (SCRUM-207), which is why the admin's own bearer token is
+    forwarded: the issuance endpoint authorises on that token rather than on a
+    service credential. AdminDep has already validated the header by the time
+    parse_bearer sees it, so it cannot fail here for a request that got this far.
+    """
     try:
         result = await service.review(
             user_id=user_id,
             reviewer=admin,
             action=payload.action,
             reason=payload.reason,
+            reviewer_token=parse_bearer(authorization),
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
@@ -90,7 +100,21 @@ async def review_realtor(
             "REASON_REQUIRED",
             "A reason is required to reject or suspend.",
         )
-    return RealtorReviewResponse(id=result.user_id, approval_status=result.approval_status)
+    except RegistrationNumberUnavailable:
+        # Fail closed (SCRUM-207): the approval is NOT committed. An approved
+        # realtor with no registration number cannot sign in by number (there
+        # isn't one) or by email (refused because they are approved), and no admin
+        # action reaches that state. Retrying is safe — issuance is idempotent.
+        return _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "REGISTRATION_NUMBER_UNAVAILABLE",
+            "We could not issue this realtor's registration number. Please try again shortly.",
+        )
+    return RealtorReviewResponse(
+        id=result.user_id,
+        approval_status=result.approval_status,
+        registration_number=result.registration_number,
+    )
 
 
 @router.get("/{user_id}/government-id", response_model=None)

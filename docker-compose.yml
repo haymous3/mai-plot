@@ -491,6 +491,13 @@ services:
       GOV_ID_STORAGE_USE_FAKE: ${GOV_ID_STORAGE_USE_FAKE:-false}
       GOV_ID_S3_BUCKET: ${S3_BUCKET_DOCUMENTS:-maiplot-documents-prod}
       GOV_ID_S3_REGION: ${AWS_REGION:-af-south-1}
+      # Approving a realtor issues their Maihomme registration number from
+      # auth-service (SCRUM-207). Pointed at the real service on the compose
+      # network rather than the fake: this is a cross-service call on an admin
+      # path, and the wiring is worth exercising locally — a 404 or a rejected
+      # token here is a bug that would otherwise surface first in staging.
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:8000}
+      REGISTRATION_NUMBER_USE_FAKE: ${REGISTRATION_NUMBER_USE_FAKE:-false}
 
   # Background worker + beat for realtor-service (SCRUM-74). Same image, no HTTP
   # port — the beat runs the hourly commission accrual/release job.

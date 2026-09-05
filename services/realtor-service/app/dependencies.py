@@ -8,6 +8,10 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.document_storage import DocumentStorage, build_document_storage
+from app.adapters.registration_number import (
+    RegistrationNumberIssuer,
+    build_registration_number_issuer,
+)
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
@@ -34,6 +38,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # connections reused across requests rather than rebuilt each call.
 _storage: DocumentStorage | None = None
 _notifier: RealtorNotifier | None = None
+_registration_number_issuer: RegistrationNumberIssuer | None = None
 _inspection_notifier: InspectionNotifier | None = None
 
 
@@ -85,12 +90,37 @@ def get_onboarding_service(
     )
 
 
+def get_registration_number_issuer(settings: SettingsDep) -> RegistrationNumberIssuer:
+    """The auth-service client that issues a realtor's Maihomme number (SCRUM-207).
+
+    ⚠️ registration_number_use_fake MUST be false in production — the fake mints
+    numbers auth-service has never heard of, which leaves the approved realtor
+    unable to sign in with either the number or their email.
+    """
+    global _registration_number_issuer
+    if _registration_number_issuer is None:
+        _registration_number_issuer = build_registration_number_issuer(
+            use_fake=settings.registration_number_use_fake,
+            base_url=settings.auth_service_url,
+            timeout_seconds=settings.registration_number_timeout_seconds,
+        )
+    return _registration_number_issuer
+
+
 def get_review_service(
     realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
     notifier: Annotated[RealtorNotifier, Depends(get_realtor_notifier)],
+    registration_numbers: Annotated[
+        RegistrationNumberIssuer, Depends(get_registration_number_issuer)
+    ],
 ) -> RealtorReviewService:
-    return RealtorReviewService(realtors=realtors, audit=audit, notifier=notifier)
+    return RealtorReviewService(
+        realtors=realtors,
+        audit=audit,
+        notifier=notifier,
+        registration_numbers=registration_numbers,
+    )
 
 
 def get_realtor_repo(

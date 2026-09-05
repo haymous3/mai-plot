@@ -36,6 +36,24 @@ class Settings(BaseSettings):
     gov_id_max_upload_bytes: int = 10 * 1024 * 1024
     gov_id_presign_ttl_seconds: int = 900
 
+    # Maihomme registration number (SCRUM-207). Approving a realtor issues the
+    # number they sign in with, from auth-service (which owns it, because login
+    # resolves it). Forwards the approving admin's own bearer token — see
+    # app/adapters/registration_number.py.
+    #
+    # ⚠️ DEFAULTS TO FALSE — the opposite of every other *_use_fake in this file,
+    # deliberately. The fake mints numbers that exist nowhere in auth-service, so
+    # an approved realtor would be refused BOTH the number they were emailed and
+    # their email address: a locked account with a cheerful notification attached.
+    # A fake-by-default setting turns "nobody configured this environment" into
+    # exactly that silent failure — which is how DEAL_CHECK_USE_FAKE quietly
+    # disabled the account-deletion guard (SCRUM-188). Unconfigured now means the
+    # real call is attempted, fails, and answers 503: loud, and recoverable by
+    # retrying once the URL is set. Tests bind the fake explicitly.
+    registration_number_use_fake: bool = False
+    auth_service_url: str = "http://localhost:8011"
+    registration_number_timeout_seconds: float = 5.0
+
     # Realtor decision notifications (SCRUM-71). The admin's approve/reject/suspend
     # is announced to the realtor via notification-service — realtor-service
     # enqueues the `notifications.dispatch` Celery task on the shared broker

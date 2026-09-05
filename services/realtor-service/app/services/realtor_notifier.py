@@ -19,16 +19,42 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
-_APPROVED_BODY = (
-    "Your realtor application has been approved. You can now receive inspection "
-    "assignments on Maiplot."
-)
+
+def _approved_body(registration_number: str | None) -> str:
+    """The approval message.
+
+    ⚠️ This carries the realtor's Maihomme registration number, which since
+    SCRUM-207 is the ONLY identifier that signs them in — their email address is
+    refused once they are approved. So the message states the number and says
+    what to do with it; a bare "you're approved" would leave them approved and
+    unable to reach the portal.
+
+    The number can be None only if a caller approves without issuing one, which
+    the review service does not allow. The fallback tells the realtor to contact
+    support rather than printing "None" at them.
+    """
+    if not registration_number:
+        return (
+            "Your realtor application has been approved. Please contact Maihomme "
+            "support for the registration number you sign in with."
+        )
+    return (
+        "Your realtor application has been approved. Your Maihomme registration "
+        f"number is {registration_number} — sign in with this number and your "
+        "password. You can now receive inspection assignments."
+    )
 
 
-def _decision_message(*, status: str, reason: str | None) -> tuple[str, str, str]:
+def _decision_message(
+    *, status: str, reason: str | None, registration_number: str | None = None
+) -> tuple[str, str, str]:
     """Return (type, title, body) for an approve/reject/suspend decision."""
     if status == "approved":
-        return "realtor_approved", "You're approved as a Maiplot realtor", _APPROVED_BODY
+        return (
+            "realtor_approved",
+            "You're approved as a Maiplot realtor",
+            _approved_body(registration_number),
+        )
     if status == "suspended":
         return (
             "realtor_suspended",
@@ -68,7 +94,12 @@ def _report_message(*, status: str, note: str | None) -> tuple[str, str, str]:
 
 class RealtorNotifier(Protocol):
     async def decision(
-        self, *, user_id: UUID, status: str, reason: str | None
+        self,
+        *,
+        user_id: UUID,
+        status: str,
+        reason: str | None,
+        registration_number: str | None = None,
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -81,7 +112,14 @@ class RealtorNotifier(Protocol):
 class NullRealtorNotifier:
     """No-op notifier — the default when notifications are disabled (no broker)."""
 
-    async def decision(self, *, user_id: UUID, status: str, reason: str | None) -> None:
+    async def decision(
+        self,
+        *,
+        user_id: UUID,
+        status: str,
+        reason: str | None,
+        registration_number: str | None = None,
+    ) -> None:
         return None
 
     async def report_decision(
@@ -98,8 +136,17 @@ class CeleryRealtorNotifier:
 
         self._app = Celery(broker=broker_url)
 
-    async def decision(self, *, user_id: UUID, status: str, reason: str | None) -> None:
-        type_, title, body = _decision_message(status=status, reason=reason)
+    async def decision(
+        self,
+        *,
+        user_id: UUID,
+        status: str,
+        reason: str | None,
+        registration_number: str | None = None,
+    ) -> None:
+        type_, title, body = _decision_message(
+            status=status, reason=reason, registration_number=registration_number
+        )
         try:
             self._app.send_task(
                 "notifications.dispatch",
@@ -108,6 +155,12 @@ class CeleryRealtorNotifier:
                     "type": type_,
                     "title": title,
                     "body": body,
+                    # All three, unchanged by SCRUM-207. Email is the channel
+                    # that actually reaches a Nigerian realtor today (§2), but an
+                    # approval message now carries the registration number the
+                    # realtor needs to sign in AT ALL, so every route to them is
+                    # worth keeping — SMS costs nothing while it fails and helps
+                    # the day the alphanumeric sender lands (SCRUM-177).
                     "channels": ["in_app", "email", "sms"],
                     "reference_type": "realtor",
                     "reference_id": str(user_id),

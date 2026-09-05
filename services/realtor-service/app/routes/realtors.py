@@ -1,8 +1,13 @@
 """/realtors routes — realtor onboarding (SCRUM-71).
 
-POST /realtors lets a realtor-role user complete their profile (ESVARBON +
-coverage + government-ID upload); GET /realtors/me returns the caller's profile.
+POST /realtors lets a realtor-role user complete their profile (coverage +
+government-ID upload); GET /realtors/me returns the caller's profile.
 Registration is multipart (the ID file + form fields).
+
+⚠️ SCRUM-207 REMOVED the `esvarbon_number` form field. A realtor is no longer
+asked for an ESVARBON licence: the admin verifies the application and the
+platform issues a Maihomme registration number instead. The column survives for
+the realtors who supplied one before, so GET /realtors/me still returns it.
 """
 
 from __future__ import annotations
@@ -52,7 +57,6 @@ async def register_realtor(
     caller: CurrentUserDep,
     service: OnboardingDep,
     file: UploadFile,
-    esvarbon_number: Annotated[str, Form()],
     coverage_states: Annotated[list[str], Form()],
     years_of_experience: Annotated[int | None, Form()] = None,
     coverage_lgas: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI Form default
@@ -67,7 +71,6 @@ async def register_realtor(
         realtor = await service.register(
             user_id=caller.user_id,
             role=caller.role,
-            esvarbon_number=esvarbon_number,
             years_of_experience=years_of_experience,
             coverage_states=coverage_states,
             coverage_lgas=coverage_lgas,

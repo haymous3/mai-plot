@@ -10,35 +10,11 @@ from app.services.credentials import (
     InvalidCredential,
     build_id_object_key,
     detect_id_document_type,
-    normalize_esvarbon_number,
     validate_id_size,
 )
 
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        ("esv/1234", "ESV/1234"),
-        ("  RC-00912 ", "RC-00912"),
-        ("ESVB12345", "ESVB12345"),
-    ],
-)
-def test_normalize_esvarbon_valid(raw: str, expected: str) -> None:
-    assert normalize_esvarbon_number(raw) == expected
-
-
-@pytest.mark.parametrize(
-    "raw",
-    ["", "   ", "AB", "NOLETTERSORNUMBERS!", "ESV ABCD", "1", "way-too-long-licence-number-value"],
-)
-def test_normalize_esvarbon_invalid(raw: str) -> None:
-    with pytest.raises(InvalidCredential):
-        normalize_esvarbon_number(raw)
-
-
-def test_letters_only_no_digit_rejected() -> None:
-    with pytest.raises(InvalidCredential):
-        normalize_esvarbon_number("ABCDEF")
+# The ESVARBON normaliser and its tests were removed by SCRUM-207: realtors are
+# no longer asked for a licence number, so nothing validated one any more.
 
 
 def test_detect_id_document_type() -> None:

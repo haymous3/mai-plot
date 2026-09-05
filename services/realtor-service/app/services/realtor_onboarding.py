@@ -1,10 +1,16 @@
 """Realtor onboarding (SCRUM-71).
 
-A user registered as a realtor completes their profile: ESVARBON licence,
-coverage areas, years of experience, and a government-ID upload (private S3).
-The profile lands at approval_status='pending' for legal/admin review. A realtor
-who was previously rejected may re-submit; an already-pending/approved/suspended
-realtor cannot re-register (409).
+A user registered as a realtor completes their profile: coverage areas, years of
+experience, and a government-ID upload (private S3). The profile lands at
+approval_status='pending' for legal/admin review. A realtor who was previously
+rejected may re-submit; an already-pending/approved/suspended realtor cannot
+re-register (409).
+
+⚠️ NO ESVARBON LICENCE (SCRUM-207). It used to be collected and format-validated
+here; the product now verifies a realtor through admin review and issues them a
+Maihomme registration number at approval instead. `realtors.esvarbon_number`
+stays nullable and keeps the values realtors supplied before — this writes NULL
+into it rather than dropping the column, so no historic licence is destroyed.
 """
 
 from __future__ import annotations
@@ -19,7 +25,6 @@ from app.services.credentials import (
     InvalidCredential,
     build_id_object_key,
     detect_id_document_type,
-    normalize_esvarbon_number,
     validate_coordinates,
     validate_id_size,
 )
@@ -64,7 +69,6 @@ class RealtorOnboardingService:
         *,
         user_id: UUID,
         role: str,
-        esvarbon_number: str,
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
@@ -83,7 +87,6 @@ class RealtorOnboardingService:
 
         # Validate the credentials (InvalidCredential -> 422). Coverage must name
         # at least one state — a realtor has to cover somewhere.
-        esvarbon = normalize_esvarbon_number(esvarbon_number)
         if not coverage_states:
             raise InvalidCredential("COVERAGE_REQUIRED", "At least one coverage state is required.")
         has_location = base_lat is not None and base_lng is not None
@@ -102,7 +105,6 @@ class RealtorOnboardingService:
         if existing is None:
             realtor = await self._realtors.create(
                 user_id=user_id,
-                esvarbon_number=esvarbon,
                 years_of_experience=years_of_experience,
                 coverage_states=coverage_states,
                 coverage_lgas=coverage_lgas,
@@ -111,7 +113,6 @@ class RealtorOnboardingService:
         else:  # re-submit after a rejection
             realtor = await self._realtors.resubmit(
                 user_id=user_id,
-                esvarbon_number=esvarbon,
                 years_of_experience=years_of_experience,
                 coverage_states=coverage_states,
                 coverage_lgas=coverage_lgas,
@@ -129,7 +130,6 @@ class RealtorOnboardingService:
             entity_id=user_id,
             new_value={
                 "approval_status": "pending",
-                "esvarbon_number": esvarbon,
                 "id_s3_key": key,
                 "content_type": stored.content_type,
                 "size": stored.size,
