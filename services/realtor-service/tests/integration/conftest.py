@@ -20,6 +20,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.adapters.registration_number import InMemoryRegistrationNumberIssuer
 from app.config import get_settings
 from app.db import dispose_engine
 
@@ -107,9 +108,16 @@ def seed_user(db_engine: Engine) -> Callable[..., UUID]:
 def seed_realtor(db_engine: Engine) -> Callable[..., UUID]:
     """Seed a user + a realtors row in the given approval_status."""
 
-    def _seed(*, status: str = "pending", esvarbon: str | None = None) -> UUID:
+    def _seed(
+        *,
+        status: str = "pending",
+        esvarbon: str | None = None,
+        full_name: str | None = None,
+    ) -> UUID:
         user_id = uuid4()
-        # esvarbon_number is UNIQUE — default to a distinct value per seed.
+        # esvarbon_number is UNIQUE — default to a distinct value per seed. New
+        # realtors get NULL here (SCRUM-207); seeds keep supplying one so the
+        # read-side "historic licence still shows" behaviour stays covered.
         esvarbon = esvarbon or f"ESV/{uuid4().hex[:8].upper()}"
         with db_engine.begin() as conn:
             conn.execute(
@@ -119,6 +127,20 @@ def seed_realtor(db_engine: Engine) -> Callable[..., UUID]:
                 ),
                 {"id": user_id},
             )
+            if full_name is not None:
+                # The admin queue reads the applicant's name from user_pii
+                # (SCRUM-207). phone is UNIQUE, so derive a distinct one.
+                conn.execute(
+                    text(
+                        "INSERT INTO user_pii (user_id, phone, full_name) "
+                        "VALUES (:id, :phone, :name)"
+                    ),
+                    {
+                        "id": user_id,
+                        "phone": f"+23480{uuid4().int % 10**8:08d}",
+                        "name": full_name,
+                    },
+                )
             conn.execute(
                 text(
                     "INSERT INTO realtors (id, esvarbon_number, coverage_states, "
@@ -130,6 +152,26 @@ def seed_realtor(db_engine: Engine) -> Callable[..., UUID]:
         return user_id
 
     return _seed
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def registration_number_fake() -> AsyncIterator[InMemoryRegistrationNumberIssuer]:
+    """Bind a fresh in-memory registration-number issuer for every test.
+
+    autouse and unconditional: approving a realtor calls auth-service (SCRUM-207),
+    and a test must never depend on that service running — nor on the
+    `registration_number_use_fake` default surviving a stray .env, which is
+    exactly how an integration suite ends up making real HTTP calls.
+
+    Set `.fail_next = True` to exercise the fail-closed 503.
+    """
+    from app.dependencies import get_registration_number_issuer
+    from app.main import app
+
+    fake = InMemoryRegistrationNumberIssuer()
+    app.dependency_overrides[get_registration_number_issuer] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_registration_number_issuer, None)
 
 
 @pytest.fixture

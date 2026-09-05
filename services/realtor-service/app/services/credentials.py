@@ -1,20 +1,19 @@
 """Realtor credential validation + key derivation (SCRUM-71).
 
-ESVARBON (Estate Surveyors and Valuers Registration Board of Nigeria) licence
-numbers are format-validated and normalised. The government-ID file's type is
-decided by SNIFFING THE BYTES (magic numbers), not the client-supplied filename
-or Content-Type — server-side, accepting PDF / JPEG / PNG only. Validation
-errors never echo the document bytes.
+The government-ID file's type is decided by SNIFFING THE BYTES (magic numbers),
+not the client-supplied filename or Content-Type — server-side, accepting
+PDF / JPEG / PNG only. Validation errors never echo the document bytes.
+
+⚠️ ESVARBON validation was REMOVED here by SCRUM-207. Realtors are no longer
+asked for a licence number — the admin verifies the application and the platform
+issues a Maihomme registration number (auth-service) instead — so the normaliser
+had no caller left. `realtors.esvarbon_number` still holds the values collected
+before the change; nothing validates a new one because nothing accepts one.
 """
 
 from __future__ import annotations
 
-import re
 from uuid import UUID, uuid4
-
-# A licence reference: letters/digits with optional / or - separators, 5-20
-# chars, and at least one digit (a registration number is numbered).
-_ESVARBON_RE = re.compile(r"^[A-Z0-9][A-Z0-9/-]{3,19}$")
 
 _PDF_MAGIC = b"%PDF-"
 _JPEG_MAGIC = b"\xff\xd8\xff"
@@ -28,15 +27,6 @@ class InvalidCredential(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
-
-
-def normalize_esvarbon_number(raw: str) -> str:
-    """Validate + canonicalise an ESVARBON licence number (trim, upper-case).
-    Raises InvalidCredential(ESVARBON_INVALID) on a malformed value."""
-    cleaned = raw.strip().upper()
-    if not _ESVARBON_RE.match(cleaned) or not any(c.isdigit() for c in cleaned):
-        raise InvalidCredential("ESVARBON_INVALID", "ESVARBON licence number format is invalid.")
-    return cleaned
 
 
 def detect_id_document_type(data: bytes) -> tuple[str, str]:

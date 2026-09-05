@@ -10,6 +10,8 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.adapters.registration_number import InMemoryRegistrationNumberIssuer
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -148,3 +150,140 @@ async def test_review_unknown_realtor_is_404(
     )
     assert resp.status_code == 404
     assert resp.json()["error_code"] == "REALTOR_NOT_FOUND"
+
+
+# --- Maihomme registration number (SCRUM-207) --------------------------------
+
+
+async def test_approve_returns_and_records_the_registration_number(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_realtor: Callable[..., UUID],
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+    registration_number_fake: InMemoryRegistrationNumberIssuer,
+) -> None:
+    realtor = seed_realtor(status="pending")
+    admin_headers = auth_header(mint_token(seed_user(role="admin"), "admin"))
+
+    resp = await http_client.post(
+        f"/admin/realtors/{realtor}/review", json={"action": "approve"}, headers=admin_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    number = resp.json()["registration_number"]
+    assert number == registration_number_fake.issued[realtor]
+    # In the audit row too: what the realtor was told is part of the decision's
+    # history, not just of the email.
+    with db_engine.connect() as conn:
+        new_value = conn.execute(
+            text(
+                "SELECT new_value FROM audit_log WHERE entity_id = :id "
+                "AND action = 'realtor.approved' ORDER BY created_at DESC LIMIT 1"
+            ),
+            {"id": realtor},
+        ).scalar_one()
+    assert new_value["registration_number"] == number
+
+
+async def test_issuance_failure_is_503_and_leaves_the_realtor_pending(
+    clean_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_realtor: Callable[..., UUID],
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+    registration_number_fake: InMemoryRegistrationNumberIssuer,
+) -> None:
+    """Fail closed. Approving without a number strands the realtor: they cannot
+    sign in by number (none exists) or by email (refused once approved)."""
+    realtor = seed_realtor(status="pending")
+    admin_headers = auth_header(mint_token(seed_user(role="admin"), "admin"))
+    registration_number_fake.fail_next = True
+
+    resp = await http_client.post(
+        f"/admin/realtors/{realtor}/review", json={"action": "approve"}, headers=admin_headers
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["error_code"] == "REGISTRATION_NUMBER_UNAVAILABLE"
+    with db_engine.connect() as conn:
+        status = conn.execute(
+            text("SELECT approval_status FROM realtors WHERE id = :id"), {"id": realtor}
+        ).scalar_one()
+    assert status == "pending"
+    assert _audit_action(db_engine, realtor) is None
+
+    # And the admin can simply try again.
+    retry = await http_client.post(
+        f"/admin/realtors/{realtor}/review", json={"action": "approve"}, headers=admin_headers
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["registration_number"]
+
+
+async def test_reject_issues_no_number(
+    clean_tables: None,
+    http_client: AsyncClient,
+    seed_realtor: Callable[..., UUID],
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+    registration_number_fake: InMemoryRegistrationNumberIssuer,
+) -> None:
+    realtor = seed_realtor(status="pending")
+    admin_headers = auth_header(mint_token(seed_user(role="admin"), "admin"))
+
+    resp = await http_client.post(
+        f"/admin/realtors/{realtor}/review",
+        json={"action": "reject", "reason": "ID illegible"},
+        headers=admin_headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["registration_number"] is None
+    assert registration_number_fake.calls == []
+
+
+async def test_queue_shows_the_applicants_name(
+    clean_tables: None,
+    http_client: AsyncClient,
+    seed_realtor: Callable[..., UUID],
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """With ESVARBON no longer collected, the name is the only thing identifying
+    the row an admin is deciding on."""
+    named = seed_realtor(status="pending", full_name="Ada Okafor")
+    admin_headers = auth_header(mint_token(seed_user(role="admin"), "admin"))
+
+    resp = await http_client.get("/admin/realtors/queue", headers=admin_headers)
+
+    assert resp.status_code == 200, resp.text
+    item = next(i for i in resp.json()["items"] if i["id"] == str(named))
+    assert item["full_name"] == "Ada Okafor"
+
+
+async def test_queue_keeps_an_applicant_with_no_pii_row(
+    clean_tables: None,
+    http_client: AsyncClient,
+    seed_realtor: Callable[..., UUID],
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """LEFT JOIN, not JOIN — a missing name must not drop the application off the
+    review list. Hiding work is worse than showing a blank."""
+    anonymous = seed_realtor(status="pending")
+    admin_headers = auth_header(mint_token(seed_user(role="admin"), "admin"))
+
+    resp = await http_client.get("/admin/realtors/queue", headers=admin_headers)
+
+    ids = [i["id"] for i in resp.json()["items"]]
+    assert str(anonymous) in ids
+    item = next(i for i in resp.json()["items"] if i["id"] == str(anonymous))
+    assert item["full_name"] is None

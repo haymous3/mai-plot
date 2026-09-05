@@ -43,6 +43,7 @@ class _StubRealtorRepo:
         self._existing = existing
         self.created = False
         self.resubmitted = False
+        self.create_kwargs: dict[str, object] = {}
         self.base_location: tuple[float, float] | None = None
 
     async def get(self, user_id: UUID) -> RealtorRow | None:
@@ -50,6 +51,7 @@ class _StubRealtorRepo:
 
     async def create(self, **kwargs: object) -> RealtorRow:
         self.created = True
+        self.create_kwargs = kwargs
         return _row()
 
     async def resubmit(self, **kwargs: object) -> RealtorRow:
@@ -88,7 +90,6 @@ async def _register(
     kwargs: dict[str, object] = {
         "user_id": uuid4(),
         "role": role,
-        "esvarbon_number": "esv/1234",
         "years_of_experience": 5,
         "coverage_states": ["Lagos"],
         "coverage_lgas": ["Ikeja"],
@@ -119,12 +120,8 @@ async def test_register_happy_path_stores_and_audits() -> None:
     assert repo.created is True
     assert len(storage.objects) == 1
     assert audit.actions == ["realtor.registered"]
-
-
-async def test_invalid_esvarbon_rejected() -> None:
-    svc, _, _ = _service(_StubRealtorRepo())
-    with pytest.raises(InvalidCredential):
-        await _register(svc, esvarbon_number="!!")
+    # SCRUM-207: nothing about a licence number reaches the repo or the audit row.
+    assert "esvarbon_number" not in repo.create_kwargs
 
 
 async def test_invalid_id_document_rejected() -> None:

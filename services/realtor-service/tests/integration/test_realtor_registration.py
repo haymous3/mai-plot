@@ -15,7 +15,6 @@ _PDF = b"%PDF-1.4 realtor government id"
 
 def _form() -> dict[str, object]:
     return {
-        "esvarbon_number": "esv/1234",
         "years_of_experience": "5",
         "coverage_states": ["Lagos"],
         "coverage_lgas": ["Ikeja"],
@@ -60,7 +59,9 @@ async def test_register_happy_then_me(
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["approval_status"] == "pending"
-    assert body["esvarbon_number"] == "ESV/1234"  # normalised
+    # No longer collected (SCRUM-207) — the realtor is verified by admin review
+    # and issued a Maihomme registration number instead.
+    assert body["esvarbon_number"] is None
     assert body["coverage_states"] == ["Lagos"]
 
     me = await http_client.get("/realtors/me", headers=headers)
@@ -68,20 +69,26 @@ async def test_register_happy_then_me(
     assert me.json()["approval_status"] == "pending"
 
 
-async def test_invalid_esvarbon_is_422(
+async def test_esvarbon_is_ignored_if_a_client_still_sends_it(
     clean_tables: None,
     http_client: AsyncClient,
     seed_user: Callable[..., UUID],
     mint_token: Callable[[UUID, str], str],
     auth_header: Callable[[str], dict[str, str]],
 ) -> None:
+    """SCRUM-207 replaced the 422-on-a-bad-licence test.
+
+    An older client (or a cached bundle mid-deploy) may still post the field.
+    That must not 422 and must not be stored: the value is no longer part of the
+    contract, and accepting whatever a stale form sends would quietly re-open a
+    field the product removed."""
     user_id = seed_user(role="realtor")
     form = _form() | {"esvarbon_number": "!!"}
     resp = await http_client.post(
         "/realtors", data=form, files=_file(), headers=auth_header(mint_token(user_id, "realtor"))
     )
-    assert resp.status_code == 422
-    assert resp.json()["error_code"] == "ESVARBON_INVALID"
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["esvarbon_number"] is None
 
 
 async def test_bad_id_document_is_422(

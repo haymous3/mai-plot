@@ -1,8 +1,12 @@
 """Access to the realtors table (owned by realtor-service, SCRUM-71).
 
-The realtors row extends users(id) with ESVARBON licence, coverage areas, the
-private government-ID object key, and the approval lifecycle
+The realtors row extends users(id) with coverage areas, the private
+government-ID object key, and the approval lifecycle
 (pending -> approved | rejected | suspended).
+
+`esvarbon_number` is no longer written (SCRUM-207): a realtor is verified by
+admin review and issued a Maihomme registration number instead. The column is
+still READ, because realtors onboarded before the change have one.
 """
 
 from __future__ import annotations
@@ -14,6 +18,25 @@ from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True)
+class PendingRealtorRow:
+    """One pending application for the admin review queue (SCRUM-207).
+
+    Carries `full_name` from user_pii, which RealtorRow does not. Before
+    SCRUM-207 the queue's only identifying column was the ESVARBON licence
+    number — with that no longer collected, an admin would have been approving
+    anonymous rows, so the applicant's name is read here.
+    """
+
+    id: UUID
+    full_name: str | None
+    esvarbon_number: str | None
+    years_of_experience: int | None
+    coverage_states: list[str]
+    coverage_lgas: list[str]
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -56,28 +79,31 @@ class RealtorRepository:
         self,
         *,
         user_id: UUID,
-        esvarbon_number: str,
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
         government_id_s3_key: str,
     ) -> RealtorRow:
-        """Insert a fresh realtor profile at approval_status='pending'."""
+        """Insert a fresh realtor profile at approval_status='pending'.
+
+        esvarbon_number is left to its NULL default (SCRUM-207). The column is
+        UNIQUE, and Postgres allows any number of NULLs in a unique index, so
+        every realtor from here on coexists happily.
+        """
         row = (
             await self._session.execute(
                 text(
                     f"""
                     INSERT INTO realtors
-                        (id, esvarbon_number, years_of_experience, coverage_states,
+                        (id, years_of_experience, coverage_states,
                          coverage_lgas, government_id_s3_key, approval_status)
                     VALUES
-                        (:id, :esvarbon, :years, :states, :lgas, :key, 'pending')
+                        (:id, :years, :states, :lgas, :key, 'pending')
                     RETURNING {_COLUMNS}
                     """
                 ),
                 {
                     "id": user_id,
-                    "esvarbon": esvarbon_number,
                     "years": years_of_experience,
                     "states": coverage_states,
                     "lgas": coverage_lgas,
@@ -91,20 +117,24 @@ class RealtorRepository:
         self,
         *,
         user_id: UUID,
-        esvarbon_number: str,
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
         government_id_s3_key: str,
     ) -> RealtorRow:
         """Re-apply after a rejection — overwrite the profile + reset to pending,
-        clearing the prior decision."""
+        clearing the prior decision.
+
+        Deliberately does NOT clear esvarbon_number. A realtor who supplied one
+        before SCRUM-207 keeps it on a re-submission: the field is no longer
+        collected, and blanking it here would delete a licence number the
+        platform was given, on a path that has nothing to do with it.
+        """
         row = (
             await self._session.execute(
                 text(
                     f"""
                     UPDATE realtors SET
-                        esvarbon_number = :esvarbon,
                         years_of_experience = :years,
                         coverage_states = :states,
                         coverage_lgas = :lgas,
@@ -120,7 +150,6 @@ class RealtorRepository:
                 ),
                 {
                     "id": user_id,
-                    "esvarbon": esvarbon_number,
                     "years": years_of_experience,
                     "states": coverage_states,
                     "lgas": coverage_lgas,
@@ -130,17 +159,41 @@ class RealtorRepository:
         ).one()
         return self._to_row(row)
 
-    async def list_pending(self, *, limit: int = 100) -> list[RealtorRow]:
+    async def list_pending(self, *, limit: int = 100) -> list[PendingRealtorRow]:
+        """Pending applications, oldest first, with the applicant's name.
+
+        LEFT JOIN, not JOIN: a realtor whose user_pii row is missing must still
+        appear in the queue. Dropping an application off the review list because
+        one column is absent hides work rather than surfacing it.
+        """
         rows = (
             await self._session.execute(
                 text(
-                    f"SELECT {_COLUMNS} FROM realtors WHERE approval_status = 'pending' "
-                    "ORDER BY created_at ASC LIMIT :limit"
+                    """
+                    SELECT r.id, p.full_name, r.esvarbon_number, r.years_of_experience,
+                           r.coverage_states, r.coverage_lgas, r.created_at
+                    FROM realtors r
+                    LEFT JOIN user_pii p ON p.user_id = r.id
+                    WHERE r.approval_status = 'pending'
+                    ORDER BY r.created_at ASC
+                    LIMIT :limit
+                    """
                 ),
                 {"limit": limit},
             )
         ).all()
-        return [self._to_row(r) for r in rows]
+        return [
+            PendingRealtorRow(
+                id=r.id,
+                full_name=r.full_name,
+                esvarbon_number=r.esvarbon_number,
+                years_of_experience=r.years_of_experience,
+                coverage_states=list(r.coverage_states),
+                coverage_lgas=list(r.coverage_lgas),
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
 
     async def set_decision(
         self,

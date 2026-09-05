@@ -598,6 +598,20 @@ projects:
               - fromGroup: maiplot-shared
               - fromGroup: maiplot-staging-fakes
 
+              # Approving a realtor issues their Maihomme registration number
+              # from auth-service, which owns it because login resolves it
+              # (SCRUM-207). Without this the approval answers 503 — loudly and
+              # retryably, which is the point: REGISTRATION_NUMBER_USE_FAKE
+              # defaults to FALSE precisely so an unconfigured environment
+              # cannot mint numbers auth-service has never heard of and leave
+              # approved realtors unable to sign in with either identifier.
+              #
+              # `hostport` yields "host:port" with no scheme and Blueprint
+              # cannot prepend one, so the issuer normalises a scheme-less base
+              # URL to http:// — same fix as the deal checker (SCRUM-190).
+              - key: AUTH_SERVICE_URL
+                fromService: { type: pserv, name: auth-service, property: hostport }
+
           - name: analytics-service
             type: pserv
             runtime: docker
