@@ -35,6 +35,13 @@ import {
 } from '@/lib/inspection-report';
 import { inspectionLocation, propertyTypeLabel } from '@/lib/realtor-inspection';
 
+/** Shown when the session is beyond saving. Keeping the realtor on the page
+ * matters: their answers and photos live only in this component, so navigating
+ * away to sign in would discard the report they just spent 20 minutes on. */
+const SESSION_EXPIRED_MESSAGE =
+  'Your session expired while you were filling this in. Open Maihomme in another tab, sign in ' +
+  'again, then come back here and press Submit — your answers and photos are still on this page.';
+
 const SUBMIT_ERRORS: Record<string, string> = {
   MIN_PHOTOS_REQUIRED: `At least ${MIN_PHOTOS} photos are required.`,
   GPS_OUT_OF_RANGE: "Your location isn't within 1km of the property — capture GPS on site.",
@@ -46,6 +53,9 @@ const SUBMIT_ERRORS: Record<string, string> = {
   STORAGE_UNAVAILABLE: 'Photo storage is temporarily unavailable. Please retry.',
   VIDEO_INVALID: 'The video must be an MP4, MOV or WebM file.',
   VIDEO_TOO_LARGE: 'The video exceeds the 50MB limit.',
+  // Never "please retry" — retrying cannot work once the session is gone
+  // (SCRUM-206). Say what happened and what actually helps.
+  NO_SESSION: SESSION_EXPIRED_MESSAGE,
 };
 
 /** Inspection report wizard (SCRUM-140, restructured to the designed five
@@ -116,6 +126,23 @@ export function ReportWizard({ insp }: { insp: RealtorInspection }) {
     if (!form.gps) return;
     setBusy(true);
     setError(null);
+
+    // Liveness check before the upload (SCRUM-206). Middleware refreshes the
+    // token on the way through, so this only fails when the refresh token is
+    // dead too — a phone asleep for days. Finding that out now costs one tiny
+    // request; finding out after pushing several photos wastes the realtor's
+    // data and, without this, their whole report.
+    try {
+      const alive = await fetch('/api/session/alive', { cache: 'no-store' });
+      if (!alive.ok) {
+        setError(SESSION_EXPIRED_MESSAGE);
+        setBusy(false);
+        return;
+      }
+    } catch {
+      // Can't tell — the upload itself will surface a real network problem.
+    }
+
     const fd = new FormData();
     fd.append('gps_lat', String(form.gps.lat));
     fd.append('gps_lng', String(form.gps.lng));
