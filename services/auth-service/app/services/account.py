@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.repositories.buyer_profile_repo import BuyerProfileRepository
+from app.repositories.realtor_registration_repo import RealtorRegistrationRepository
 from app.repositories.user_repo import UserRepository
 
 
@@ -50,6 +51,10 @@ class Account:
     location: str | None
     # Postal address (SCRUM-201). See migration 0014 for how it differs.
     address: str | None
+    # Realtor-only (SCRUM-207): the Maihomme registration number they sign in
+    # with. None for every other role, and for a realtor still awaiting
+    # approval — the number is issued by the admin decision, not by onboarding.
+    registration_number: str | None
     # Buyer-only; None for every other role, and for a buyer who has not filled
     # in the optional buying-capacity step.
     employment_status: str | None
@@ -58,9 +63,16 @@ class Account:
 
 
 class AccountService:
-    def __init__(self, *, users: UserRepository, buyer_profiles: BuyerProfileRepository) -> None:
+    def __init__(
+        self,
+        *,
+        users: UserRepository,
+        buyer_profiles: BuyerProfileRepository,
+        registration_numbers: RealtorRegistrationRepository,
+    ) -> None:
         self._users = users
         self._buyer_profiles = buyer_profiles
+        self._registration_numbers = registration_numbers
 
     async def get(self, user_id: UUID) -> Account:
         account = await self._users.get_account(user_id)
@@ -78,6 +90,12 @@ class AccountService:
                 preferred_location = profile.preferred_location
                 budget_kobo = profile.budget_kobo
 
+        # Same reasoning as the buyer profile above: only realtors can have a
+        # registration number, so no other role pays for the read.
+        registration_number = None
+        if account.role == "realtor":
+            registration_number = await self._registration_numbers.get_for_user(user_id)
+
         return Account(
             id=account.id,
             role=account.role,
@@ -92,6 +110,7 @@ class AccountService:
             avatar_s3_key=account.avatar_s3_key,
             location=account.location,
             address=account.address,
+            registration_number=registration_number,
             employment_status=employment_status,
             preferred_location=preferred_location,
             budget_kobo=budget_kobo,

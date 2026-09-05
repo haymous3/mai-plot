@@ -43,6 +43,7 @@ _TABLES = (
     "refresh_tokens",
     "auth_credentials",
     "buyer_profiles",
+    "realtor_registration_numbers",
     "email_verification_tokens",
     "otp_codes",
     "user_pii",

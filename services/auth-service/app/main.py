@@ -13,6 +13,7 @@ from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.dev import dev_routes_enabled
 from app.routes.dev import router as dev_router
+from app.routes.internal import router as internal_router
 from app.security import AuthenticationError, AuthorizationError
 from app.telemetry import setup_telemetry
 
@@ -29,6 +30,9 @@ setup_telemetry(SERVICE_NAME, app)
 app.add_middleware(TraceIdMiddleware)
 app.include_router(auth_router)
 app.include_router(admin_router)
+# Service-to-service only (SCRUM-207). NOT in infra/kong/kong.yml — see the
+# module docstring in app/routes/internal.py before touching that.
+app.include_router(internal_router)
 
 # Local-only helpers (app/routes/dev.py) — the /dev/otp/latest reader that lets
 # a developer complete /auth/otp/verify while the fake SMS adapter is bound.

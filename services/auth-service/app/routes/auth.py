@@ -299,14 +299,16 @@ async def login(
     service: Annotated[LoginService, Depends(get_login_service)],
 ) -> LoginResponse | JSONResponse:
     try:
-        result = await service.login(email=body.email, password=body.password)
+        result = await service.login(identifier=body.login_identifier, password=body.password)
     except InvalidCredentials:
-        # One generic message for unknown email / no password / wrong
-        # password — never reveal which, to prevent account enumeration.
+        # One generic message for every failure — unknown identifier, no
+        # password, wrong password, and an approved realtor who used their email
+        # instead of their registration number. Never reveal which, to prevent
+        # account enumeration (SCRUM-207).
         return _error(
             status.HTTP_401_UNAUTHORIZED,
             "INVALID_CREDENTIALS",
-            "Email or password is incorrect.",
+            "Those sign-in details are incorrect.",
         )
 
     return LoginResponse(
@@ -519,6 +521,7 @@ async def get_me(
             "avatar_url": avatars.presigned_url(account.avatar_s3_key),
             "location": account.location,
             "address": account.address,
+            "registration_number": account.registration_number,
             "employment_status": account.employment_status,
             "preferred_location": account.preferred_location,
             "budget_kobo": account.budget_kobo,
