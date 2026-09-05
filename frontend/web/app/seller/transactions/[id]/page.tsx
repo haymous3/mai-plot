@@ -79,11 +79,13 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
               </div>
               <div className="min-w-0">
                 <p className="font-medium text-ink-900">{realtor.realtor_name ?? 'Realtor'}</p>
-                <p className="text-xs text-ink-500">
-                  {realtor.esvarbon_number
-                    ? `ESVARBON ${realtor.esvarbon_number}`
-                    : 'ESVARBON licence on file'}
-                </p>
+                {/* Was the ESVARBON licence, shown as reassurance that the
+                    realtor is credentialled. It is no longer collected
+                    (SCRUM-207), and for every realtor onboarded since it is
+                    null — so this now states the fact the licence line was
+                    standing in for. Still identity only, no contact details
+                    (CLAUDE.md §10). */}
+                <p className="text-xs text-ink-500">Verified Maihomme realtor</p>
               </div>
               <span className="ml-auto shrink-0 rounded-full bg-ink-300/15 px-2.5 py-0.5 text-[11px] font-medium text-ink-600">
                 {INSPECTION_STATUS[realtor.status ?? ''] ?? realtor.status ?? 'assigned'}

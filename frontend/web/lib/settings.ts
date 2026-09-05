@@ -35,6 +35,13 @@ export type Account = {
    * migration 0014 for why all three exist.
    */
   address: string | null;
+  /**
+   * Realtor-only (SCRUM-207): the Maihomme number an approved realtor signs in
+   * with. Null for every other role, and for a realtor whose application is not
+   * approved yet — the number is issued by the admin decision, not by
+   * onboarding, so "not approved" and "no number" are the same state.
+   */
+  registration_number: string | null;
   /** Buyer-only; null for other roles and for buyers who skipped the step. */
   employment_status: string | null;
   preferred_location: string | null;

@@ -3,17 +3,27 @@ import Link from 'next/link';
 
 import { RealtorHeader } from '../realtor-header';
 import type { RealtorProfile } from '@/lib/api';
-import { realtorServiceUrl } from '@/lib/api';
+import { authServiceUrl, realtorServiceUrl } from '@/lib/api';
 import { sessionBackendGet } from '@/lib/session-api';
+import type { Account } from '@/lib/settings';
 
 export const metadata: Metadata = { title: 'Profile · Maihomme Realtor' };
 
 /** Realtor Profile (SCRUM-144). A read view of the realtor's own credentials +
- * coverage from the existing GET /realtors/me — ESVARBON licence, coverage
- * area, experience, approval status, completed deals. Read-only; editing
- * coverage would need a backend PATCH (out of scope). */
+ * coverage from the existing GET /realtors/me — coverage area, experience,
+ * approval status, completed deals. Read-only; editing coverage would need a
+ * backend PATCH (out of scope).
+ *
+ * The Maihomme registration number comes from GET /auth/me, not from
+ * /realtors/me: auth-service owns it because login resolves it (SCRUM-207).
+ * That read is deliberately not fatal — a realtor whose account call fails
+ * still gets their profile, with the number shown as unavailable rather than
+ * the whole page replaced by an error. */
 export default async function RealtorProfilePage() {
-  const res = await sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`);
+  const [res, accountRes] = await Promise.all([
+    sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`),
+    sessionBackendGet<Account>(`${authServiceUrl()}/auth/me`),
+  ]);
 
   // 404 = not onboarded yet (SCRUM-156): point them at onboarding rather than
   // showing an empty profile.
@@ -46,6 +56,7 @@ export default async function RealtorProfilePage() {
   }
 
   const profile = res.data;
+  const registrationNumber = accountRes.ok ? accountRes.data.registration_number : null;
   const approval = APPROVAL_META[profile.approval_status] ?? {
     label: profile.approval_status,
     pill: 'bg-ink-300/20 text-ink-500',
@@ -69,13 +80,30 @@ export default async function RealtorProfilePage() {
             {profile.approval_status !== 'approved' && (
               <p className="max-w-xs text-right text-xs text-ink-500">
                 You&rsquo;ll start receiving inspection assignments once our team approves your
-                credentials.
+                credentials. We&rsquo;ll email your Maihomme registration number then &mdash;
+                it&rsquo;s what you&rsquo;ll sign in with.
               </p>
             )}
           </div>
 
           <dl className="mt-6 grid gap-5 sm:grid-cols-2">
-            <Field label="ESVARBON licence" value={profile.esvarbon_number ?? '—'} />
+            {/* The realtor's sign-in identifier, so it is shown even before it
+                exists — "issued once verified" answers the question a blank
+                dash would leave open. ESVARBON is only rendered for the
+                realtors who supplied one before SCRUM-207; a null is omitted
+                rather than shown as an empty row nobody can ever fill. */}
+            <Field
+              label="Maihomme registration number"
+              value={
+                registrationNumber ??
+                (profile.approval_status === 'approved'
+                  ? 'Unavailable — please retry'
+                  : 'Issued once your account is verified')
+              }
+            />
+            {profile.esvarbon_number && (
+              <Field label="ESVARBON licence" value={profile.esvarbon_number} />
+            )}
             <Field
               label="Years of experience"
               value={

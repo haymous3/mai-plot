@@ -88,7 +88,8 @@ export default async function RealtorOverviewPage() {
               </p>
               <p className="mt-1">
                 You&apos;ll start receiving inspection assignments once our team approves your
-                ESVARBON credentials.
+                credentials. We&apos;ll email your Maihomme registration number then &mdash; it&apos;s
+                what you&apos;ll sign in with from now on.
               </p>
             </div>
           )}

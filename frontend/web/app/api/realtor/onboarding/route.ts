@@ -5,8 +5,10 @@ import { sessionAccessToken } from '@/lib/session-server';
 
 /**
  * Same-origin multipart proxy for realtor onboarding (SCRUM-132). The
- * "Realtor Profile" onboarding step posts its ESVARBON number, coverage area,
- * and credentials document here; we forward the FormData to realtor-service
+ * "Realtor Profile" onboarding step posts its coverage area and credentials
+ * document here (no ESVARBON number since SCRUM-207 — the realtor is verified
+ * by an admin and issued a registration number instead); we forward the
+ * FormData to realtor-service
  * POST /realtors with the session access token (role=realtor JWT). Multipart, so
  * we re-send the parsed FormData (fetch sets the boundary) rather than JSON.
  */

@@ -369,6 +369,11 @@ export interface PoaQueueResponse {
  * This endpoint returns the pending list only — no pagination envelope. */
 export interface RealtorQueueItem {
   id: string;
+  /** The applicant's name (SCRUM-207) — with ESVARBON no longer collected, this
+   * is what identifies the row an admin is deciding on. Null when the account
+   * has no user_pii row; the query LEFT JOINs so the application still lists. */
+  full_name: string | null;
+  /** Null for every realtor onboarded since SCRUM-207 stopped collecting it. */
   esvarbon_number: string | null;
   years_of_experience: number | null;
   coverage_states: string[];
@@ -501,6 +506,9 @@ export interface CommissionHistoryResponse {
 /** The calling realtor's profile (GET /realtors/me, SCRUM-71). */
 export interface RealtorProfile {
   id: string;
+  /** Historic only — no longer collected (SCRUM-207). The realtor's identifier
+   * is now the Maihomme registration number, which comes from GET /auth/me
+   * because auth-service owns it (login resolves it). */
   esvarbon_number: string | null;
   years_of_experience: number | null;
   coverage_states: string[];
@@ -696,13 +704,21 @@ export interface LoginFailure {
 
 /** Call auth-service POST /auth/login. Never throws on a 4xx — returns a typed
  * failure so the caller maps it to a response. */
-export async function backendLogin(email: string, password: string): Promise<LoginSuccess | LoginFailure> {
+/**
+ * Authenticate against auth-service. `identifier` is an email address for most
+ * roles, or an approved realtor's Maihomme registration number (SCRUM-207) —
+ * the service decides which by shape, so there is one field and one endpoint.
+ */
+export async function backendLogin(
+  identifier: string,
+  password: string,
+): Promise<LoginSuccess | LoginFailure> {
   let resp: Response;
   try {
     resp = await fetch(`${authServiceUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
       cache: 'no-store',
     });
   } catch {

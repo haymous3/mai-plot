@@ -13,24 +13,33 @@ import {
  * authenticate via auth-service, reject admins (they use the admin surface),
  * store the tokens in httpOnly session cookies, and return the caller's role
  * home so the client can route there. Replaces the buyer-only /api/buyer/login.
+ *
+ * The credential field is `identifier` (SCRUM-207): an email address, or an
+ * approved realtor's Maihomme registration number. `email` is still accepted so
+ * a client cached from before the change keeps working through a deploy.
  */
 const FIFTEEN_MINUTES = 15 * 60;
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  let payload: { email?: unknown; password?: unknown };
+  let payload: { identifier?: unknown; email?: unknown; password?: unknown };
   try {
     payload = await request.json();
   } catch {
     return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400 });
   }
-  const email = typeof payload.email === 'string' ? payload.email : '';
+  const identifier =
+    typeof payload.identifier === 'string'
+      ? payload.identifier
+      : typeof payload.email === 'string'
+        ? payload.email
+        : '';
   const password = typeof payload.password === 'string' ? payload.password : '';
-  if (!email || !password) {
+  if (!identifier || !password) {
     return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400 });
   }
 
-  const result = await backendLogin(email, password);
+  const result = await backendLogin(identifier, password);
   if (!result.ok) {
     return NextResponse.json({ error: result.code }, { status: result.status === 502 ? 502 : 401 });
   }

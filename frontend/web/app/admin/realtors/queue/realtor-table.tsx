@@ -11,6 +11,12 @@ const REVIEW_ERRORS: Record<string, string> = {
   REALTOR_NOT_FOUND: 'This applicant no longer exists.',
   REASON_REQUIRED: 'A rejection reason is required.',
   NO_SESSION: 'Your session expired — please sign in again.',
+  // The approval was NOT applied — issuing the registration number failed and
+  // realtor-service refuses to approve without one (SCRUM-207). Say "try again"
+  // rather than anything final: the applicant is still pending and a retry is
+  // the whole remedy.
+  REGISTRATION_NUMBER_UNAVAILABLE:
+    'Could not issue a registration number just now, so the applicant was not approved. Please try again.',
 };
 
 export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
@@ -19,6 +25,11 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<RealtorQueueItem | null>(null);
   const [viewing, setViewing] = useState<RealtorQueueItem | null>(null);
+  // The number just issued, kept on screen after the row disappears from the
+  // queue. The realtor is emailed it, but if that never arrives the reviewer is
+  // the only one who can pass it on — and nothing else in the admin surface can
+  // show it (SCRUM-207).
+  const [issued, setIssued] = useState<{ name: string; number: string } | null>(null);
 
   async function review(id: string, action: 'approve' | 'reject', reason?: string) {
     setBusyId(id);
@@ -29,10 +40,20 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, reason }),
       });
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: string;
+        registration_number?: string | null;
+      };
       if (!resp.ok) {
-        const body = (await resp.json()) as { error?: string };
         setError(REVIEW_ERRORS[body.error ?? ''] ?? 'Could not complete the review.');
         return;
+      }
+      if (action === 'approve' && body.registration_number) {
+        const applicant = items.find((i) => i.id === id);
+        setIssued({
+          name: applicant?.full_name ?? 'This applicant',
+          number: body.registration_number,
+        });
       }
       setRejecting(null);
       router.refresh();
@@ -43,16 +64,28 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
     }
   }
 
+  const issuedNotice = issued && (
+    <div className="mb-4 rounded-md border border-emerald-accent/30 bg-emerald-accent/5 px-3.5 py-2.5 text-sm text-ink-700">
+      <span className="font-medium">{issued.name}</span> approved. Registration number{' '}
+      <span className="font-mono font-medium text-ink-900">{issued.number}</span> — emailed to them,
+      and what they sign in with. Pass it on if they say the email never arrived.
+    </div>
+  );
+
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-ink-300/50 bg-white/60 px-6 py-16 text-center text-sm text-ink-300">
-        No realtor applications awaiting review.
-      </div>
+      <>
+        {issuedNotice}
+        <div className="rounded-lg border border-dashed border-ink-300/50 bg-white/60 px-6 py-16 text-center text-sm text-ink-300">
+          No realtor applications awaiting review.
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      {issuedNotice}
       {error && (
         <p role="alert" className="mb-4 rounded-md bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
           {error}
@@ -63,7 +96,10 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
-              <th className="px-5 py-3 font-medium">ESVARBON licence</th>
+              {/* Was "ESVARBON licence" — the only identifying column, until
+                  SCRUM-207 stopped collecting it. Approving an anonymous row is
+                  not a review. */}
+              <th className="px-5 py-3 font-medium">Applicant</th>
               <th className="px-5 py-3 font-medium">Experience</th>
               <th className="px-5 py-3 font-medium">Coverage</th>
               <th className="px-5 py-3 font-medium">Applied</th>
@@ -76,7 +112,7 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
               return (
                 <tr key={item.id} className="border-b border-ink-300/20 last:border-0">
                   <td className="px-5 py-4 font-medium text-ink-900">
-                    {item.esvarbon_number ?? '—'}
+                    {item.full_name ?? 'Name not provided'}
                   </td>
                   <td className="px-5 py-4 text-ink-500">
                     {item.years_of_experience === null
@@ -147,7 +183,7 @@ function DocumentModal({ item, onClose }: { item: RealtorQueueItem; onClose: () 
       >
         <div className="flex items-center justify-between border-b border-ink-300/30 px-5 py-3">
           <h2 className="font-display text-lg text-ink-900">
-            Government ID — {item.esvarbon_number ?? 'applicant'}
+            Government ID — {item.full_name ?? 'applicant'}
           </h2>
           <button
             onClick={onClose}

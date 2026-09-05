@@ -18,7 +18,7 @@ export type OnboardingStep =
   | 'buyer-profile'
   /** Seller only: NIN, selling authority, and a PoA document when not the owner. */
   | 'seller-verification'
-  /** Realtor only: ESVARBON, coverage area, credentials document. */
+  /** Realtor only: NIN, address, coverage area, credentials document. */
   | 'realtor-profile'
   /** Shared closing screen for every role. */
   | 'welcome';

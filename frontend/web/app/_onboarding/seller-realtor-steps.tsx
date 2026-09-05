@@ -240,13 +240,13 @@ export function SellerVerificationStep({
 }
 
 /**
- * Realtor Profile — credentials document, coverage area, and ESVARBON.
+ * Realtor Profile — credentials document and coverage area.
  *
- * ⚠️ THE EXPORT OMITS ESVARBON, and it is added back here deliberately. It is a
- * required Form field on `POST /realtors`, so the screen as drawn cannot
- * complete, and CLAUDE.md §9 requires the licence number to be validated at
- * onboarding. Shipping the export literally would have produced a form that
- * 422s every time.
+ * ⚠️ NO ESVARBON FIELD (SCRUM-207). It used to be here — added back against the
+ * export because `POST /realtors` required it — and the product has now removed
+ * the licence number entirely: an admin verifies the application and the
+ * platform issues a Maihomme registration number, emailed to the realtor, which
+ * they sign in with. The screen finally matches the export it was drawn from.
  *
  * Coverage is a comma-separated free-text field, matching the export's
  * "e.g., Lagos, Lekki, Victoria Island", and is split into the repeated
@@ -265,7 +265,6 @@ export function RealtorProfileStep({
   // platform-wide identity check was simply absent for the role.
   const [nin, setNin] = useState('');
   const [address, setAddress] = useState('');
-  const [esvarbon, setEsvarbon] = useState('');
   const [coverage, setCoverage] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -273,11 +272,7 @@ export function RealtorProfileStep({
 
   const ninOk = /^\d{11}$/.test(nin.trim());
   const canSubmit =
-    ninOk &&
-    address.trim().length > 0 &&
-    esvarbon.trim() !== '' &&
-    coverage.trim() !== '' &&
-    file !== null;
+    ninOk && address.trim().length > 0 && coverage.trim() !== '' && file !== null;
 
   async function submit() {
     if (file && file.size > MAX_BYTES) {
@@ -317,7 +312,6 @@ export function RealtorProfileStep({
       }
 
       const form = new FormData();
-      form.append('esvarbon_number', esvarbon.trim());
       coverage
         .split(',')
         .map((s) => s.trim())
@@ -374,21 +368,6 @@ export function RealtorProfileStep({
             value={address}
             onChange={setAddress}
             placeholder="e.g., 12 Admiralty Way, Lekki Phase 1, Lagos"
-            disabled={busy}
-          />
-        </div>
-
-        <div className="mt-9">
-          {/* Not on the export — see the note above. Required by POST /realtors
-              and by CLAUDE.md §9. */}
-          <FieldLabel htmlFor="esvarbon" required>
-            ESVARBON Licence Number
-          </FieldLabel>
-          <TextField
-            id="esvarbon"
-            value={esvarbon}
-            onChange={setEsvarbon}
-            placeholder="ESV/2024/12345"
             disabled={busy}
           />
         </div>
