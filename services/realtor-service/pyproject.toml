@@ -11,6 +11,13 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.4",
     "pyjwt>=2.9",
+    # RUNTIME, not dev: app/adapters/registration_number.py imports httpx at
+    # module scope to call auth-service when an admin approves a realtor
+    # (SCRUM-207). It was in the dev group only, so the test venv had it and the
+    # Docker image did not — the container crash-looped on
+    # `ModuleNotFoundError: No module named 'httpx'` while every test, mypy and
+    # ruff passed. The image build does not import the app, so CI was green too.
+    "httpx>=0.27",
     # Government-ID upload (private S3) + multipart form parsing (SCRUM-71).
     "boto3>=1.34",
     "python-multipart>=0.0.9",
@@ -33,7 +40,8 @@ dependencies = [
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
-    "httpx>=0.27",
+    # httpx is a RUNTIME dependency above — the ASGI test client also needs it,
+    # and listing it twice is how it stayed dev-only when the adapter landed.
 ]
 
 [build-system]

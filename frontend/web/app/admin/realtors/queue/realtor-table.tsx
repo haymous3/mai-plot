@@ -6,6 +6,18 @@ import { useState } from 'react';
 import type { RealtorQueueItem } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 
+/**
+ * ⚠️ `?? 'Name not provided'` is NOT enough: an account created before
+ * SCRUM-197 — or through the API without the field — has `full_name = ""`, not
+ * null, because registration stored `full_name or ""`. An empty string is a
+ * present value, so the nullish fallback never fires and the cell renders blank,
+ * which reads as a rendering bug rather than as missing data. Same trap
+ * `welcomeGreeting` handles for the onboarding greeting.
+ */
+function applicantName(item: RealtorQueueItem): string | null {
+  return item.full_name?.trim() ? item.full_name : null;
+}
+
 const REVIEW_ERRORS: Record<string, string> = {
   REALTOR_NOT_ACTIONABLE: 'This applicant is no longer awaiting review.',
   REALTOR_NOT_FOUND: 'This applicant no longer exists.',
@@ -51,7 +63,7 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
       if (action === 'approve' && body.registration_number) {
         const applicant = items.find((i) => i.id === id);
         setIssued({
-          name: applicant?.full_name ?? 'This applicant',
+          name: (applicant && applicantName(applicant)) ?? 'This applicant',
           number: body.registration_number,
         });
       }
@@ -112,7 +124,7 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
               return (
                 <tr key={item.id} className="border-b border-ink-300/20 last:border-0">
                   <td className="px-5 py-4 font-medium text-ink-900">
-                    {item.full_name ?? 'Name not provided'}
+                    {applicantName(item) ?? 'Name not provided'}
                   </td>
                   <td className="px-5 py-4 text-ink-500">
                     {item.years_of_experience === null
@@ -183,7 +195,7 @@ function DocumentModal({ item, onClose }: { item: RealtorQueueItem; onClose: () 
       >
         <div className="flex items-center justify-between border-b border-ink-300/30 px-5 py-3">
           <h2 className="font-display text-lg text-ink-900">
-            Government ID — {item.full_name ?? 'applicant'}
+            Government ID — {applicantName(item) ?? 'applicant'}
           </h2>
           <button
             onClick={onClose}

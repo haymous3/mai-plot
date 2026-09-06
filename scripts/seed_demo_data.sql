@@ -21,6 +21,13 @@
 --   realtor1@demo.maiplot.ng   Bola Ahmed        (approved)
 --   realtor2@demo.maiplot.ng   Grace Peter       (approved)
 --
+-- ⚠️ THE TWO REALTORS DO NOT SIGN IN WITH THEIR EMAIL (SCRUM-207). They are
+-- approved, so auth-service refuses the address and expects the Maihomme
+-- registration number issued below. Read theirs with:
+--   SELECT u.email, n.registration_number FROM realtor_registration_numbers n
+--     JOIN users u ON u.id = n.user_id;
+-- Password is still Password123!.
+--
 -- Money is BIGINT kobo (1 NGN = 100 kobo).
 -- Run: docker exec -i maiplot-postgres psql -U maiplot -d maiplot < scripts/seed_demo_data.sql
 -- =============================================================================
@@ -50,6 +57,7 @@ DELETE FROM property_listings         WHERE id::text LIKE 'd1%';
 DELETE FROM bank_partners             WHERE id::text LIKE 'd0bank%' OR short_code IN ('SHB','GTM');
 DELETE FROM payout_accounts           WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 DELETE FROM buyer_profiles            WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
+DELETE FROM realtor_registration_numbers WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 DELETE FROM realtors                  WHERE id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 DELETE FROM user_pii                  WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 -- Auth children created at runtime by logins / push opt-ins (not by this seed),
@@ -104,6 +112,23 @@ INSERT INTO buyer_profiles (id, user_id, employment_status, preferred_location, 
 INSERT INTO realtors (id, esvarbon_number, years_of_experience, coverage_states, coverage_lgas, completed_deals, approval_status, approved_by, approved_at, base_location) VALUES
  ('d0000000-0000-0000-0000-000000000031','ESV-2021-04412', 7, ARRAY['Lagos'],         ARRAY['Eti-Osa','Lagos Island','Surulere'], 12, 'approved','d0000000-0000-0000-0000-000000000001', now() - interval '120 days', ST_SetSRID(ST_MakePoint(3.4210,6.4281),4326)::geography),
  ('d0000000-0000-0000-0000-000000000032','ESV-2022-09873', 4, ARRAY['Abuja','Lagos'], ARRAY['Abuja Municipal','Gwarinpa'],        5,  'approved','d0000000-0000-0000-0000-000000000001', now() - interval '80 days',  ST_SetSRID(ST_MakePoint(7.4913,9.0579),4326)::geography);
+
+-- Maihomme registration numbers for the APPROVED realtors (SCRUM-207).
+--
+-- ⚠️ NOT optional. Since SCRUM-207 an approved realtor signs in with this number
+-- and their EMAIL is refused precisely because they are approved — so a seeded
+-- approved realtor with no row here cannot log in by ANY identifier. The number
+-- comes from the same sequence production uses, so the demo world looks real.
+INSERT INTO realtor_registration_numbers (user_id, registration_number)
+SELECT s.id, 'MH-R-' || LPAD(nextval('realtor_registration_number_seq')::text, 6, '0')
+FROM (
+    SELECT r.id
+    FROM realtors r
+    JOIN users u ON u.id = r.id
+    WHERE r.approval_status = 'approved'
+      AND u.email LIKE '%@demo.maiplot.ng'
+    ORDER BY r.approved_at
+) s;
 
 -- Payout accounts (sellers + realtors)
 INSERT INTO payout_accounts (user_id, account_number, bank_code, account_name) VALUES
