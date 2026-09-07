@@ -407,6 +407,54 @@ export interface AssignableRealtorsResponse {
   items: AssignableRealtor[];
 }
 
+/** One row of the admin user list (GET /admin/users, SCRUM-209).
+ *
+ * ⚠️ No BVN/NIN, not even booleans — the list is a browse surface over the whole
+ * user base, and the verification flags belong to a deliberate lookup of one
+ * person. `AdminUserDetail` carries them. */
+export interface AdminUserListItem {
+  id: string;
+  role: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  verified_status: string;
+  is_active: boolean;
+  deleted: boolean;
+  created_at: string;
+  /** A realtor's Maihomme sign-in number (SCRUM-207); null for other roles. */
+  registration_number: string | null;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserListItem[];
+  pagination: { page: number; page_size: number; total: number };
+}
+
+/** One account in full (GET /admin/users/{id}, SCRUM-209).
+ *
+ * BVN and NIN are booleans and always will be: both are stored as bcrypt hashes
+ * and the hash is as sensitive as the number (CLAUDE.md §4). */
+export interface AdminUserDetail {
+  id: string;
+  role: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  verified_status: string;
+  seller_authority_type: string | null;
+  poa_verified_status: string;
+  bvn_verified: boolean;
+  nin_verified: boolean;
+  location: string | null;
+  address: string | null;
+  is_active: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  registration_number: string | null;
+}
+
 /** A row in the admin realtor onboarding queue (GET /admin/realtors/queue).
  * This endpoint returns the pending list only — no pagination envelope. */
 export interface RealtorQueueItem {
