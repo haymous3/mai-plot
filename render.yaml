@@ -785,8 +785,20 @@ projects:
                 value: "true"
               - key: EMAIL_VIA_CELERY
                 value: "true"
+              # SCRUM-211: Resend is the V1 provider (§2) and the only one with
+              # credentials. Staging keeps SES_USE_FAKE=true in the fakes group,
+              # so nothing leaves this environment until that is flipped.
+              - key: EMAIL_PROVIDER
+                value: resend
+              # ⚠️ MANUAL — the same Resend key auth-service uses.
+              - key: RESEND_API_KEY
+                sync: false
+              # ⚠️ The domain MUST be Resend-verified: maihomme.com, the same
+              # sender auth-service uses. maiplot.ng is NOT verified — Resend
+              # 403s it (proven live 2026-09-07), despite the stale CLAUDE.md
+              # line that said otherwise.
               - key: SES_FROM_EMAIL
-                value: noreply@maihomme.com
+                value: Maihomme <noreply@maihomme.com>
               - key: VAPID_SUBJECT
                 value: mailto:ops@maihomme.com
 

@@ -97,6 +97,8 @@ def get_email_client(settings: SettingsDep) -> EmailClient:
             from_email=settings.ses_from_email,
             region=settings.ses_region,
             endpoint_url=settings.ses_endpoint_url,
+            provider=settings.email_provider,
+            api_key=settings.resend_api_key,
         )
     return _email_client
 

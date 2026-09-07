@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     # recipient's unsubscribe link points at (NDPR); the link carries the user id
     # — the unsubscribe endpoint + preference honouring are the preferences-API
     # follow-up.
+    # SCRUM-211: WHICH provider sends notification email. "resend" is the V1
+    # provider per CLAUDE.md §2 and the only one with working credentials —
+    # auth-service has sent verification mail through it since SCRUM-152. "ses"
+    # keeps the original adapter alive for the day the AWS account exists.
+    #
+    # ⚠️ ses_use_fake is the kill switch for BOTH providers (the name predates
+    # there being two). True = nothing leaves the process, which is what local
+    # and CI want; it is why staging sent no notification email at all.
+    email_provider: str = "resend"
+    resend_api_key: str = ""
     ses_use_fake: bool = True
     ses_from_email: str = "noreply@maihomme.com"
     ses_region: str = "af-south-1"

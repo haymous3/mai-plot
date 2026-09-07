@@ -465,8 +465,21 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:ops@maihomme.com}
       EMAIL_VIA_CELERY: ${EMAIL_VIA_CELERY:-true}
+      # SCRUM-211: which provider actually sends. Resend is the V1 provider
+      # (§2) and the only one with credentials — SES has none in any environment
+      # we run, which is why notification email silently went nowhere. SES stays
+      # selectable for the day the AWS account exists.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       SES_USE_FAKE: ${SES_USE_FAKE:-false}
-      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@maihomme.com}
+      # ⚠️ The DOMAIN must be one Resend has VERIFIED, and that is maihomme.com
+      # — the address auth-service has been sending verification mail from all
+      # along. Not maiplot.ng: CLAUDE.md §2 still claimed that domain was
+      # verified, but Resend answers
+      #   403 "The maiplot.ng domain is not verified"
+      # (proven live, 2026-09-07). The doc line predates the SCRUM-186 brand
+      # sweep and has been corrected.
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-Maihomme <noreply@maihomme.com>}
       SES_REGION: ${SES_REGION:-af-south-1}
       UNSUBSCRIBE_BASE_URL: ${UNSUBSCRIBE_BASE_URL:-https://maihomme.com/notifications/unsubscribe}
       # Must match the API's value (SCRUM-122) so the email's signed unsubscribe

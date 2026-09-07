@@ -19,6 +19,8 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 _TASK = "payments.disburse_commission"
+# transaction-service owns the payout: MONEY moves there, never here.
+_TASK_QUEUE = "transaction-service"
 
 
 class DisbursementProducer(Protocol):
@@ -65,6 +67,9 @@ class CeleryDisbursementProducer:
         try:
             self._app.send_task(
                 _TASK,
+                # SCRUM-210: cross-service, so the destination queue is explicit —
+                # without it this lands in the sender's own queue and nothing runs it.
+                queue=_TASK_QUEUE,
                 kwargs={
                     "commission_id": str(commission_id),
                     "transaction_id": str(transaction_id),

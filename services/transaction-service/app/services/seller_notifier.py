@@ -68,6 +68,9 @@ class CelerySellerNotifier:
         try:
             self._app.send_task(
                 "notifications.dispatch",
+                # SCRUM-210: cross-service, so the destination queue is explicit —
+                # without it this lands in the sender's own queue and nothing runs it.
+                queue="notification-service",
                 kwargs={
                     "user_id": str(seller_id),
                     "type": _OFFER_RECEIVED,
@@ -101,6 +104,9 @@ class CelerySellerNotifier:
         try:
             self._app.send_task(
                 "notifications.dispatch",
+                # SCRUM-210: cross-service, so the destination queue is explicit —
+                # without it this lands in the sender's own queue and nothing runs it.
+                queue="notification-service",
                 kwargs={
                     "user_id": str(seller_id),
                     "type": _DEPOSIT_CONFIRMED,

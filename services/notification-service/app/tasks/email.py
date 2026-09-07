@@ -35,6 +35,8 @@ async def _run(notification_id: UUID) -> str:
         from_email=settings.ses_from_email,
         region=settings.ses_region,
         endpoint_url=settings.ses_endpoint_url,
+        provider=settings.email_provider,
+        api_key=settings.resend_api_key,
     )
     try:
         async with sessionmaker() as session:

@@ -1,0 +1,59 @@
+"""Celery queue routing (transaction-service, SCRUM-210).
+
+Every service used to publish to — and every worker consumed from — the single
+default "celery" queue, while each Celery app knows only its OWN tasks. A worker
+that grabbed somebody else's task logged "Received unregistered task" and dropped
+it, so on staging (ten workers) a task reached its owner about one time in ten.
+That is how an approved realtor's registration-number email went missing.
+
+Nothing tested these producers at all — they were only exercised through their
+Null variants — which is precisely how it shipped.
+"""
+
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+
+from app.celery_app import celery_app
+from app.services.seller_notifier import CelerySellerNotifier
+
+_BROKER = "memory://"
+
+
+class _RecordingApp:
+    """Stands in for the ad-hoc Celery client the producers build: constructed
+    with a broker URL, but nothing connects until a send, so swapping `_app`
+    records the publish without a broker."""
+
+    def __init__(self) -> None:
+        self.sends: list[tuple[str, str | None]] = []
+
+    def send_task(self, name: str, **kwargs: object) -> None:
+        queue = kwargs.get("queue")
+        self.sends.append((name, queue if isinstance(queue, str) else None))
+
+
+def test_this_services_tasks_run_on_its_own_queue() -> None:
+    """Its beat tasks must reach ITS worker, not whichever grabbed them first."""
+    assert celery_app.conf.task_default_queue == "transaction-service"
+
+
+@pytest.mark.asyncio
+async def test_seller_notifications_go_to_the_notification_queue() -> None:
+    notifier = CelerySellerNotifier(broker_url=_BROKER)
+    recorder = _RecordingApp()
+    notifier._app = recorder
+
+    await notifier.offer_received(
+        seller_id=uuid4(), offer_id=uuid4(), listing_id=uuid4(), amount_kobo=1_000_000_00
+    )
+    await notifier.deposit_confirmed(
+        seller_id=uuid4(), transaction_id=uuid4(), amount_kobo=1_000_000_00
+    )
+
+    assert recorder.sends == [
+        ("notifications.dispatch", "notification-service"),
+        ("notifications.dispatch", "notification-service"),
+    ]

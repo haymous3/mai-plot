@@ -34,6 +34,23 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
+    # SCRUM-210: this service's OWN queue, and the fix for cross-service task
+    # theft. Every service used to publish to — and every worker consumed from —
+    # the single default "celery" queue, while each Celery app knows only its own
+    # tasks. A worker that grabbed somebody else's task logged "Received
+    # unregistered task" and DROPPED it, so with ten workers on staging a task
+    # reached its owner about one time in ten. Proven in the Railway logs:
+    # realtor-celery-worker ate notification-service's send_email_notification,
+    # and notification-celery-worker ate loan-service's poll_pending_loan_status.
+    #
+    # Setting task_default_queue fixes both halves at once: publishes land here,
+    # and a worker started WITHOUT -Q consumes exactly its task_default_queue —
+    # which is why no compose/render/Railway start command had to change.
+    #
+    # ⚠️ A cross-service send_task MUST now name the destination queue
+    # explicitly (queue="notification-service"), or it lands in the sender's own
+    # queue where nothing can run it.
+    task_default_queue="transaction-service",
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_max_tasks_per_child=200,
