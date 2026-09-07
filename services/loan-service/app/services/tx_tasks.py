@@ -63,6 +63,9 @@ class CeleryTxTaskProducer:
     ) -> None:
         self._app.send_task(
             "payments.credit_loan_disbursement",
+            # SCRUM-210: cross-service, so the destination queue is explicit —
+            # without it this lands in the sender's own queue and nothing runs it.
+            queue="transaction-service",
             kwargs={
                 "loan_id": str(loan_id),
                 "transaction_id": str(transaction_id),
@@ -74,6 +77,9 @@ class CeleryTxTaskProducer:
     def advance_loan_decision(self, *, transaction_id: UUID, decision: str) -> None:
         self._app.send_task(
             "transactions.advance_loan_decision",
+            # SCRUM-210: cross-service, so the destination queue is explicit —
+            # without it this lands in the sender's own queue and nothing runs it.
+            queue="transaction-service",
             kwargs={"transaction_id": str(transaction_id), "decision": decision},
         )
 

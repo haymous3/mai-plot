@@ -100,8 +100,23 @@ def build_email_client(
     from_email: str,
     region: str,
     endpoint_url: str,
+    provider: str = "ses",
+    api_key: str = "",
 ) -> EmailClient:
-    """Factory — in-memory fake for local/CI, real SES client in production."""
+    """Factory — in-memory fake for local/CI, else the configured provider.
+
+    SCRUM-211 added the provider branch. Until then this only ever built an SES
+    client, and SES has credentials in no environment we run — so every
+    notification email in staging went into an in-memory list and nobody
+    received one, while auth-service's Resend mail arrived fine.
+
+    The import is local to keep ses_email.py free of a cycle: resend_email
+    imports EmailError/EmailMessage from here.
+    """
     if use_fake:
         return InMemorySesClient()
+    if provider == "resend":
+        from app.adapters.resend_email import ResendEmailClient
+
+        return ResendEmailClient(api_key=api_key, from_email=from_email)
     return SesEmailClient(from_email=from_email, region=region, endpoint_url=endpoint_url)

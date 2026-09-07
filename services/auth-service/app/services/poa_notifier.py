@@ -67,6 +67,9 @@ class CeleryPoaNotifier:
         try:
             self._app.send_task(
                 "notifications.dispatch",
+                # SCRUM-210: cross-service, so the destination queue is explicit —
+                # without it this lands in the sender's own queue and nothing runs it.
+                queue="notification-service",
                 kwargs={
                     "user_id": str(user_id),
                     "type": type_,
