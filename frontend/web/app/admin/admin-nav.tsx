@@ -9,6 +9,9 @@ const TABS = [
   { key: 'poa', label: 'Power of Attorney', href: '/admin/poa/queue' },
   { key: 'documents', label: 'Documents', href: '/admin/documents/queue' },
   { key: 'realtors', label: 'Realtors', href: '/admin/realtors/queue' },
+  // Requests sits BEFORE reports: a request waiting for a realtor is work the
+  // platform owes someone, where a report is work already done (SCRUM-208).
+  { key: 'requests', label: 'Inspection requests', href: '/admin/inspections/requests' },
   { key: 'reports', label: 'Inspection reports', href: '/admin/inspections/reports' },
   { key: 'loans', label: 'Loans', href: '/admin/loans' },
   { key: 'audit', label: 'Audit log', href: '/admin/audit' },
@@ -28,6 +31,7 @@ export function AdminNav({
     | 'poa'
     | 'documents'
     | 'realtors'
+    | 'requests'
     | 'reports'
     | 'loans'
     | 'audit'

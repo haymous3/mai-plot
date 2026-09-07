@@ -365,6 +365,48 @@ export interface PoaQueueResponse {
   pagination: Pagination;
 }
 
+/** One inspection request still waiting for a realtor
+ * (GET /admin/inspections/unassigned, SCRUM-208).
+ *
+ * The parties are 8-char references, never names or contacts (CLAUDE.md §10):
+ * an admin placing work needs to know WHICH property and WHEN. */
+export interface UnassignedInspection {
+  id: string;
+  transaction_id: string;
+  proposed_date: string;
+  created_at: string;
+  listing_id: string;
+  property_title: string | null;
+  lga: string | null;
+  state: string | null;
+  buyer_ref: string;
+  seller_ref: string;
+  /** False = the listing row is gone, so proximity can never place this. */
+  property_located: boolean;
+}
+
+export interface UnassignedInspectionsResponse {
+  items: UnassignedInspection[];
+}
+
+/** An approved realtor an admin may place work with
+ * (GET /admin/inspections/assignable-realtors, SCRUM-208). */
+export interface AssignableRealtor {
+  id: string;
+  full_name: string | null;
+  coverage_states: string[];
+  coverage_lgas: string[];
+  completed_deals: number;
+  /** False = unreachable by proximity assignment. Currently true of every
+   * realtor who onboarded through the product, because onboarding collects no
+   * location — which is why manual placement exists at all. */
+  has_base_location: boolean;
+}
+
+export interface AssignableRealtorsResponse {
+  items: AssignableRealtor[];
+}
+
 /** A row in the admin realtor onboarding queue (GET /admin/realtors/queue).
  * This endpoint returns the pending list only — no pagination envelope. */
 export interface RealtorQueueItem {
