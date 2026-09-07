@@ -2,12 +2,23 @@
 
 A party to a transaction requests an inspection; the nearest approved realtor
 within the radius is assigned with a 2-hour acceptance window, and notified. The
-assigned realtor accepts within the window. If nobody is in range, an admin
-alert is logged (the fallback) and the request fails.
+assigned realtor accepts within the window.
+
+⚠️ **Nobody in range no longer fails the request (SCRUM-208).** It used to raise
+NoRealtorAvailable → 503, whose message claimed "an admin has been alerted" while
+the code only wrote a log line: the buyer had asked for an inspection and nothing
+survived to act on. Now the inspection is created at `status='unassigned'` and
+returned 201, so the ask becomes a row in the admin queue and a candidate for the
+placement sweep. Losing a request is worse than admitting we have not placed it.
+
+This matters more than it sounds: `find_nearest_approved` requires
+`base_location IS NOT NULL`, and onboarding collects no location, so EVERY
+realtor who signed up through the product is currently unreachable by proximity.
+The unassigned path is not a rare fallback — for now it is the normal outcome.
 
 Reassignment of a lapsed (unaccepted) window is a follow-up Celery sweep — the
 algorithm here (`find_nearest_approved` with an exclude list) is built to support
-it.
+it, and the same sweep places unassigned rows.
 """
 
 from __future__ import annotations
@@ -47,7 +58,13 @@ class InspectionAlreadyActive(InspectionError):
 
 
 class NoRealtorAvailable(InspectionError):
-    """No approved realtor with a base location is within the radius."""
+    """No approved realtor with a base location is within the radius.
+
+    ⚠️ NO LONGER RAISED by `request()` (SCRUM-208) — that path records an
+    unassigned inspection instead of failing. Kept because the admin placement
+    service raises it for an explicit auto-assign request, where "nobody is in
+    range" is the answer the admin asked for rather than a dropped buyer request.
+    """
 
 
 class InspectionNotFound(InspectionError):
@@ -103,13 +120,21 @@ class InspectionService:
             listing_id=txn.listing_id, radius_m=self._radius
         )
         if realtor_id is None:
-            # Fallback (AC): no realtor in range — surface a high-visibility alert
-            # for ops/admin (there is no single admin user to push to).
-            logger.warning(
-                "inspection.no_realtor_available",
-                extra={"transaction_id": str(transaction_id), "listing_id": str(txn.listing_id)},
+            # SCRUM-208: keep the request. It becomes a row in the admin queue
+            # (GET /admin/inspections/unassigned) and the sweep retries it, so
+            # the buyer's ask outlives the fact that nobody was in range.
+            unassigned = await self._inspections.create_unassigned(
+                transaction_id=transaction_id, proposed_date=proposed_date
             )
-            raise NoRealtorAvailable()
+            logger.warning(
+                "inspection.unassigned_awaiting_admin",
+                extra={
+                    "inspection_id": str(unassigned.id),
+                    "transaction_id": str(transaction_id),
+                    "listing_id": str(txn.listing_id),
+                },
+            )
+            return unassigned
 
         inspection = await self._inspections.create(
             transaction_id=transaction_id,
@@ -153,7 +178,14 @@ class InspectionService:
             raise NotAssignedRealtor()
         if inspection.status != "pending":
             raise InspectionNotPending()
-        if inspection.assignment_expires_at <= datetime.now(UTC):
+        # 'pending' always carries a window (an unassigned row has neither a
+        # realtor nor a deadline — DB CHECK, migration 0008), so None here means
+        # the row is malformed. Refuse rather than treat "no deadline" as "never
+        # expires": that would hand out an assignment nobody can time out.
+        if (
+            inspection.assignment_expires_at is None
+            or inspection.assignment_expires_at <= datetime.now(UTC)
+        ):
             raise AssignmentExpired()
 
         await self._inspections.mark_accepted(inspection_id)
@@ -175,7 +207,13 @@ class InspectionService:
             raise NotAssignedRealtor()
         if inspection.status != "pending":
             raise InspectionNotPending()
-        if inspection.assignment_expires_at <= datetime.now(UTC):
+        # Same reasoning as accept(): a 'pending' row without a window is
+        # malformed, and treating None as "open forever" is the wrong direction
+        # to fail in.
+        if (
+            inspection.assignment_expires_at is None
+            or inspection.assignment_expires_at <= datetime.now(UTC)
+        ):
             raise AssignmentExpired()
         if new_date <= datetime.now(UTC):
             raise InvalidProposedTime()

@@ -146,7 +146,7 @@ async def test_request_assigns_nearest_realtor(
     assert accept.json()["status"] == "accepted"
 
 
-async def test_request_no_realtor_in_range_is_503(
+async def test_request_with_no_realtor_in_range_is_kept_unassigned(
     clean_tables: None,
     http_client: AsyncClient,
     db_engine: Engine,
@@ -166,8 +166,14 @@ async def test_request_no_realtor_in_range_is_503(
         json={"transaction_id": str(tx_id), "proposed_date": _proposed()},
         headers=auth_header(mint_token(buyer, "buyer")),
     )
-    assert resp.status_code == 503
-    assert resp.json()["error_code"] == "NO_REALTOR_AVAILABLE"
+
+    # SCRUM-208: this used to be 503 NO_REALTOR_AVAILABLE, which threw the
+    # buyer's request away and only wrote a log line. The request is now KEPT.
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["status"] == "unassigned"
+    assert body["realtor_id"] is None
+    assert body["assignment_expires_at"] is None  # no offer, so no deadline
 
 
 async def test_request_by_non_party_is_403(

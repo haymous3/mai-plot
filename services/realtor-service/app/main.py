@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.admin import router as admin_router
+from app.routes.admin_inspections import router as admin_inspections_router
 from app.routes.admin_reports import router as admin_reports_router
 from app.routes.inspections import router as inspections_router
 from app.routes.realtors import router as realtors_router
@@ -24,6 +25,9 @@ setup_telemetry(SERVICE_NAME, app)
 app.include_router(realtors_router)
 app.include_router(admin_router)
 app.include_router(admin_reports_router)
+# Same /admin/inspections prefix as the report routes above, so Kong's
+# existing admin-inspections route covers it (SCRUM-208).
+app.include_router(admin_inspections_router)
 app.include_router(inspections_router)
 
 

@@ -21,7 +21,6 @@ from app.services.inspection_service import (
     InspectionNotFound,
     InspectionNotPending,
     InspectionService,
-    NoRealtorAvailable,
     NotAssignedRealtor,
     NotTransactionParty,
     TransactionNotFound,
@@ -44,7 +43,7 @@ def _txn() -> TransactionInfo:
 
 
 def _inspection(
-    *, realtor_id: UUID, status: str = "pending", expires_in_h: float = 2
+    *, realtor_id: UUID | None, status: str = "pending", expires_in_h: float = 2
 ) -> InspectionRow:
     now = datetime.now(UTC)
     return InspectionRow(
@@ -100,6 +99,7 @@ class _StubInspectionRepo:
         self._assigned = assigned
         self._realtor_rows = realtor_rows or []
         self.created_realtor: UUID | None = None
+        self.created_unassigned: list[UUID] = []
         self.accepted: list[UUID] = []
         self.rescheduled: list[tuple[UUID, datetime]] = []
         self.listed_realtor: UUID | None = None
@@ -117,6 +117,13 @@ class _StubInspectionRepo:
     ) -> InspectionRow:
         self.created_realtor = realtor_id
         return _inspection(realtor_id=realtor_id)
+
+    async def create_unassigned(
+        self, *, transaction_id: UUID, proposed_date: datetime
+    ) -> InspectionRow:
+        """SCRUM-208: a request nobody was in range for is kept, not dropped."""
+        self.created_unassigned.append(transaction_id)
+        return _inspection(realtor_id=None, status="unassigned")
 
     async def get(self, inspection_id: UUID) -> InspectionRow | None:
         return self._get_row
@@ -198,10 +205,23 @@ async def test_request_already_active() -> None:
         await svc.request(caller=_BUYER, transaction_id=uuid4(), proposed_date=datetime.now(UTC))
 
 
-async def test_request_no_realtor_available() -> None:
-    svc, _, _ = _service(txn=_txn(), nearest=None)
-    with pytest.raises(NoRealtorAvailable):
-        await svc.request(caller=_BUYER, transaction_id=uuid4(), proposed_date=datetime.now(UTC))
+async def test_request_with_no_realtor_is_kept_unassigned() -> None:
+    """SCRUM-208 replaced the NoRealtorAvailable raise. The buyer's request now
+    survives as an unassigned row for an admin (and the sweep) to place —
+    dropping it was worse than admitting nobody has been assigned yet."""
+    svc, insp, notifier = _service(txn=_txn(), nearest=None)
+    transaction_id = uuid4()
+
+    result = await svc.request(
+        caller=_BUYER, transaction_id=transaction_id, proposed_date=datetime.now(UTC)
+    )
+
+    assert result.status == "unassigned"
+    assert result.realtor_id is None
+    assert insp.created_unassigned == [transaction_id]
+    assert insp.created_realtor is None
+    # Nobody to notify: no realtor was offered anything.
+    assert notifier.assigned_to == []
 
 
 async def test_request_assigns_and_notifies() -> None:

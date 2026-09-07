@@ -134,12 +134,18 @@ class ReportReviewService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        await self._notify(
-            user_id=inspection.realtor_id,
-            inspection_id=inspection_id,
-            status=decision,
-            note=clean_note,
-        )
+        # A submitted report can only come from the realtor it was assigned to,
+        # so realtor_id is set here; the type is Optional only because an
+        # UNASSIGNED row exists at the other end of the lifecycle (SCRUM-208).
+        # Guarded rather than asserted: the decision is already committed, and a
+        # missing notification must not turn that into a 500.
+        if inspection.realtor_id is not None:
+            await self._notify(
+                user_id=inspection.realtor_id,
+                inspection_id=inspection_id,
+                status=decision,
+                note=clean_note,
+            )
         return ReportReviewResult(inspection_id=inspection_id, report_review_status=decision)
 
     async def _notify(

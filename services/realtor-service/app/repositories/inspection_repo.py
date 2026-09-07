@@ -1,8 +1,14 @@
 """Access to the inspections table (owned by realtor-service, SCRUM-72).
 
-An inspection is created already assigned to the nearest approved realtor, with a
-2-hour acceptance window (assignment_expires_at). The realtor accepts within the
-window; a lapsed window is reassigned by a follow-up sweep.
+An inspection is normally created already assigned to the nearest approved
+realtor, with a 2-hour acceptance window (assignment_expires_at). The realtor
+accepts within the window; a lapsed window is reassigned by a follow-up sweep.
+
+An inspection can also exist with NO realtor: `status='unassigned'`,
+`realtor_id IS NULL`, `assignment_expires_at IS NULL` (SCRUM-208). That is a
+request nobody could be found for — previously a 503 and a log line, i.e. a lost
+request. It becomes assigned by an admin placing it, or by the sweep when a
+realtor becomes eligible. See migration 0008.
 """
 
 from __future__ import annotations
@@ -19,7 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # An inspection in one of these statuses is "live" — a transaction can't have a
 # second one requested while one is outstanding.
-_ACTIVE_STATUSES = ("pending", "accepted", "rescheduled")
+#
+# 'unassigned' counts (SCRUM-208): a request waiting for a realtor is every bit
+# as outstanding as an offered one, and letting a buyer stack five of them while
+# they wait would fill the admin queue with duplicates of the same ask.
+_ACTIVE_STATUSES = ("unassigned", "pending", "accepted", "rescheduled")
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -31,11 +41,16 @@ def _blank_to_none(value: str | None) -> str | None:
 class InspectionRow:
     id: UUID
     transaction_id: UUID
-    realtor_id: UUID
+    # None only while status == 'unassigned' (SCRUM-208) — the DB enforces that
+    # pairing with a CHECK, so a caller reading a non-unassigned row can rely on
+    # this being set.
+    realtor_id: UUID | None
     proposed_date: datetime
     confirmed_date: datetime | None
     status: str
-    assignment_expires_at: datetime
+    # None while unassigned: the 2-hour window belongs to an OFFER, and there is
+    # no offer outstanding until a realtor is named.
+    assignment_expires_at: datetime | None
     created_at: datetime
     gps_lat: Decimal | None
     gps_lng: Decimal | None
@@ -132,12 +147,41 @@ class ReportReviewRow:
 
 
 @dataclass(frozen=True)
+class UnassignedInspectionRow:
+    """A requested inspection with no realtor yet — one row of the admin queue
+    (SCRUM-208).
+
+    `property_located` says whether a listing row with a point was found.
+    `property_listings.location` is NOT NULL, so false means the LEFT JOIN missed
+    — the listing is gone or soft-deleted. Proximity can never place such a
+    request however many realtors exist, so the queue surfaces it instead of
+    leaving an admin to wonder why the sweep keeps skipping the row.
+    """
+
+    id: UUID
+    transaction_id: UUID
+    proposed_date: datetime
+    created_at: datetime
+    listing_id: UUID
+    buyer_id: UUID
+    seller_id: UUID
+    property_title: str | None
+    lga: str | None
+    state: str | None
+    property_located: bool
+
+
+@dataclass(frozen=True)
 class LapsedInspection:
     """A pending inspection whose acceptance window has lapsed, with the data the
-    reassignment sweep needs (SCRUM-123)."""
+    reassignment sweep needs (SCRUM-123).
+
+    Also carries an UNASSIGNED request (SCRUM-208), where `realtor_id` is None
+    because nobody holds it — the sweep places those with the same code path.
+    """
 
     inspection_id: UUID
-    realtor_id: UUID
+    realtor_id: UUID | None
     listing_id: UUID
     declined_realtor_ids: list[UUID]
 
@@ -315,6 +359,138 @@ class InspectionRepository:
             )
         ).one()
         return self._to_row(row)
+
+    async def create_unassigned(
+        self, *, transaction_id: UUID, proposed_date: datetime
+    ) -> InspectionRow:
+        """Record a requested inspection that nobody could be assigned to yet
+        (SCRUM-208).
+
+        realtor_id and assignment_expires_at are both NULL — there is no realtor
+        and therefore no acceptance window. This exists so a request that finds
+        nobody in range survives as something an admin (or the sweep) can act on,
+        instead of being a 503 and a log line.
+        """
+        row = (
+            await self._session.execute(
+                text(
+                    f"""
+                    INSERT INTO inspections (transaction_id, proposed_date, status)
+                    VALUES (:tx, :proposed, 'unassigned')
+                    RETURNING {_COLUMNS}
+                    """
+                ),
+                {"tx": transaction_id, "proposed": proposed_date},
+            )
+        ).one()
+        return self._to_row(row)
+
+    async def list_unassigned(self, *, limit: int = 100) -> list[UnassignedInspectionRow]:
+        """The admin queue: every request still waiting for a realtor, oldest
+        first, with the property and the parties who asked.
+
+        Every join is LEFT except the transaction itself: a request whose listing
+        row is incomplete must still appear. Dropping it would hide the exact
+        case this queue exists to surface.
+        """
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT i.id, i.transaction_id, i.proposed_date, i.created_at,
+                           t.listing_id, t.buyer_id, t.seller_id,
+                           l.title AS property_title, l.lga, l.state,
+                           l.location IS NOT NULL AS property_located
+                    FROM inspections i
+                    JOIN transactions t ON t.id = i.transaction_id
+                    LEFT JOIN property_listings l ON l.id = t.listing_id
+                    WHERE i.status = 'unassigned'
+                    ORDER BY i.created_at ASC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [
+            UnassignedInspectionRow(
+                id=r.id,
+                transaction_id=r.transaction_id,
+                proposed_date=r.proposed_date,
+                created_at=r.created_at,
+                listing_id=r.listing_id,
+                buyer_id=r.buyer_id,
+                seller_id=r.seller_id,
+                property_title=_blank_to_none(r.property_title),
+                lga=_blank_to_none(r.lga),
+                state=_blank_to_none(r.state),
+                property_located=bool(r.property_located),
+            )
+            for r in rows
+        ]
+
+    async def place(
+        self, inspection_id: UUID, *, realtor_id: UUID, window_hours: int
+    ) -> InspectionRow | None:
+        """Give an UNASSIGNED inspection to a realtor and open the acceptance
+        window (SCRUM-208).
+
+        Guarded on `status = 'unassigned'`, so two admins clicking Assign cannot
+        both win — the loser gets None and the caller answers 409 without writing
+        an audit row or a notification. Deliberately NOT a way to move an already
+        offered or accepted assignment: that is a different decision, with a
+        different audit story, and it is not what this closes.
+        """
+        row = (
+            await self._session.execute(
+                text(
+                    f"""
+                    UPDATE inspections SET
+                        realtor_id = :realtor,
+                        status = 'pending',
+                        assignment_expires_at = NOW() + make_interval(hours => :hours),
+                        updated_at = NOW()
+                    WHERE id = :id AND status = 'unassigned'
+                    RETURNING {_COLUMNS}
+                    """
+                ),
+                {"id": inspection_id, "realtor": realtor_id, "hours": window_hours},
+            )
+        ).first()
+        return self._to_row(row) if row is not None else None
+
+    async def list_unassigned_for_sweep(self, *, limit: int = 500) -> list[LapsedInspection]:
+        """Unassigned requests, shaped for the reassignment sweep (SCRUM-208).
+
+        Reuses LapsedInspection so the sweep has one code path: `realtor_id` is
+        None here because nobody holds it, and `declined_realtor_ids` still
+        applies — a realtor who let this same request lapse should not be handed
+        it again by the auto-placer.
+        """
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids
+                    FROM inspections i
+                    JOIN transactions t ON t.id = i.transaction_id
+                    WHERE i.status = 'unassigned'
+                    ORDER BY i.created_at ASC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [
+            LapsedInspection(
+                inspection_id=r.id,
+                realtor_id=r.realtor_id,
+                listing_id=r.listing_id,
+                declined_realtor_ids=list(r.declined_realtor_ids or []),
+            )
+            for r in rows
+        ]
 
     async def mark_accepted(self, inspection_id: UUID) -> bool:
         """Accept the assignment: status -> accepted, confirmed_date = proposed.

@@ -35,7 +35,6 @@ from app.services.inspection_service import (
     InspectionNotPending,
     InspectionService,
     InvalidProposedTime,
-    NoRealtorAvailable,
     NotAssignedRealtor,
     NotTransactionParty,
     TransactionNotFound,
@@ -68,7 +67,13 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 async def request_inspection(
     payload: InspectionRequest, caller: CurrentUserDep, service: InspectionServiceDep
 ) -> InspectionResponse | JSONResponse:
-    """Request an inspection for a transaction → auto-assigns the nearest realtor."""
+    """Request an inspection for a transaction → auto-assigns the nearest realtor.
+
+    Returns 201 either way (SCRUM-208): `status='pending'` with a realtor when one
+    is in range, `status='unassigned'` with `realtor_id: null` when none is. The
+    second is not a failure — it is a request an admin can place and the sweep
+    retries. Clients must read `status`, not assume a realtor is attached.
+    """
     try:
         inspection = await service.request(
             caller=caller,
@@ -89,12 +94,10 @@ async def request_inspection(
             "INSPECTION_ALREADY_ACTIVE",
             "This transaction already has an active inspection.",
         )
-    except NoRealtorAvailable:
-        return _error(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "NO_REALTOR_AVAILABLE",
-            "No realtor is available in range. An admin has been alerted.",
-        )
+    # No NO_REALTOR_AVAILABLE branch any more (SCRUM-208). "Nobody in range"
+    # returns 201 with status='unassigned' instead of 503: the request becomes a
+    # row in the admin queue and a candidate for the placement sweep, rather than
+    # a 503 whose message promised an admin alert that was only ever a log line.
     return InspectionResponse.from_row(inspection)
 
 

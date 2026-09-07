@@ -26,13 +26,22 @@ class ProposeTimeRequest(BaseModel):
 
 
 class InspectionResponse(BaseModel):
+    """An inspection as returned by the request/accept endpoints.
+
+    ⚠️ `realtor_id` and `assignment_expires_at` are NULL when
+    `status == 'unassigned'` (SCRUM-208) — a request nobody was in range for. A
+    client must branch on `status` rather than assuming a realtor is attached;
+    the previous contract could not express this because the request 503'd
+    instead, and the row never existed.
+    """
+
     id: UUID
     transaction_id: UUID
-    realtor_id: UUID
+    realtor_id: UUID | None
     proposed_date: datetime
     confirmed_date: datetime | None
     status: str
-    assignment_expires_at: datetime
+    assignment_expires_at: datetime | None
 
     @classmethod
     def from_row(cls, row: InspectionRow) -> InspectionResponse:
