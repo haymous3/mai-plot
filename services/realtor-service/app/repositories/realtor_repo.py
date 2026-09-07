@@ -40,6 +40,21 @@ class PendingRealtorRow:
 
 
 @dataclass(frozen=True)
+class ApprovedRealtorRow:
+    """One approved realtor for the admin assignment picker (SCRUM-208)."""
+
+    id: UUID
+    full_name: str | None
+    coverage_states: list[str]
+    coverage_lgas: list[str]
+    completed_deals: int
+    # False = proximity assignment can never reach this realtor. Currently true
+    # of everyone who onboarded through the UI (no location is collected), which
+    # is why manual placement matters.
+    has_base_location: bool
+
+
+@dataclass(frozen=True)
 class RealtorRow:
     id: UUID
     esvarbon_number: str | None
@@ -191,6 +206,47 @@ class RealtorRepository:
                 coverage_states=list(r.coverage_states),
                 coverage_lgas=list(r.coverage_lgas),
                 created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def list_approved(self, *, limit: int = 200) -> list[ApprovedRealtorRow]:
+        """Every approved realtor, for the admin assignment picker (SCRUM-208).
+
+        `/admin/realtors/queue` is pending-only, so before this the admin UI had
+        nothing to choose from. Includes `has_base_location` because a realtor
+        without one can never be reached by proximity assignment — per SCRUM-208
+        that is currently EVERY realtor who signed up through the product, since
+        onboarding collects no location — and an admin placing work by hand is
+        the only way those realtors ever receive any.
+
+        LEFT JOIN on user_pii: a missing name must not hide an approved realtor
+        from the picker.
+        """
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT r.id, p.full_name, r.coverage_states, r.coverage_lgas,
+                           r.completed_deals, r.base_location IS NOT NULL AS has_base_location
+                    FROM realtors r
+                    LEFT JOIN user_pii p ON p.user_id = r.id
+                    WHERE r.approval_status = 'approved'
+                    ORDER BY p.full_name NULLS LAST, r.id
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+        ).all()
+        return [
+            ApprovedRealtorRow(
+                id=r.id,
+                full_name=r.full_name if (r.full_name or "").strip() else None,
+                coverage_states=list(r.coverage_states),
+                coverage_lgas=list(r.coverage_lgas),
+                completed_deals=r.completed_deals,
+                has_base_location=bool(r.has_base_location),
             )
             for r in rows
         ]

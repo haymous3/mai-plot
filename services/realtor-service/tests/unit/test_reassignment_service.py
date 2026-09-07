@@ -13,14 +13,35 @@ pytestmark = pytest.mark.asyncio
 
 
 class _StubInspections:
-    def __init__(self, lapsed: list[LapsedInspection], *, reassign_ok: bool = True) -> None:
+    def __init__(
+        self,
+        lapsed: list[LapsedInspection],
+        *,
+        reassign_ok: bool = True,
+        unassigned: list[LapsedInspection] | None = None,
+        place_ok: bool = True,
+    ) -> None:
         self._lapsed = lapsed
         self._reassign_ok = reassign_ok
+        # Unassigned requests the sweep may place (SCRUM-208). Empty by default,
+        # so the reassignment cases below exercise only the lapsed path.
+        self._unassigned = unassigned or []
+        self._place_ok = place_ok
         self.reassigned: list[dict[str, object]] = []
         self.deferred: list[UUID] = []
+        self.placed: list[dict[str, object]] = []
 
     async def list_lapsed_pending(self, *, limit: int = 500) -> list[LapsedInspection]:
         return self._lapsed
+
+    async def list_unassigned_for_sweep(self, *, limit: int = 500) -> list[LapsedInspection]:
+        return self._unassigned
+
+    async def place(
+        self, inspection_id: UUID, *, realtor_id: UUID, window_hours: int
+    ) -> object | None:
+        self.placed.append({"id": inspection_id, "realtor": realtor_id})
+        return object() if self._place_ok else None
 
     async def reassign(
         self, inspection_id: UUID, *, old_realtor_id: UUID, new_realtor_id: UUID, window_hours: int
@@ -51,6 +72,16 @@ class _StubNotifier:
 
     async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
         self.notified.append(realtor_id)
+
+
+def _unassigned_row(*, declined: list[UUID] | None = None) -> LapsedInspection:
+    """An unassigned request as the sweep sees it: no realtor holds it."""
+    return LapsedInspection(
+        inspection_id=uuid4(),
+        realtor_id=None,
+        listing_id=uuid4(),
+        declined_realtor_ids=declined or [],
+    )
 
 
 def _lapsed(*, realtor_id: UUID, declined: list[UUID] | None = None) -> LapsedInspection:
@@ -134,3 +165,62 @@ async def test_no_notify_when_reassign_guard_loses_race() -> None:
 async def test_empty_sweep_is_noop() -> None:
     result = await _service(_StubInspections([]), _StubRealtors(None), _StubNotifier()).run()
     assert result == result.__class__(scanned=0, reassigned=0, deferred=0)
+
+
+# --- placing unassigned requests (SCRUM-208) ---------------------------------
+
+
+async def test_places_an_unassigned_request_and_notifies() -> None:
+    """The dropped-request fallback is self-healing: a realtor who becomes
+    eligible picks up the backlog on the next tick, with no admin involved."""
+    realtor = uuid4()
+    row = _unassigned_row()
+    inspections = _StubInspections([], unassigned=[row])
+    realtors = _StubRealtors(realtor)
+    notifier = _StubNotifier()
+
+    result = await _service(inspections, realtors, notifier).run()
+
+    assert result.placed == 1
+    assert inspections.placed == [{"id": row.inspection_id, "realtor": realtor}]
+    assert notifier.notified == [realtor]
+    # Nothing was taken from anybody, so this is not a reassignment.
+    assert result.reassigned == 0
+    assert inspections.reassigned == []
+
+
+async def test_unassigned_request_excludes_realtors_who_already_lapsed_it() -> None:
+    declined = uuid4()
+    inspections = _StubInspections([], unassigned=[_unassigned_row(declined=[declined])])
+    realtors = _StubRealtors(uuid4())
+
+    await _service(inspections, realtors, _StubNotifier()).run()
+
+    assert realtors.exclude_seen == [[declined]]
+
+
+async def test_unassigned_request_stays_when_nobody_is_available() -> None:
+    """No defer branch: an unassigned row has no window to push out, so it simply
+    waits for the next tick or for an admin. It must NOT be counted as deferred
+    or touched at all."""
+    inspections = _StubInspections([], unassigned=[_unassigned_row()])
+    notifier = _StubNotifier()
+
+    result = await _service(inspections, _StubRealtors(None), notifier).run()
+
+    assert result.placed == 0
+    assert inspections.placed == []
+    assert inspections.deferred == []
+    assert notifier.notified == []
+
+
+async def test_no_notify_when_the_placement_guard_loses_the_race() -> None:
+    """An admin placed it first: the guarded UPDATE returns nothing, so the
+    realtor we picked must not be told they have an assignment they do not."""
+    inspections = _StubInspections([], unassigned=[_unassigned_row()], place_ok=False)
+    notifier = _StubNotifier()
+
+    result = await _service(inspections, _StubRealtors(uuid4()), notifier).run()
+
+    assert result.placed == 0
+    assert notifier.notified == []

@@ -20,6 +20,7 @@ from app.repositories.inspection_repo import InspectionRepository
 from app.repositories.realtor_repo import RealtorRepository
 from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_inspection_service import AdminInspectionService
 from app.services.commission_service import CommissionService
 from app.services.credential_service import CredentialAccessService
 from app.services.inspection_notifier import InspectionNotifier, build_inspection_notifier
@@ -187,6 +188,28 @@ def get_inspection_service(
         transactions=transactions,
         realtors=realtors,
         inspections=inspections,
+        notifier=notifier,
+        radius_meters=settings.inspection_radius_meters,
+        assignment_window_hours=settings.inspection_window_hours,
+    )
+
+
+def get_admin_inspection_service(
+    settings: SettingsDep,
+    inspections: Annotated[InspectionRepository, Depends(_inspection_repo)],
+    realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
+    transactions: Annotated[TransactionRepository, Depends(_transaction_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    notifier: Annotated[InspectionNotifier, Depends(get_inspection_notifier)],
+) -> AdminInspectionService:
+    """Admin placement of inspections (SCRUM-208). Shares the radius + window
+    settings with the auto-assign path so a manually placed assignment behaves
+    exactly like an automatic one once it exists."""
+    return AdminInspectionService(
+        inspections=inspections,
+        realtors=realtors,
+        transactions=transactions,
+        audit=audit,
         notifier=notifier,
         radius_meters=settings.inspection_radius_meters,
         assignment_window_hours=settings.inspection_window_hours,

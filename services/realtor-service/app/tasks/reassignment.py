@@ -49,10 +49,13 @@ async def _run() -> dict[str, int]:
         "scanned": result.scanned,
         "reassigned": result.reassigned,
         "deferred": result.deferred,
+        # Unassigned requests finally given a realtor (SCRUM-208).
+        "placed": result.placed,
     }
 
 
 @celery_app.task(name="app.tasks.reassignment.run_inspection_reassignment")  # type: ignore[untyped-decorator]
 def run_inspection_reassignment() -> dict[str, int]:
-    """Beat entry point — reassign lapsed pending inspections to the next realtor."""
+    """Beat entry point — reassign lapsed pending inspections to the next realtor,
+    and place unassigned requests that nobody was available for (SCRUM-208)."""
     return asyncio.run(_run())
