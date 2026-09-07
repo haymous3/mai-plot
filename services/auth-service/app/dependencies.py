@@ -35,6 +35,7 @@ from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.account import AccountService
+from app.services.admin_users import AdminUserService
 from app.services.avatar_upload import AvatarService
 from app.services.buyer_profile import BuyerProfileService
 from app.services.bvn_verification import BvnVerificationService
@@ -585,10 +586,16 @@ async def require_legal_team(
     return caller
 
 
-async def require_admin(
+async def require_admin_service_call(
     caller: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> CurrentUser:
     """Admin gate for the /internal endpoints (SCRUM-207).
+
+    ⚠️ NOT the gate for human admin endpoints — use `require_admin` below, which
+    also applies the IP allowlist §4 requires. This one was renamed from
+    `require_admin` by SCRUM-209 precisely so the unqualified name is the STRICT
+    one: a future endpoint that reaches for the obvious name gets the safe gate,
+    and anything wanting this weaker one has to say "service_call" out loud.
 
     Role only — deliberately NO IP allowlist, unlike require_legal_team above.
     These endpoints are called by a SIBLING SERVICE forwarding the admin's own
@@ -610,6 +617,52 @@ async def require_admin(
     if caller.role != "admin":
         raise AuthorizationError("ADMIN_FORBIDDEN", "Admin access required.")
     return caller
+
+
+async def require_admin(
+    request: Request,
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+    settings: SettingsDep,
+) -> CurrentUser:
+    """Admin gate for HUMAN admin endpoints (SCRUM-209): an admin JWT AND (if
+    configured) a whitelisted IP, exactly as CLAUDE.md §4 requires.
+
+    Mirrors require_legal_team, which guards the PoA queue. The two roles are not
+    interchangeable: legal_team reviews powers of attorney, admin runs the
+    console. A legal_team token gets 403 here, the same way it already does on
+    the realtor and document queues in their own services.
+
+    Distinct from require_admin_service_call above, which checks the role only
+    because its caller is a sibling service rather than a browser.
+    """
+    if caller.role != "admin":
+        raise AuthorizationError("ADMIN_FORBIDDEN", "Admin access required.")
+    allowlist = [ip.strip() for ip in settings.admin_ip_allowlist.split(",") if ip.strip()]
+    if allowlist:
+        client_ip = request.client.host if request.client else None
+        if client_ip not in allowlist:
+            raise AuthorizationError(
+                "ADMIN_IP_FORBIDDEN", "Your IP is not permitted for admin access."
+            )
+    return caller
+
+
+def get_admin_user_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    deals: DealCheckerDep,
+    storage: DocumentStorageDep,
+) -> AdminUserService:
+    """The admin user console (SCRUM-209). Shares the deal checker with the
+    self-service account deletion, so both paths fail closed the same way."""
+    return AdminUserService(
+        users=users,
+        refresh_tokens=refresh_tokens,
+        audit=audit,
+        deals=deals,
+        storage=storage,
+    )
 
 
 def get_realtor_registration_service(

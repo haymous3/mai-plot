@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 from typing import Protocol
+from uuid import UUID
 
 import httpx
 
@@ -58,6 +59,11 @@ class DealChecker(Protocol):
     async def has_active_deals(self, *, bearer_token: str) -> bool:  # pragma: no cover
         ...
 
+    async def has_active_deals_for(
+        self, *, user_id: UUID, bearer_token: str
+    ) -> bool:  # pragma: no cover
+        ...
+
 
 class HttpDealChecker:
     """Real client. Short timeout: this sits in front of a user-facing delete,
@@ -67,8 +73,25 @@ class HttpDealChecker:
         self._base_url = _normalise_base_url(base_url)
         self._timeout = timeout_seconds
 
+    async def has_active_deals_for(self, *, user_id: UUID, bearer_token: str) -> bool:
+        """Whether ANOTHER user has a live deal — the admin console's delete guard
+        (SCRUM-209).
+
+        A separate endpoint from the one below because that one is CALLER-scoped:
+        it reads the subject from the JWT, so calling it with an admin's token
+        would answer "does the admin have deals" and let the delete through while
+        the target's escrow was still moving. Same fail-closed contract.
+        """
+        return await self._get_has_active(
+            f"{self._base_url}/internal/users/{user_id}/active-deals", bearer_token
+        )
+
     async def has_active_deals(self, *, bearer_token: str) -> bool:
-        url = f"{self._base_url}/transactions/active-deals"
+        return await self._get_has_active(
+            f"{self._base_url}/transactions/active-deals", bearer_token
+        )
+
+    async def _get_has_active(self, url: str, bearer_token: str) -> bool:
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.get(
@@ -94,12 +117,19 @@ class HttpDealChecker:
 
 class InMemoryDealChecker:
     """Test double. `has_active` is the answer; `fail_next` simulates the
-    service being unreachable so the fail-closed path can be exercised."""
+    service being unreachable so the fail-closed path can be exercised.
+
+    `active_for` overrides the answer per user id, so an admin-delete test can
+    say "the TARGET has deals" without also claiming the admin does — the
+    distinction the subject-scoped endpoint exists for (SCRUM-209).
+    """
 
     def __init__(self, *, has_active: bool = False, fail_next: bool = False) -> None:
         self.has_active = has_active
         self.fail_next = fail_next
         self.calls: list[str] = []
+        self.subject_calls: list[UUID] = []
+        self.active_for: dict[UUID, bool] = {}
 
     async def has_active_deals(self, *, bearer_token: str) -> bool:
         self.calls.append(bearer_token)
@@ -107,6 +137,13 @@ class InMemoryDealChecker:
             self.fail_next = False
             raise DealCheckUnavailable()
         return self.has_active
+
+    async def has_active_deals_for(self, *, user_id: UUID, bearer_token: str) -> bool:
+        self.subject_calls.append(user_id)
+        if self.fail_next:
+            self.fail_next = False
+            raise DealCheckUnavailable()
+        return self.active_for.get(user_id, self.has_active)
 
 
 def build_deal_checker(*, use_fake: bool, base_url: str) -> DealChecker:

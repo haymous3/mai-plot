@@ -9,8 +9,8 @@ does not read another service's tables).
 lists every public path individually and /internal is deliberately absent, so
 there is no route from the internet to anything here; auth-service itself is a
 private service. Adding /internal to kong.yml would expose an admin-authorised
-write with no IP allowlist in front of it — see require_admin in
-dependencies.py for the full reasoning.
+write with no IP allowlist in front of it — see
+require_admin_service_call in dependencies.py for the full reasoning.
 
 AUTHENTICATION: the admin's OWN bearer token, forwarded by realtor-service.
 The same pattern adapters/deals.py uses in the other direction, and it means no
@@ -27,7 +27,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_realtor_registration_service, require_admin
+from app.dependencies import get_realtor_registration_service, require_admin_service_call
 from app.schemas.internal import RegistrationNumberResponse
 from app.security import CurrentUser
 from app.services.realtor_registration import (
@@ -38,7 +38,7 @@ from app.services.realtor_registration import (
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
-AdminDep = Annotated[CurrentUser, Depends(require_admin)]
+AdminDep = Annotated[CurrentUser, Depends(require_admin_service_call)]
 RegistrationServiceDep = Annotated[
     RealtorRegistrationService, Depends(get_realtor_registration_service)
 ]

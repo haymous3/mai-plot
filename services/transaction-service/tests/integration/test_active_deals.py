@@ -264,3 +264,94 @@ async def test_path_is_not_captured_as_a_transaction_id(
     )
 
     assert resp.status_code == 200
+
+
+# --- the subject-scoped internal endpoint (SCRUM-209) -------------------------
+
+
+@pytest.mark.asyncio
+async def test_internal_endpoint_answers_about_the_named_user(
+    clean_tables: None,
+    db_engine: Engine,
+    http_client: AsyncClient,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """The whole point of the endpoint: with an ADMIN's token it must report on
+    the TARGET, not on the caller. `/transactions/active-deals` reads its subject
+    from the JWT, so reusing it for an admin delete answered "does the admin have
+    deals" — a guard checking the wrong subject reads as protection and gives
+    none (SCRUM-209).
+    """
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    admin = seed_user(role="admin")
+    listing = seed_listing(seller_id=seller)
+    _seed_transaction(db_engine, buyer=buyer, seller=seller, listing=listing, stage="payment_held")
+
+    admin_headers = auth_header(mint_token(admin, "admin"))
+
+    # The buyer, who is a party to a live deal.
+    theirs = await http_client.get(f"/internal/users/{buyer}/active-deals", headers=admin_headers)
+    assert theirs.status_code == 200, theirs.text
+    assert theirs.json() == {"active_count": 1, "has_active": True}
+
+    # The admin themselves, who is a party to nothing — the answer the caller
+    # scoped endpoint would have given for BOTH calls.
+    mine = await http_client.get(f"/internal/users/{admin}/active-deals", headers=admin_headers)
+    assert mine.json() == {"active_count": 0, "has_active": False}
+
+
+@pytest.mark.asyncio
+async def test_internal_endpoint_counts_the_realtor_as_a_party(
+    clean_tables: None,
+    db_engine: Engine,
+    http_client: AsyncClient,
+    seed_user: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """Role-agnostic: deleting the realtor mid-inspection strands the deal just as
+    surely as deleting the buyer."""
+    buyer = seed_user(role="buyer")
+    seller = seed_user(role="seller")
+    realtor = seed_user(role="realtor")
+    admin = seed_user(role="admin")
+    listing = seed_listing(seller_id=seller)
+    _seed_transaction(
+        db_engine,
+        buyer=buyer,
+        seller=seller,
+        listing=listing,
+        stage="inspection_scheduled",
+        realtor=realtor,
+    )
+
+    resp = await http_client.get(
+        f"/internal/users/{realtor}/active-deals",
+        headers=auth_header(mint_token(admin, "admin")),
+    )
+
+    assert resp.json() == {"active_count": 1, "has_active": True}
+
+
+@pytest.mark.asyncio
+async def test_internal_endpoint_is_admin_only(
+    clean_tables: None,
+    http_client: AsyncClient,
+    seed_user: Callable[..., UUID],
+    mint_token: Callable[[UUID, str], str],
+    auth_header: Callable[[str], dict[str, str]],
+) -> None:
+    """A buyer must not be able to ask about anybody, least of all somebody else."""
+    buyer = seed_user(role="buyer")
+    other = seed_user(role="seller")
+
+    assert (await http_client.get(f"/internal/users/{other}/active-deals")).status_code == 401
+    forbidden = await http_client.get(
+        f"/internal/users/{other}/active-deals", headers=auth_header(mint_token(buyer, "buyer"))
+    )
+    assert forbidden.status_code == 403

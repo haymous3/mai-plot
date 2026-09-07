@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.middleware.trace_id import HEADER as TRACE_HEADER
 from app.middleware.trace_id import TraceIdMiddleware
 from app.routes.admin import router as admin_router
+from app.routes.admin_users import router as admin_users_router
 from app.routes.auth import router as auth_router
 from app.routes.dev import dev_routes_enabled
 from app.routes.dev import router as dev_router
@@ -30,6 +31,7 @@ setup_telemetry(SERVICE_NAME, app)
 app.add_middleware(TraceIdMiddleware)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(admin_users_router)
 # Service-to-service only (SCRUM-207). NOT in infra/kong/kong.yml — see the
 # module docstring in app/routes/internal.py before touching that.
 app.include_router(internal_router)

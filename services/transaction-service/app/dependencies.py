@@ -271,6 +271,27 @@ async def get_current_user(
     return CurrentUser(user_id=claims.user_id, role=claims.role)
 
 
+async def require_admin_service_call(
+    caller: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
+    """Admin gate for the /internal endpoints (SCRUM-209): ROLE ONLY, no IP
+    allowlist.
+
+    The caller is a sibling service forwarding the admin's own token, so the
+    request arrives from auth-service's address and never from the admin's
+    browser — an allowlist would check the wrong machine and reject every
+    legitimate call. What stands in for §4's allowlist is the network boundary:
+    /internal is absent from infra/kong/kong.yml and this service is private, so
+    there is no route from the internet to it.
+
+    Use `require_admin` below for anything a browser reaches. The names say which
+    is which on purpose.
+    """
+    if caller.role != "admin":
+        raise AdminAccessError("ADMIN_FORBIDDEN", "Admin access required.")
+    return caller
+
+
 async def require_admin(
     request: Request,
     caller: Annotated[CurrentUser, Depends(get_current_user)],
