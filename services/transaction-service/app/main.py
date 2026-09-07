@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.escrow import router as escrow_router
+from app.routes.internal import router as internal_router
 from app.routes.offers import router as offers_router
 from app.routes.payments import router as payments_router
 from app.routes.payout_accounts import router as payout_accounts_router
@@ -33,6 +34,9 @@ app.include_router(payments_router)
 app.include_router(payout_accounts_router)
 app.include_router(wallet_router)
 app.include_router(webhooks_router)
+# Service-to-service only (SCRUM-209). NOT in infra/kong/kong.yml — see the
+# module docstring in app/routes/internal.py before touching that.
+app.include_router(internal_router)
 
 
 @app.exception_handler(RequestValidationError)

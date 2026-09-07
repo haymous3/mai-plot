@@ -169,6 +169,14 @@ class Settings(BaseSettings):
     # Comma-separated IPs; empty = allow any (dev/test default).
     legal_team_ip_allowlist: str = ""
 
+    # The admin console's own gate (SCRUM-209). Separate from the legal-team one
+    # above because the two roles are separate: legal_team reviews powers of
+    # attorney, admin runs the console (users, listings, documents). Same shape
+    # and same default — empty means "allow any", which is what local and CI
+    # want; production sets both. Named to match realtor-service and
+    # document-service, which have carried ADMIN_IP_ALLOWLIST since SCRUM-71.
+    admin_ip_allowlist: str = ""
+
     # PoA decision notifications (SCRUM-113). The legal team's approve/reject is
     # announced to the seller (in-app + SMS + email) via notification-service —
     # auth-service enqueues the `notifications.dispatch` Celery task on the shared

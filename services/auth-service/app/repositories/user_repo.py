@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User, UserPii
+from app.models import RealtorRegistrationNumber, User, UserPii
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,57 @@ class UserAuthority:
 
     role: str
     seller_authority_type: str | None
+
+
+@dataclass(frozen=True)
+class AdminUserRow:
+    """One account in the admin user list (SCRUM-209).
+
+    ⚠️ NO BVN/NIN, not even as booleans: the list is a browse surface over the
+    platform's PII, and every field on it is one an admin sees without asking for
+    a particular person. The detail read carries the verification booleans.
+    """
+
+    id: UUID
+    role: str
+    full_name: str | None
+    email: str | None
+    phone: str | None
+    verified_status: str
+    is_active: bool
+    deleted_at: datetime | None
+    created_at: datetime
+    # A realtor's Maihomme login id (SCRUM-207), so support can match the number
+    # a caller reads out to an account. Null for every other role.
+    registration_number: str | None
+
+
+@dataclass(frozen=True)
+class AdminUserDetail:
+    """One account in full, for the admin detail view (SCRUM-209).
+
+    BVN and NIN appear ONLY as booleans, as everywhere else: both are stored as
+    bcrypt hashes and an 11-digit identifier is trivially crackable offline from
+    its hash (§4). An admin needs to know whether we verified it, not what it is.
+    """
+
+    id: UUID
+    role: str
+    full_name: str | None
+    email: str | None
+    phone: str | None
+    verified_status: str
+    seller_authority_type: str | None
+    poa_verified_status: str
+    bvn_verified: bool
+    nin_verified: bool
+    location: str | None
+    address: str | None
+    is_active: bool
+    deleted_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    registration_number: str | None
 
 
 @dataclass(frozen=True)
@@ -501,6 +552,207 @@ class UserRepository:
         user = await self._session.get(User, user_id)
         if user is not None:
             user.poa_verified_status = "pending"
+
+    async def list_users(
+        self,
+        *,
+        role: str | None = None,
+        search: str | None = None,
+        include_deleted: bool = False,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> tuple[list[AdminUserRow], int]:
+        """The admin user list (SCRUM-209), newest first. Returns (rows, total).
+
+        LEFT JOIN on user_pii, not JOIN: an account whose PII row is missing must
+        still be findable — the point of this screen is to look up an account
+        somebody is having trouble with, and the broken ones are the ones being
+        looked up. Same reasoning as the realtor review queue.
+
+        `search` matches name, email or phone, case-insensitively. Phone is
+        matched as typed AND with a leading 0 swapped for +234, because a support
+        caller reads out "0801…" while the column holds "+234801…" — without that
+        the obvious search silently finds nothing.
+
+        Soft-deleted accounts are excluded unless asked for: they are the
+        exception, and an admin looking for a deleted one is being deliberate.
+        """
+        base = (
+            select(
+                User.id,
+                User.role,
+                User.email,
+                User.verified_status,
+                User.is_active,
+                User.deleted_at,
+                User.created_at,
+                UserPii.full_name,
+                UserPii.phone,
+                RealtorRegistrationNumber.registration_number,
+            )
+            .join(UserPii, UserPii.user_id == User.id, isouter=True)
+            .join(
+                RealtorRegistrationNumber,
+                (RealtorRegistrationNumber.user_id == User.id)
+                & (RealtorRegistrationNumber.deleted_at.is_(None)),
+                isouter=True,
+            )
+        )
+        if not include_deleted:
+            base = base.where(User.deleted_at.is_(None))
+        if role:
+            base = base.where(User.role == role)
+        if search:
+            term = search.strip()
+            like = f"%{term.lower()}%"
+            clauses = [
+                func.lower(UserPii.full_name).like(like),
+                func.lower(User.email).like(like),
+                UserPii.phone.like(f"%{term}%"),
+            ]
+            # "0801…" typed, "+234801…" stored — match both spellings of the same
+            # number rather than making the admin know which one we keep.
+            if term.startswith("0") and term[1:].isdigit():
+                clauses.append(UserPii.phone.like(f"%+234{term[1:]}%"))
+            base = base.where(or_(*clauses))
+
+        total = (
+            await self._session.execute(select(func.count()).select_from(base.subquery()))
+        ).scalar_one()
+        rows = (
+            await self._session.execute(
+                base.order_by(User.created_at.desc())
+                .limit(page_size)
+                .offset((page - 1) * page_size)
+            )
+        ).all()
+        items = [
+            AdminUserRow(
+                id=r.id,
+                role=r.role,
+                full_name=r.full_name,
+                email=r.email,
+                phone=r.phone,
+                verified_status=r.verified_status,
+                is_active=r.is_active,
+                deleted_at=r.deleted_at,
+                created_at=r.created_at,
+                registration_number=r.registration_number,
+            )
+            for r in rows
+        ]
+        return items, int(total)
+
+    async def get_admin_detail(self, user_id: UUID) -> AdminUserDetail | None:
+        """One account for the admin detail view (SCRUM-209).
+
+        Unlike `get_account` (the user's own /auth/me) this deliberately DOES
+        return a soft-deleted or deactivated account: an admin looking one up is
+        usually asking "what happened to this person", and 404 for a deleted
+        account hides exactly the answer they need.
+        """
+        stmt = (
+            select(
+                User.id,
+                User.role,
+                User.email,
+                User.verified_status,
+                User.seller_authority_type,
+                User.poa_verified_status,
+                User.is_active,
+                User.deleted_at,
+                User.created_at,
+                User.updated_at,
+                UserPii.full_name,
+                UserPii.phone,
+                UserPii.location,
+                UserPii.address,
+                UserPii.bvn_hash.is_not(None).label("bvn_verified"),
+                UserPii.nin_hash.is_not(None).label("nin_verified"),
+                RealtorRegistrationNumber.registration_number,
+            )
+            .join(UserPii, UserPii.user_id == User.id, isouter=True)
+            .join(
+                RealtorRegistrationNumber,
+                (RealtorRegistrationNumber.user_id == User.id)
+                & (RealtorRegistrationNumber.deleted_at.is_(None)),
+                isouter=True,
+            )
+            .where(User.id == user_id)
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return AdminUserDetail(
+            id=row.id,
+            role=row.role,
+            full_name=row.full_name,
+            email=row.email,
+            phone=row.phone,
+            verified_status=row.verified_status,
+            seller_authority_type=row.seller_authority_type,
+            poa_verified_status=row.poa_verified_status,
+            bvn_verified=bool(row.bvn_verified),
+            nin_verified=bool(row.nin_verified),
+            location=row.location,
+            address=row.address,
+            is_active=row.is_active,
+            deleted_at=row.deleted_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            registration_number=row.registration_number,
+        )
+
+    async def admin_update_profile(
+        self,
+        user_id: UUID,
+        *,
+        full_name: str | None = None,
+        location: str | None = None,
+        set_location: bool = False,
+        address: str | None = None,
+        set_address: bool = False,
+    ) -> bool:
+        """Admin edit of a user's profile text (SCRUM-209). False when there is
+        no live user_pii row to write.
+
+        Deliberately narrower than it could be: no role, no email, no phone. Role
+        is a privilege-escalation path, and email/phone are verified identifiers
+        whose silent edit would transfer account ownership without the
+        verification that established it — and would break a realtor's MH-R login.
+
+        `set_location` / `set_address` follow the same convention as
+        `update_profile`: "the caller sent this field", so clearing a value is
+        expressible while omitting it leaves the stored value alone.
+        """
+        pii = await self._session.get(UserPii, user_id)
+        if pii is None or pii.deleted_at is not None:
+            return False
+        if full_name is not None:
+            pii.full_name = full_name
+        if set_location:
+            pii.location = location
+        if set_address:
+            pii.address = address
+        await self._session.flush()
+        return True
+
+    async def set_active(self, user_id: UUID, *, active: bool) -> bool:
+        """Suspend or reactivate an account (SCRUM-209). False when the user is
+        unknown or soft-deleted — a deleted account is not suspendable, and
+        reactivating one would resurrect it through the wrong door.
+
+        is_active=False already bites everywhere that matters: every login and
+        token path filters on it, so a suspended user cannot sign in and their
+        existing tokens stop resolving.
+        """
+        user = await self._session.get(User, user_id)
+        if user is None or user.deleted_at is not None:
+            return False
+        user.is_active = active
+        user.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return True
 
     async def list_poa_queue(self, *, page: int, page_size: int) -> tuple[list[PoaQueueRow], int]:
         """Pending PoA submissions awaiting legal-team review (status='pending'

@@ -51,7 +51,7 @@ consumers:
 services:
 
   # =========================================================================
-  # Auth service — /auth/*  +  /admin/poa/* (PoA review queue)
+  # Auth service — /auth/*  +  /admin/poa/* (PoA queue)  +  /admin/users/* (console)
   # =========================================================================
   - name: auth-service
     url: http://auth-service:8000
@@ -63,6 +63,35 @@ services:
       # to point at document-service, which has no /admin/poa handler at all;
       # locally the admin UI reached auth-service directly on its own port so
       # the misroute never showed up until the frontend was pointed at Kong.
+      # Admin user console (SCRUM-209) — auth-service owns `users`, so the
+      # list/read/edit/suspend/delete endpoints live there, at /admin/users.
+      # A SEPARATE route from admin-poa because Kong lists individual paths and
+      # matches prefixes: /admin/users is not covered by /admin/poa, and an
+      # endpoint that 404s only at the gateway has cost six tickets. Same
+      # plugins as the PoA route — rate limit, ip-restriction (§4 requires the
+      # allowlist on admin paths), JWT.
+      - name: admin-users
+        paths:
+          - /admin/users
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+          - name: ip-restriction
+            config:
+              allow:
+                - 127.0.0.1
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 10.0.0.0/8
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
       - name: admin-poa
         paths:
           - /admin/poa
