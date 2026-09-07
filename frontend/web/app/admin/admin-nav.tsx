@@ -5,6 +5,9 @@ import { PushToggle } from './push-toggle';
 import { SignOutButton } from './sign-out-button';
 
 const TABS = [
+  // Users first: it is the only tab that is a lookup rather than a queue, and
+  // it is where an admin starts when somebody contacts support (SCRUM-209).
+  { key: 'users', label: 'Users', href: '/admin/users' },
   { key: 'listings', label: 'Listings', href: '/admin/listings/queue' },
   { key: 'poa', label: 'Power of Attorney', href: '/admin/poa/queue' },
   { key: 'documents', label: 'Documents', href: '/admin/documents/queue' },
@@ -27,6 +30,7 @@ export function AdminNav({
   count,
 }: {
   active:
+    | 'users'
     | 'listings'
     | 'poa'
     | 'documents'
