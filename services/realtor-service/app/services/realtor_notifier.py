@@ -52,18 +52,18 @@ def _decision_message(
     if status == "approved":
         return (
             "realtor_approved",
-            "You're approved as a Maiplot realtor",
+            "You're approved as a Maihomme realtor",
             _approved_body(registration_number),
         )
     if status == "suspended":
         return (
             "realtor_suspended",
-            "Your Maiplot realtor account is suspended",
+            "Your Maihomme realtor account is suspended",
             f"Your realtor account has been suspended. Reason: {reason}.",
         )
     return (
         "realtor_rejected",
-        "Update on your Maiplot realtor application",
+        "Update on your Maihomme realtor application",
         (
             "Your realtor application was not approved. "
             f"Reason: {reason}. You may re-submit corrected details."
@@ -80,7 +80,7 @@ def _report_message(*, status: str, note: str | None) -> tuple[str, str, str]:
             "inspection_report_approved",
             "Your inspection report was approved",
             "Your inspection report has been approved and now counts towards the "
-            "property's verification on Maiplot.",
+            "property's verification on Maihomme.",
         )
     return (
         "inspection_report_rejected",

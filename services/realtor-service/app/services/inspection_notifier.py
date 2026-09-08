@@ -18,11 +18,11 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 _BODY = (
-    "You've been assigned a property inspection on Maiplot. Accept it within 2 "
+    "You've been assigned a property inspection on Maihomme. Accept it within 2 "
     "hours, or it will be offered to another realtor."
 )
 _RESCHEDULE_BODY = (
-    "The realtor proposed a new time for your property inspection. Open Maiplot "
+    "The realtor proposed a new time for your property inspection. Open Maihomme "
     "to see the updated schedule."
 )
 

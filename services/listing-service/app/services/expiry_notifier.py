@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 _TYPE = "listing_expiry_warning"
 _TITLE = "Your listing is expiring soon"
 _BODY = (
-    "Your Maiplot listing expires within 48 hours. Renew it or convert it to a "
+    "Your Maihomme listing expires within 48 hours. Renew it or convert it to a "
     "normal sale to keep it live."
 )
 
