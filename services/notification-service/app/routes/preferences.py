@@ -28,7 +28,7 @@ PreferenceRepoDep = Annotated[PreferenceRepository, Depends(get_preference_repo)
 _UNSUBSCRIBED_HTML = (
     '<!doctype html><html><body style="font-family:Arial,sans-serif;">'
     "<h2>You're unsubscribed</h2>"
-    "<p>You will no longer receive Maiplot notification emails. You can re-enable "
+    "<p>You will no longer receive Maihomme notification emails. You can re-enable "
     "them anytime from your notification settings.</p></body></html>"
 )
 

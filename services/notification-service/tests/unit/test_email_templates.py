@@ -23,12 +23,12 @@ def test_falls_back_to_type_subject_then_generic() -> None:
     typed = render_email(
         to="a@b.com", type="listing_approved", title=None, body="B", unsubscribe_url=_UNSUB
     )
-    assert typed.subject == "Your Maiplot listing is approved"
+    assert typed.subject == "Your Maihomme listing is approved"
 
     generic = render_email(
         to="a@b.com", type="something_unknown", title=None, body="B", unsubscribe_url=_UNSUB
     )
-    assert generic.subject == "Maiplot notification"
+    assert generic.subject == "Maihomme notification"
 
 
 def test_unsubscribe_link_in_both_parts() -> None:

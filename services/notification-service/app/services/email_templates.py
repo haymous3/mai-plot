@@ -16,16 +16,16 @@ from app.adapters.ses_email import EmailMessage
 # Per-type subject lines. The notification's own title wins when present; this is
 # the fallback when a type has no title set.
 _DEFAULT_SUBJECTS: dict[str, str] = {
-    "listing_approved": "Your Maiplot listing is approved",
-    "listing_rejected": "Update on your Maiplot listing",
-    "loan_approved": "Your Maiplot loan decision",
-    "loan_rejected": "Your Maiplot loan decision",
-    "document_verified": "Your Maiplot document was verified",
-    "document_rejected": "Action needed on your Maiplot document",
-    "offer_accepted": "Your Maiplot offer was accepted",
-    "transaction_completed": "Your Maiplot transaction is complete",
+    "listing_approved": "Your Maihomme listing is approved",
+    "listing_rejected": "Update on your Maihomme listing",
+    "loan_approved": "Your Maihomme loan decision",
+    "loan_rejected": "Your Maihomme loan decision",
+    "document_verified": "Your Maihomme document was verified",
+    "document_rejected": "Action needed on your Maihomme document",
+    "offer_accepted": "Your Maihomme offer was accepted",
+    "transaction_completed": "Your Maihomme transaction is complete",
 }
-_GENERIC_SUBJECT = "Maiplot notification"
+_GENERIC_SUBJECT = "Maihomme notification"
 
 
 def _subject_for(*, type: str, title: str | None) -> str:
@@ -43,12 +43,12 @@ def render_email(
     unsubscribe_url: str,
 ) -> EmailMessage:
     subject = _subject_for(type=type, title=title)
-    heading = title or "Maiplot"
+    heading = title or "Maihomme"
 
     text_body = (
         f"{body}\n\n"
         "—\n"
-        "You're receiving this because you have a Maiplot account.\n"
+        "You're receiving this because you have a Maihomme account.\n"
         f"Unsubscribe: {unsubscribe_url}\n"
     )
 
@@ -59,7 +59,7 @@ def render_email(
         f"<p>{html.escape(body)}</p>"
         '<hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0;">'
         '<p style="font-size:12px;color:#777;">'
-        "You're receiving this because you have a Maiplot account. "
+        "You're receiving this because you have a Maihomme account. "
         f'<a href="{html.escape(unsubscribe_url)}">Unsubscribe</a>.'
         "</p></body></html>"
     )
