@@ -17,6 +17,7 @@ import {
   WarehouseIcon,
 } from './icons';
 import { TestimonialCarousel } from './testimonials';
+import { Reveal } from '../_components/reveal';
 import { FINANCING_IMAGE } from '@/lib/placeholder-images';
 
 /**
@@ -65,8 +66,12 @@ function SectionHead({
   align?: 'left' | 'center';
   tone?: 'light' | 'dark';
 }) {
+  // Revealed here rather than at each call site (SCRUM-216): every section on
+  // the page routes its heading through this component, so one wrapper covers
+  // all of them and none can be forgotten. `Reveal` renders the same single
+  // div this returned before, so the markup is unchanged.
   return (
-    <div className={align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-3xl'}>
+    <Reveal className={align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-3xl'}>
       <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
         {eyebrow}
       </p>
@@ -82,7 +87,7 @@ function SectionHead({
           {sub}
         </p>
       )}
-    </div>
+    </Reveal>
   );
 }
 
@@ -120,7 +125,11 @@ export function TrustBar() {
         <p className="text-center text-sm font-semibold uppercase tracking-[0.08em] text-ink-500">
           Trusted by leading Nigerian banks &amp; institutions
         </p>
-        <ul className="mt-12 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+        <Reveal
+          as="ul"
+          stagger
+          className="mt-12 flex flex-wrap items-center justify-center gap-x-12 gap-y-6"
+        >
           {banks.map((b) => (
             <li
               key={b}
@@ -129,7 +138,7 @@ export function TrustBar() {
               {b}
             </li>
           ))}
-        </ul>
+        </Reveal>
       </Shell>
     </section>
   );
@@ -189,7 +198,7 @@ export function WhyChooseUs() {
           title="Built on Trust, Powered by Technology"
           sub="We combine rigorous verification, bank-grade escrow, and smart financing to give every Nigerian a fair shot at property ownership."
         />
-        <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Reveal stagger className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {pillars.map(({ Icon, title, body, dark }) => (
             <div
               key={title}
@@ -216,7 +225,7 @@ export function WhyChooseUs() {
               </p>
             </div>
           ))}
-        </div>
+        </Reveal>
       </Shell>
     </section>
   );
@@ -281,7 +290,11 @@ export function Process() {
           tone="dark"
         />
 
-        <ol className="mt-16 grid gap-y-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-y-0">
+        <Reveal
+          as="ol"
+          stagger
+          className="mt-16 grid gap-y-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-y-0"
+        >
           {steps.map((s, i) => (
             <li key={s.n} className="relative flex flex-col items-center text-center">
               {i < steps.length - 1 && (
@@ -305,7 +318,7 @@ export function Process() {
               <p className="mt-6 max-w-[196px] text-sm leading-[22px] text-white/70">{s.body}</p>
             </li>
           ))}
-        </ol>
+        </Reveal>
 
         <div className="mt-14 flex justify-center">
           <Link
@@ -353,7 +366,7 @@ export function Categories() {
     <section className="bg-surface-card pb-24 pt-[104px]">
       <Shell>
         <SectionHead eyebrow="Browse By Category" title="Find Your Property Type" />
-        <div className="mt-14 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <Reveal stagger className="mt-14 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           {cats.map(({ label, count, Icon, q }) => {
             const inner = (
               <>
@@ -372,7 +385,7 @@ export function Categories() {
               <Link
                 key={label}
                 href={`/dashboard?property_type=${q}`}
-                className={`${shell} transition hover:border-emerald-deep/40`}
+                className={`${shell} transition duration-300 hover:-translate-y-1 hover:border-emerald-deep/40 hover:shadow-md motion-reduce:transform-none motion-reduce:transition-none`}
               >
                 {inner}
               </Link>
@@ -382,7 +395,7 @@ export function Categories() {
               </div>
             );
           })}
-        </div>
+        </Reveal>
       </Shell>
     </section>
   );
@@ -428,7 +441,11 @@ export function Stats() {
   return (
     <section className="bg-surface-card py-20">
       <Shell>
-        <dl className="grid grid-cols-2 gap-10 lg:grid-cols-4">
+        {/* A plain fade, and no count-up, deliberately: these four figures
+            are hardcoded marketing copy rather than anything the platform
+            counts, so animating them upward would dress invented numbers
+            as measured ones. */}
+        <Reveal as="dl" className="grid grid-cols-2 gap-10 lg:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className="text-center">
               <dd className="text-[40px] font-bold leading-none text-emerald-deep sm:text-5xl">
@@ -437,7 +454,7 @@ export function Stats() {
               <dt className="mt-5 text-base leading-6 text-ink-500">{s.label}</dt>
             </div>
           ))}
-        </dl>
+        </Reveal>
       </Shell>
     </section>
   );
@@ -468,7 +485,7 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
   return (
     <section id="financing" className="bg-surface-paper pb-24 pt-[104px]">
       <Shell className="grid items-center gap-y-16 lg:grid-cols-2 lg:gap-x-16">
-        <div className="relative">
+        <Reveal className="relative">
           <div className="h-[416px] w-full overflow-hidden rounded-2xl bg-emerald-deep/10 shadow-lg">
             {/* Decorative, like the hero: this illustrates financing, not a
                 specific property, so the stand-in carries no marker. */}
@@ -485,9 +502,9 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
             <p className="mt-1 text-sm leading-5 text-white/75">Financing Available</p>
             <span aria-hidden className="mt-3 block h-1 w-7 rounded-full bg-status-gold" />
           </div>
-        </div>
+        </Reveal>
 
-        <div>
+        <Reveal>
           <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
             Property Financing
           </p>
@@ -508,14 +525,14 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
             banks to give you access to competitive mortgage financing — applied directly from your
             dashboard, with decisions in as little as 72 hours.
           </p>
-          <ul className="mt-8 flex flex-col gap-4">
+          <Reveal as="ul" stagger className="mt-8 flex flex-col gap-4">
             {points.map((p) => (
               <li key={p} className="flex items-center gap-3 text-[15px] leading-5 text-ink-700">
                 <CheckCircleIcon className="h-5 w-5 flex-none text-emerald-deep" />
                 {p}
               </li>
             ))}
-          </ul>
+          </Reveal>
           <Link
             href="/dashboard"
             className="mt-10 inline-flex h-[52px] items-center gap-2.5 rounded-xl bg-emerald-deep px-7 text-base font-semibold text-white transition hover:brightness-110"
@@ -523,7 +540,7 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
             Check Financing Eligibility
             <ArrowRightIcon className="h-5 w-5" />
           </Link>
-        </div>
+        </Reveal>
       </Shell>
     </section>
   );
@@ -555,7 +572,7 @@ export function FinalCta() {
             className="pointer-events-none absolute -bottom-32 -left-20 h-60 w-60 rounded-full bg-white/10"
           />
 
-          <div className="relative">
+          <Reveal className="relative">
             <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
               Start Today
             </p>
@@ -587,7 +604,7 @@ export function FinalCta() {
                 Sign Up
               </Link>
             </div>
-          </div>
+          </Reveal>
         </div>
       </Shell>
     </section>

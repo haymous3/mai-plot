@@ -4,6 +4,7 @@ import { ArrowRightIcon, CheckCircleIcon, LockIcon } from './icons';
 import { Shell } from './sections';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { staggerDelayMs } from '@/lib/motion';
 import { HERO_IMAGE } from '@/lib/placeholder-images';
 
 /**
@@ -31,7 +32,14 @@ import { HERO_IMAGE } from '@/lib/placeholder-images';
  * THE PHOTO IS LIVE DATA, NOT A STOCK ASSET. The design's price card carries a
  * location, a price and a verified tick — which is exactly a `FeedItem`. So the
  * hero renders the top featured listing rather than a hardcoded image we would
- * have to ship and keep in sync. With no feed (service down, empty result, no
+ * have to ship and keep in sync.
+ *
+ * ENTRANCE (SCRUM-216): the left column arrives as a stagger on load. This is
+ * a plain CSS keyframe with an inline `animationDelay`, NOT the `<Reveal>`
+ * observer the sections below use — the hero is in view on load, so there is
+ * nothing to observe, and a CSS animation runs with no JavaScript at all. That
+ * makes `both` fill safe here in a way an observer-driven hidden state is not.
+ * `prefers-reduced-motion` switches the animation off in globals.css. With no feed (service down, empty result, no
  * thumbnail) the photo falls back to a flat tint and the price card drops out;
  * the financing chip stays because 50% is a business rule (CLAUDE.md §8.5), not
  * a property of any one listing.
@@ -43,7 +51,10 @@ export function Hero({ featured }: { featured?: FeedItem }) {
     <section className="relative overflow-hidden bg-gradient-to-b from-emerald-deep from-85% to-[#124031] text-white">
       <Shell className="grid items-center gap-y-16 pb-[124px] pt-20 lg:grid-cols-[1fr_576px] lg:gap-x-[120px]">
         <div>
-          <p className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-[15px] leading-5 text-white/90">
+          <p
+            className="animate-enter-up inline-flex min-h-10 items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-[15px] leading-5 text-white/90"
+            style={{ animationDelay: `${staggerDelayMs(0)}ms` }}
+          >
             <span aria-hidden className="h-2 w-2 flex-none rounded-full bg-status-gold" />
             Nigeria&apos;s Most Trusted Property Platform
           </p>
@@ -55,7 +66,10 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             override `leading-[1.16]` back to 1. Arbitrary sizes carry no
             line-height, so the measured 70px pitch survives.
           */}
-          <h1 className="mt-8 max-w-[520px] font-display text-[40px] font-bold leading-[1.16] sm:text-[52px] lg:text-[60px]">
+          <h1
+            className="animate-enter-up mt-8 max-w-[520px] font-display text-[40px] font-bold leading-[1.16] sm:text-[52px] lg:text-[60px]"
+            style={{ animationDelay: `${staggerDelayMs(1)}ms` }}
+          >
             Own Your Dream Property,{' '}
             {/*
               Block-level so the gold clause always starts its own line, as the
@@ -67,12 +81,18 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             <span className="block text-status-gold">Safely &amp; Effortlessly.</span>
           </h1>
 
-          <p className="mt-6 max-w-[520px] text-xl leading-[29px] text-white/75">
+          <p
+            className="animate-enter-up mt-6 max-w-[520px] text-xl leading-[29px] text-white/75"
+            style={{ animationDelay: `${staggerDelayMs(2)}ms` }}
+          >
             Maihomme connects buyers, sellers, and agents on a verified, escrow-secured platform —
             with financing up to 50% through partner banks.
           </p>
 
-          <div className="mt-10 flex flex-wrap gap-4">
+          <div
+            className="animate-enter-up mt-10 flex flex-wrap gap-4"
+            style={{ animationDelay: `${staggerDelayMs(3)}ms` }}
+          >
             {/* SCRUM-204: these were "Explore Properties" (-> /dashboard) and
                 "List Your Property" (-> /register). The HREFS moved with the
                 labels — a button reading "Sign In" that opened a property feed
@@ -95,7 +115,10 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             </Link>
           </div>
 
-          <dl className="mt-14 flex flex-wrap gap-9">
+          <dl
+            className="animate-enter-up mt-14 flex flex-wrap gap-9"
+            style={{ animationDelay: `${staggerDelayMs(4)}ms` }}
+          >
             {[
               { value: '12K+', label: 'Listings' },
               { value: '9.6K+', label: 'Homeowners' },
@@ -109,7 +132,7 @@ export function Hero({ featured }: { featured?: FeedItem }) {
           </dl>
         </div>
 
-        <div className="relative">
+        <div className="animate-enter-up relative" style={{ animationDelay: `${staggerDelayMs(2)}ms` }}>
           <div className="h-[520px] w-full overflow-hidden rounded-2xl bg-white/10">
             {/* Decorative framing, so a stand-in needs no marker — unlike a
                 listing card, this panel does not claim to be a property for

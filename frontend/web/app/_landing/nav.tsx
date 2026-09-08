@@ -1,7 +1,9 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 import { HouseIcon } from './icons';
-import { Shell } from './sections';
 
 /**
  * Public top navigation — SCRUM-178.
@@ -27,6 +29,17 @@ import { Shell } from './sections';
  *   link gaps     ~32px between items
  *   Get Started   118×40, 12px radius, `status-gold` fill
  *
+ * SCRUM-216 makes it a client component so it can tell whether the page has
+ * scrolled. At rest it stays flat, exactly as described above; once past the
+ * first few pixels it gains a shadow and a hairline, which is what separates
+ * the bar from white content scrolling under it. There is no colour change —
+ * the fill is already `emerald-deep` at both ends.
+ *
+ * ⚠️ `Shell` is deliberately INLINED here rather than imported. It lives in
+ * `sections.tsx`, and importing a 23KB module of server-rendered sections into
+ * a client component would pull all of it into the browser bundle to reuse one
+ * `<div>` of container padding.
+ *
  * The link group sits ~20px left of the true container centre in the export.
  * That is not reproduced: `justify-between` puts it ~20px further left still,
  * and chasing the difference would mean hard-coding a magic offset for a
@@ -46,9 +59,25 @@ const LINKS: { label: string; href?: string }[] = [
 ];
 
 export function Nav() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    // Read once on mount as well as on scroll: a reload partway down the page,
+    // or a back-navigation that restores scroll position, both start already
+    // scrolled and would otherwise render the flat bar over white content.
+    const sync = () => setScrolled(window.scrollY > 8);
+    sync();
+    window.addEventListener('scroll', sync, { passive: true });
+    return () => window.removeEventListener('scroll', sync);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-50 bg-emerald-deep">
-      <Shell className="flex h-18 items-center justify-between">
+    <header
+      className={`sticky top-0 z-50 bg-emerald-deep transition-shadow duration-300 ${
+        scrolled ? 'shadow-lg shadow-black/10 ring-1 ring-white/10' : ''
+      }`}
+    >
+      <div className="mx-auto flex h-18 w-full max-w-[1280px] items-center justify-between px-8">
         <Link href="/" className="flex items-center text-white" aria-label="Maihomme home">
           <HouseIcon className="h-7 w-7" strokeWidth={2} />
         </Link>
@@ -83,7 +112,7 @@ export function Nav() {
             Get Started
           </Link>
         </div>
-      </Shell>
+      </div>
     </header>
   );
 }
