@@ -6,9 +6,18 @@ import { Shell } from './sections';
 /**
  * Public top navigation — SCRUM-178.
  *
- * Sits transparently on top of the hero rather than being its own bar: the
- * export has no rule, no fill and no shadow between the nav row and the
- * headline, just continuous `emerald-deep`.
+ * STICKY since SCRUM-204, and rendered by the page rather than by the hero.
+ *
+ * It could not stay inside the hero `<section>`: `position: sticky` is bounded
+ * by its parent, so it would have unstuck at the bottom of the hero — and that
+ * section carries `overflow-hidden`, which disables sticky outright. Neither
+ * fails loudly; the nav would simply have scrolled away.
+ *
+ * The background is a flat `emerald-deep` with no scroll listener, because the
+ * hero's gradient is solid `emerald-deep` for its first 85%. At rest the bar is
+ * therefore indistinguishable from the transparent-over-hero look the export
+ * draws — no rule, no shadow, just continuous colour — and once the page
+ * scrolls it is what keeps white links legible over white content.
  *
  * Measured (1577px artboard, container 180..1396):
  *   row height    72px  (Get Started spans y16..55, so 40px centred in 72)
@@ -38,7 +47,7 @@ const LINKS: { label: string; href?: string }[] = [
 
 export function Nav() {
   return (
-    <header className="relative z-10">
+    <header className="sticky top-0 z-50 bg-emerald-deep">
       <Shell className="flex h-18 items-center justify-between">
         <Link href="/" className="flex items-center text-white" aria-label="Maihomme home">
           <HouseIcon className="h-7 w-7" strokeWidth={2} />
@@ -63,13 +72,10 @@ export function Nav() {
           </ul>
         </nav>
 
+        {/* Log In was removed here (SCRUM-204): the hero now carries Sign In
+            and Sign Up as its two calls to action, so a third auth entry point
+            in the bar was competing with them. */}
         <div className="flex items-center gap-7">
-          <Link
-            href="/login"
-            className="text-[15px] leading-5 text-white/90 transition hover:text-white"
-          >
-            Log In
-          </Link>
           <Link
             href="/register"
             className="inline-flex h-10 items-center rounded-xl bg-status-gold px-5 text-[15px] font-semibold leading-5 text-white transition hover:brightness-105"

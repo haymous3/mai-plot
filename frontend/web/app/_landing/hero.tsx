@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
-import { CheckCircleIcon, HouseIcon, SearchIcon } from './icons';
-import { Nav } from './nav';
+import { ArrowRightIcon, CheckCircleIcon, LockIcon } from './icons';
 import { Shell } from './sections';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
@@ -42,8 +41,6 @@ export function Hero({ featured }: { featured?: FeedItem }) {
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-emerald-deep from-85% to-[#124031] text-white">
-      <Nav />
-
       <Shell className="grid items-center gap-y-16 pb-[124px] pt-20 lg:grid-cols-[1fr_576px] lg:gap-x-[120px]">
         <div>
           <p className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-[15px] leading-5 text-white/90">
@@ -76,19 +73,25 @@ export function Hero({ featured }: { featured?: FeedItem }) {
           </p>
 
           <div className="mt-10 flex flex-wrap gap-4">
+            {/* SCRUM-204: these were "Explore Properties" (-> /dashboard) and
+                "List Your Property" (-> /register). The HREFS moved with the
+                labels — a button reading "Sign In" that opened a property feed
+                would be the worse half of the change. The icons moved too: a
+                magnifying glass beside "Sign In" was left over from the search
+                CTA it replaced. */}
             <Link
-              href="/dashboard"
+              href="/login"
               className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
             >
-              <SearchIcon className="h-5 w-5" />
-              Explore Properties
+              <LockIcon className="h-5 w-5" />
+              Sign In
             </Link>
             <Link
               href="/register"
               className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
             >
-              <HouseIcon className="h-5 w-5" />
-              List Your Property
+              <ArrowRightIcon className="h-5 w-5" />
+              Sign Up
             </Link>
           </div>
 

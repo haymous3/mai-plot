@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FeaturedCard } from './_landing/featured-card';
 import { Footer } from './_landing/footer';
 import { Hero } from './_landing/hero';
+import { Nav } from './_landing/nav';
 import { ArrowRightIcon } from './_landing/icons';
 import {
   Categories,
@@ -50,6 +51,10 @@ export default async function HomePage() {
 
   return (
     <main>
+      {/* Rendered here rather than inside <Hero> (SCRUM-204) so `sticky` is
+          bounded by the page, not by the hero section — and clear of that
+          section's `overflow-hidden`, which would have disabled sticky. */}
+      <Nav />
       <Hero featured={featured[0]} />
 
       <TrustBar />
