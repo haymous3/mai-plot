@@ -22,6 +22,7 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.saved_repo import SavedListingRepository
 from app.repositories.seller_repo import SellerRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_listing_actions import AdminListingActionsService
 from app.services.admin_listings import AdminListingsService
 from app.services.admin_queue import AdminQueueService
 from app.services.express_interest import ExpressInterestService
@@ -126,8 +127,11 @@ def get_saved_listing_service(
 
 def get_seller_listings_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    dispatch: Annotated[IndexDispatcher, Depends(_index_dispatcher)],
 ) -> SellerListingsService:
-    return SellerListingsService(listings=listings)
+    # SCRUM-215: the dispatcher was missing here, which is what left paused
+    # listings in the search index carrying status "active".
+    return SellerListingsService(listings=listings, dispatch=dispatch)
 
 
 def _interest_repo(session: SessionDep) -> InterestRepository:
@@ -176,6 +180,14 @@ def get_admin_listings_service(
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
 ) -> AdminListingsService:
     return AdminListingsService(listings=listings, sellers=sellers, audit=audit)
+
+
+def get_admin_listing_actions_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    dispatch: Annotated[IndexDispatcher, Depends(_index_dispatcher)],
+) -> AdminListingActionsService:
+    return AdminListingActionsService(listings=listings, audit=audit, dispatch=dispatch)
 
 
 def get_listing_review_service(
