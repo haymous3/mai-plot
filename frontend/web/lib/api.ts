@@ -431,6 +431,83 @@ export interface AdminDealsResponse {
   pagination: { page: number; page_size: number; total: number };
 }
 
+/** One row of the admin listing console (GET /admin/listings, SCRUM-215).
+ *
+ * Distinct from the review queue's row: the queue is a decision surface where
+ * every entry is about to be approved or rejected, so a handful of columns is
+ * enough. This is a FIND surface, so it carries the photo, the type, the
+ * document rollup and the counters. */
+export interface AdminListing {
+  id: string;
+  seller_id: string;
+  title: string;
+  property_type: string;
+  state: string;
+  lga: string;
+  asking_price_kobo: number;
+  sale_type: string;
+  urgency_tag: string | null;
+  status: string;
+  doc_verification_status: string;
+  view_count: number;
+  interest_count: number;
+  expires_at: string | null;
+  created_at: string;
+  seller_authority_type: string | null;
+  cover_photo_url: string | null;
+}
+
+export interface AdminListingsResponse {
+  data: AdminListing[];
+  pagination: { page: number; page_size: number; total: number; total_pages: number };
+}
+
+/** One recorded state change on a listing, from the detail page's history. */
+export interface AdminAuditEntry {
+  id: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  action: string;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** The full listing an admin opens (GET /admin/listings/{id}, SCRUM-215).
+ *
+ * Everything the approve/reject decision needed and never had — before this the
+ * decision was made from a table row with no photo, description or address. */
+export interface AdminListingDetail {
+  id: string;
+  seller: { id: string; authority_type: string | null; poa_owner_name: string | null };
+  title: string;
+  property_type: string;
+  description: string | null;
+  address_text: string;
+  location: { lat: number; lng: number };
+  state: string;
+  lga: string;
+  size_sqm: number | null;
+  asking_price_kobo: number;
+  sale_type: string;
+  urgency_tag: string | null;
+  status: string;
+  doc_verification_status: string;
+  /** Set when rejected or taken down — the seller is shown this text. */
+  rejection_reason: string | null;
+  view_count: number;
+  interest_count: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  media: { type: string; url: string; sort_order: number }[];
+  history: AdminAuditEntry[];
+}
+
+/** What an admin may do to a live listing (SCRUM-215). Editing is deliberately
+ * absent: price, description and photos are the seller's content. */
+export type AdminListingAction = 'pause' | 'unpause' | 'take_down' | 'expire';
+
 /** One row of the admin user list (GET /admin/users, SCRUM-209).
  *
  * ⚠️ No BVN/NIN, not even booleans — the list is a browse surface over the whole
