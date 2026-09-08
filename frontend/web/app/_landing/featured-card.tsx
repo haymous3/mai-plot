@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AreaIcon, CheckCircleIcon, ChevronRightIcon, MapPinIcon } from './icons';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { listingPlaceholder } from '@/lib/placeholder-images';
 
 /**
  * Featured-listing card on the public landing page — Figma node 627:67.
@@ -42,13 +43,23 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
       {/* 208px media band on an emerald 10% fallback, with a top-down scrim so
           the location text stays legible over any photo (node 627:68/627:70). */}
       <div className="relative h-52 w-full overflow-hidden bg-emerald-deep/10">
-        {item.thumbnail_url && (
-          // eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL
-          <img
-            src={item.thumbnail_url}
-            alt={item.title}
-            className="h-full w-full object-cover"
-          />
+        {/*
+          A real photo always wins; the stand-in only fills a listing with no
+          media, which today is every one of them (SCRUM-203). It is LABELLED,
+          because a stock house sitting above a real address and price would
+          otherwise read as a photograph of that property.
+        */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL */}
+        <img
+          src={item.thumbnail_url ?? listingPlaceholder(item.id)}
+          alt={item.thumbnail_url ? item.title : ''}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+        {!item.thumbnail_url && (
+          <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm">
+            Photo coming soon
+          </span>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
