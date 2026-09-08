@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { Reveal } from './_components/reveal';
 import { FeaturedCard } from './_landing/featured-card';
 import { Footer } from './_landing/footer';
 import { Hero } from './_landing/hero';
@@ -51,6 +52,26 @@ export default async function HomePage() {
 
   return (
     <main>
+      {/*
+        Arms the scroll animations (SCRUM-216).
+
+        Every `[data-reveal]` hidden state in globals.css is scoped under
+        `.motion-ready`, and this is the only thing that ever adds it. That
+        makes the animations strictly additive: with JS disabled, broken, or
+        still loading, the class is absent and the page renders exactly as it
+        did before this ticket rather than as a blank screen.
+
+        Inline and rendered FIRST on purpose — it executes while the browser is
+        still parsing the sections below, so they are hidden before their first
+        paint. Deferring it to a React effect would show every section, then
+        hide it, then fade it back in.
+      */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: "document.documentElement.classList.add('motion-ready')",
+        }}
+      />
+
       {/* Rendered here rather than inside <Hero> (SCRUM-204) so `sticky` is
           bounded by the page, not by the hero section — and clear of that
           section's `overflow-hidden`, which would have disabled sticky. */}
@@ -67,7 +88,7 @@ export default async function HomePage() {
       {featured.length > 0 && (
         <section className="bg-surface-paper pb-24 pt-[104px]">
           <Shell>
-            <div className="flex flex-wrap items-end justify-between gap-4">
+            <Reveal className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
                   Featured Listings
@@ -84,12 +105,15 @@ export default async function HomePage() {
                 View All Properties
                 <ArrowRightIcon className="h-4 w-4" />
               </Link>
-            </div>
-            <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            </Reveal>
+            {/* `stagger` makes this Reveal the grid itself, so the cards arrive
+                one after another without an extra wrapper element changing how
+                the grid lays out. */}
+            <Reveal stagger className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featured.map((item) => (
                 <FeaturedCard key={item.id} item={item} />
               ))}
-            </div>
+            </Reveal>
           </Shell>
         </section>
       )}

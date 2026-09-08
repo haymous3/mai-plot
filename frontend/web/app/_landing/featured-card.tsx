@@ -38,7 +38,12 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
   return (
     <Link
       href={`/listings/${item.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-surface-card shadow transition hover:shadow-md"
+      // The card lifts and its photo pushes in slightly on hover (SCRUM-216).
+      // `duration-300` on both so the lift and the zoom finish together —
+      // Tailwind's bare `transition` is 150ms, which reads as a twitch next to
+      // a 300ms zoom. `motion-reduce:` drops the movement but keeps the
+      // shadow, so the card still answers the pointer.
+      className="group flex flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-surface-card shadow transition duration-300 hover:-translate-y-1 hover:shadow-xl motion-reduce:transform-none motion-reduce:transition-none"
     >
       {/* 208px media band on an emerald 10% fallback, with a top-down scrim so
           the location text stays legible over any photo (node 627:68/627:70). */}
@@ -54,7 +59,7 @@ export function FeaturedCard({ item }: { item: FeedItem }) {
           src={item.thumbnail_url ?? listingPlaceholder(item.id)}
           alt={item.thumbnail_url ? item.title : ''}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none"
         />
         {!item.thumbnail_url && (
           <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm">

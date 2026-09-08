@@ -35,3 +35,94 @@
     animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
+
+/* ⚠️ DELIBERATELY OUTSIDE `@layer utilities`.
+ *
+ * Tailwind purges rules inside that layer whose selectors it cannot match to a
+ * class it saw in the scanned content. These rules are driven by ATTRIBUTES
+ * (`[data-reveal]`), so there is no class name for it to match and the whole
+ * mechanism would be dropped from the bundle — silently, exactly like the
+ * `bg-pending-100` family did before `lib/` was added to the content glob.
+ * Plain CSS outside every layer is always emitted. */
+/* ------------------------------------------------------------------ *
+ * Landing-page motion — SCRUM-216
+ *
+ * ⚠️ THE HIDDEN STATE IS GATED ON `.motion-ready`, WHICH ONLY JAVASCRIPT
+ * EVER ADDS. This is the whole safety design, so do not "simplify" it away.
+ *
+ * The naive version ships `opacity: 0` in the HTML and reveals it with JS.
+ * If JS is disabled, errors before hydration, or the bundle 404s, the entire
+ * marketing page then renders BLANK — the worst available failure for the
+ * page that sells the product. Gating on a class set by a pre-paint inline
+ * script (see app/page.tsx) means every one of those cases degrades to the
+ * fully readable static page instead of to nothing.
+ *
+ * `prefers-reduced-motion` is honoured below, and is the first such handling
+ * in this codebase — there was none before this ticket.
+ * ------------------------------------------------------------------ */
+
+/* A single block: section headings, panels, the financing image. */
+[data-reveal],
+/* A row or grid whose DIRECT CHILDREN arrive one after another. Staggering
+   via nth-child rather than a per-child inline style means the component can
+   BE the existing grid element instead of wrapping it in another div, so no
+   layout changes and no extra DOM. */
+[data-reveal-group] > * {
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.motion-ready [data-reveal='out'],
+.motion-ready [data-reveal-group='out'] > * {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+/* Keep in step with STAGGER_STEP_MS / STAGGER_MAX_STEPS in lib/motion.ts.
+   The cap is why this stops at the 7th child: past it every item shares the
+   final delay, so a 12-card grid still finishes arriving inside 480ms. */
+[data-reveal-group] > *:nth-child(2) { transition-delay: 80ms; }
+[data-reveal-group] > *:nth-child(3) { transition-delay: 160ms; }
+[data-reveal-group] > *:nth-child(4) { transition-delay: 240ms; }
+[data-reveal-group] > *:nth-child(5) { transition-delay: 320ms; }
+[data-reveal-group] > *:nth-child(6) { transition-delay: 400ms; }
+[data-reveal-group] > *:nth-child(n + 7) { transition-delay: 480ms; }
+
+/* Above-the-fold entrance for the hero. Pure CSS, no observer: the hero is
+   in view on load, and a keyframe animation runs without JavaScript at all,
+   so `both` fill is safe here in a way `[data-reveal]` would not be. */
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-enter-up {
+  animation: enter-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Not merely faster — OFF. Vestibular triggers are movement, not duration,
+     so a 1ms slide is still a slide. Everything lands in its final state. */
+  .motion-ready [data-reveal='out'],
+  .motion-ready [data-reveal-group='out'] > * {
+    opacity: 1;
+    transform: none;
+  }
+
+  [data-reveal],
+  [data-reveal-group] > * {
+    transition: none;
+  }
+
+  .animate-enter-up,
+  .animate-rise {
+    animation: none;
+  }
+}
