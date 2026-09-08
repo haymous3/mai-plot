@@ -10,7 +10,6 @@ import {
   FileTextIcon,
   HouseIcon,
   LockIcon,
-  SearchIcon,
   ShieldIcon,
   TreeIcon,
   TrendingUpIcon,
@@ -568,20 +567,24 @@ export function FinalCta() {
               Join over 9,600 Nigerians who have found, financed, and secured their dream properties
               through Maihomme.
             </p>
+            {/* Matches the hero pair (SCRUM-204). Both bands are the page's
+                call to act, so offering different actions in each was asking
+                the same visitor two different questions. Hrefs and icons moved
+                with the labels, same as the hero. */}
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
               <Link
-                href="/dashboard"
+                href="/login"
                 className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
               >
-                <SearchIcon className="h-5 w-5" />
-                Explore Properties
+                <LockIcon className="h-5 w-5" />
+                Sign In
               </Link>
               <Link
                 href="/register"
                 className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
               >
-                <HouseIcon className="h-5 w-5" />
-                List Your Property
+                <ArrowRightIcon className="h-5 w-5" />
+                Sign Up
               </Link>
             </div>
           </div>
