@@ -6,6 +6,7 @@ handlers never touch SQLAlchemy directly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -384,6 +385,51 @@ class ListingRepository:
             ),
             {"id": listing_id, "status": status},
         )
+
+    async def set_status_guarded(
+        self,
+        listing_id: UUID,
+        *,
+        new_status: str,
+        expected: Sequence[str],
+        rejection_reason: str | None = None,
+    ) -> bool:
+        """Move a listing to `new_status` only if it is currently in `expected`.
+
+        True when it applied, False when the row was gone or had already moved.
+        The guarded UPDATE is the arbiter, so two admins acting at once produce
+        one change and one conflict — and the loser writes no audit row and
+        triggers no re-index (SCRUM-215).
+
+        `rejection_reason` is written for a take-down and CLEARED otherwise: a
+        listing that is paused and resumed must not keep showing the seller the
+        reason it was taken down last month.
+        """
+        # RETURNING rather than rowcount: the typed Result has no rowcount, and
+        # a returned row is the same evidence without reaching for the cursor.
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE property_listings
+                    SET status = :new_status,
+                        rejection_reason = :reason,
+                        updated_at = NOW()
+                    WHERE id = :id
+                      AND deleted_at IS NULL
+                      AND status = ANY(:expected)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "id": listing_id,
+                    "new_status": new_status,
+                    "reason": rejection_reason,
+                    "expected": list(expected),
+                },
+            )
+        ).first()
+        return row is not None
 
     async def get_detail(self, listing_id: UUID) -> DetailRow | None:
         """A single non-deleted listing with lat/lng extracted from PostGIS."""

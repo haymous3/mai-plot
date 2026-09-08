@@ -6,8 +6,9 @@ separate:
   * the **review queue** (SCRUM-24) — pending listings and the approve/reject
     decision that publishes or rejects them; and
   * the **listing console** (SCRUM-215) — browse every listing in any status,
-    and open one. The queue answers "what needs deciding"; the console answers
-    "show me this property", which nothing could do before.
+    open one, and act on a LIVE one (pause, take down, expire). The queue
+    answers "what needs deciding"; the console answers "show me this property"
+    and "get it off the marketplace", neither of which was possible before.
 
 All endpoints depend on require_admin (admin JWT + IP allowlist, §4).
 """
@@ -21,12 +22,15 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
+    get_admin_listing_actions_service,
     get_admin_listings_service,
     get_admin_queue_service,
     get_listing_review_service,
     require_admin,
 )
 from app.schemas.listing import (
+    AdminListingActionRequest,
+    AdminListingActionResponse,
     AdminListingDetailResponse,
     AdminListingsResponse,
     AdminQueueResponse,
@@ -34,6 +38,13 @@ from app.schemas.listing import (
     ReviewResponse,
 )
 from app.security import CurrentUser
+from app.services.admin_listing_actions import (
+    AdminListingActionsService,
+    ListingStatusConflict,
+    ListingUnderOffer,
+    ReasonRequired,
+)
+from app.services.admin_listing_actions import ListingNotFound as ActionListingNotFound
 from app.services.admin_listings import AdminListingsService
 from app.services.admin_listings import ListingNotFound as AdminListingNotFound
 from app.services.admin_queue import AdminQueueService
@@ -120,6 +131,62 @@ async def listing_detail(
         return _error(
             status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found with that id."
         )
+
+
+@router.post("/{listing_id}/status", response_model=None)
+async def apply_listing_action(
+    listing_id: UUID,
+    body: AdminListingActionRequest,
+    request: Request,
+    admin: Annotated[CurrentUser, Depends(require_admin)],
+    service: Annotated[AdminListingActionsService, Depends(get_admin_listing_actions_service)],
+) -> AdminListingActionResponse | JSONResponse:
+    """Act on a live listing: pause, unpause, take down, or expire it.
+
+    Admin control used to stop at the front door — approve or reject once, while
+    the listing was `pending_review`, and nothing afterwards. A listing that
+    turned out to be fraudulent or duplicated stayed on the marketplace.
+
+    `take_down` requires a reason; it lands in `rejection_reason`, which the
+    seller is already shown for a rejected listing, so no new seller-facing
+    concept is introduced.
+
+    ⚠️ **`under_offer` is refused with its own code.** That is the §8 rule-4
+    lock: an offer has been accepted and there may be escrow behind it, so the
+    remedy is to resolve the transaction, not to retry the listing action.
+    """
+    try:
+        new_status = await service.apply(
+            listing_id=listing_id,
+            action=body.action,
+            reason=body.reason,
+            admin=admin,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except ActionListingNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND, "LISTING_NOT_FOUND", "No listing found with that id."
+        )
+    except ReasonRequired:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "REASON_REQUIRED",
+            "Taking a listing down requires a reason — the seller is shown it.",
+        )
+    except ListingUnderOffer:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "LISTING_UNDER_OFFER",
+            "This listing is held by an accepted offer. Resolve the transaction first.",
+        )
+    except ListingStatusConflict as exc:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "LISTING_STATUS_CONFLICT",
+            f"A listing in status '{exc.current}' cannot be {exc.action.replace('_', ' ')}d.",
+        )
+    return AdminListingActionResponse(listing_id=listing_id, status=new_status)
 
 
 @router.post("/{listing_id}/review", response_model=ReviewResponse)

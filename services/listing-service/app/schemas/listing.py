@@ -84,6 +84,9 @@ class MediaUploadResponse(BaseModel):
 # ---- Admin review (SCRUM-22 status management) ----------------------------
 
 ReviewAction = Literal["approve", "reject"]
+# Admin power over a LIVE listing (SCRUM-215), distinct from the one-time
+# review decision above.
+AdminListingAction = Literal["pause", "unpause", "take_down", "expire"]
 
 
 class AdminQueueItem(BaseModel):
@@ -338,3 +341,22 @@ class AdminListingDetailResponse(BaseModel):
     updated_at: datetime
     media: list[MediaItem]
     history: list[AdminAuditEntry]
+
+
+class AdminListingActionRequest(BaseModel):
+    """Apply an action to a live listing (SCRUM-215).
+
+    `reason` is required for `take_down` (enforced in the service so the error
+    code is specific) and ignored otherwise. The seller is shown this text — it
+    lands in `rejection_reason`, the same field a rejected listing uses.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: AdminListingAction
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class AdminListingActionResponse(BaseModel):
+    listing_id: UUID
+    status: str
