@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -74,7 +75,14 @@ class _Realtors(Protocol):
 
 
 class _Notifier(Protocol):
-    async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None: ...
+    async def assigned(
+        self,
+        *,
+        realtor_id: UUID,
+        inspection_id: UUID,
+        property_title: str | None = None,
+        proposed_date: datetime | None = None,
+    ) -> None: ...
 
 
 class ReassignmentService:
@@ -142,7 +150,10 @@ class ReassignmentService:
                 reassigned += 1
                 # Best-effort alert; a broker outage must not undo the reassign.
                 await self._notifier.assigned(
-                    realtor_id=next_realtor, inspection_id=item.inspection_id
+                    realtor_id=next_realtor,
+                    inspection_id=item.inspection_id,
+                    property_title=item.property_title,
+                    proposed_date=item.proposed_date,
                 )
         return ReassignmentResult(
             scanned=len(lapsed) + placed.scanned,
@@ -186,6 +197,9 @@ class ReassignmentService:
                 # Best-effort, as above: a broker outage must not undo a placement
                 # that is already committed to the row.
                 await self._notifier.assigned(
-                    realtor_id=realtor_id, inspection_id=item.inspection_id
+                    realtor_id=realtor_id,
+                    inspection_id=item.inspection_id,
+                    property_title=item.property_title,
+                    proposed_date=item.proposed_date,
                 )
         return _PlacementCount(scanned=len(rows), placed=placed)

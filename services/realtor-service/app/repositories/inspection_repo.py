@@ -184,6 +184,11 @@ class LapsedInspection:
     realtor_id: UUID | None
     listing_id: UUID
     declined_realtor_ids: list[UUID]
+    # SCRUM-213: what the assignment alert needs to be readable on its own. The
+    # title is LEFT JOINed, so a vanished listing leaves it None and the message
+    # simply omits the property rather than the sweep skipping the row.
+    proposed_date: datetime
+    property_title: str | None
 
 
 class InspectionRepository:
@@ -471,9 +476,11 @@ class InspectionRepository:
             await self._session.execute(
                 text(
                     """
-                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids
+                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids,
+                           i.proposed_date, pl.title AS property_title
                     FROM inspections i
                     JOIN transactions t ON t.id = i.transaction_id
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
                     WHERE i.status = 'unassigned'
                     ORDER BY i.created_at ASC
                     LIMIT :limit
@@ -488,6 +495,8 @@ class InspectionRepository:
                 realtor_id=r.realtor_id,
                 listing_id=r.listing_id,
                 declined_realtor_ids=list(r.declined_realtor_ids or []),
+                proposed_date=r.proposed_date,
+                property_title=r.property_title,
             )
             for r in rows
         ]
@@ -671,9 +680,11 @@ class InspectionRepository:
             await self._session.execute(
                 text(
                     """
-                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids
+                    SELECT i.id, i.realtor_id, t.listing_id, i.declined_realtor_ids,
+                           i.proposed_date, pl.title AS property_title
                     FROM inspections i
                     JOIN transactions t ON t.id = i.transaction_id
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
                     WHERE i.status = 'pending' AND i.assignment_expires_at <= NOW()
                     ORDER BY i.assignment_expires_at ASC
                     LIMIT :limit
@@ -688,6 +699,8 @@ class InspectionRepository:
                 realtor_id=r.realtor_id,
                 listing_id=r.listing_id,
                 declined_realtor_ids=list(r.declined_realtor_ids or []),
+                proposed_date=r.proposed_date,
+                property_title=r.property_title,
             )
             for r in rows
         ]

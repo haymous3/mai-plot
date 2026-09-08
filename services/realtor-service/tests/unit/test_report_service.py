@@ -119,6 +119,7 @@ def _txn(inspection: InspectionRow) -> TransactionInfo:
         buyer_id=_BUYER.user_id,
         seller_id=_SELLER_ID,
         stage="inspection_scheduled",
+        property_title="4-bed duplex, Lekki",
     )
 
 
