@@ -18,6 +18,7 @@ import {
   WarehouseIcon,
 } from './icons';
 import { TestimonialCarousel } from './testimonials';
+import { FINANCING_IMAGE } from '@/lib/placeholder-images';
 
 /**
  * Static sections of the public landing page — Figma nodes 627:9 through
@@ -453,9 +454,10 @@ export function Stats() {
  * The 50% badge overhangs the photo's bottom-right corner by 24px on both
  * axes, mirroring the hero's overlay composition.
  *
- * ⚠️ NO IMAGE ASSET EXISTS. Like the hero, this renders a real listing photo
- * from the feed rather than a stock file; with no feed it degrades to a flat
- * tint. The badge is static because 50% is a business rule (CLAUDE.md §8.5).
+ * Renders a real listing photo from the feed when there is one, and falls back
+ * to decorative stock photography rather than a flat tint (SCRUM-203) — the
+ * panel was rendering as an empty box on the live site. The badge is static
+ * because 50% is a business rule (CLAUDE.md §8.5).
  */
 export function Financing({ photo, alt }: { photo?: string | null; alt?: string }) {
   const points = [
@@ -469,10 +471,15 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
       <Shell className="grid items-center gap-y-16 lg:grid-cols-2 lg:gap-x-16">
         <div className="relative">
           <div className="h-[416px] w-full overflow-hidden rounded-2xl bg-emerald-deep/10 shadow-lg">
-            {photo && (
-              // eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL
-              <img src={photo} alt={alt ?? ''} className="h-full w-full object-cover" />
-            )}
+            {/* Decorative, like the hero: this illustrates financing, not a
+                specific property, so the stand-in carries no marker. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL */}
+            <img
+              src={photo ?? FINANCING_IMAGE}
+              alt={photo ? (alt ?? '') : ''}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="absolute bottom-4 right-4 w-[130px] rounded-2xl bg-emerald-deep px-5 py-5 text-white shadow-xl lg:-bottom-6 lg:-right-6">
             <p className="text-[28px] font-bold leading-9">50%</p>

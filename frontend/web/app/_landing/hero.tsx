@@ -5,6 +5,7 @@ import { Nav } from './nav';
 import { Shell } from './sections';
 import type { FeedItem } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { HERO_IMAGE } from '@/lib/placeholder-images';
 
 /**
  * Landing hero — SCRUM-178.
@@ -107,14 +108,15 @@ export function Hero({ featured }: { featured?: FeedItem }) {
 
         <div className="relative">
           <div className="h-[520px] w-full overflow-hidden rounded-2xl bg-white/10">
-            {photo && (
-              // eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL
-              <img
-                src={photo}
-                alt={featured?.title ?? ''}
-                className="h-full w-full object-cover"
-              />
-            )}
+            {/* Decorative framing, so a stand-in needs no marker — unlike a
+                listing card, this panel does not claim to be a property for
+                sale. A real featured photo still takes precedence. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- listing media is an external CDN URL */}
+            <img
+              src={photo ?? HERO_IMAGE}
+              alt={photo ? (featured?.title ?? '') : ''}
+              className="h-full w-full object-cover"
+            />
           </div>
 
           <div className="absolute right-4 top-4 w-[140px] rounded-2xl bg-emerald-deep px-4 py-3.5 shadow-xl lg:-right-6 lg:-top-3">
