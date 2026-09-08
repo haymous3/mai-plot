@@ -407,6 +407,30 @@ export interface AssignableRealtorsResponse {
   items: AssignableRealtor[];
 }
 
+/** One live deal an admin can schedule an inspection on
+ * (GET /admin/transactions, SCRUM-213).
+ *
+ * Parties are 8-char references, never names or contacts: identity is masked
+ * from everyone but the counterparties (§10), and the decision this screen
+ * supports is about the PROPERTY, not the people. */
+export interface AdminDeal {
+  id: string;
+  listing_id: string;
+  stage: string;
+  agreed_price_kobo: number;
+  created_at: string;
+  property_title: string | null;
+  lga: string | null;
+  state: string | null;
+  buyer_ref: string;
+  seller_ref: string;
+}
+
+export interface AdminDealsResponse {
+  items: AdminDeal[];
+  pagination: { page: number; page_size: number; total: number };
+}
+
 /** One row of the admin user list (GET /admin/users, SCRUM-209).
  *
  * ⚠️ No BVN/NIN, not even booleans — the list is a browse surface over the whole

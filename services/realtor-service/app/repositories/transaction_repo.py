@@ -22,6 +22,11 @@ class TransactionInfo:
     buyer_id: UUID
     seller_id: UUID
     stage: str
+    # SCRUM-213: the listing's title, so an assignment alert can name the
+    # property instead of telling a realtor to log in and find out where the job
+    # is. LEFT JOIN, so a missing or soft-deleted listing leaves it None rather
+    # than making the transaction unreadable.
+    property_title: str | None
 
 
 class TransactionRepository:
@@ -32,8 +37,11 @@ class TransactionRepository:
         row = (
             await self._session.execute(
                 text(
-                    "SELECT id, listing_id, buyer_id, seller_id, stage "
-                    "FROM transactions WHERE id = :id"
+                    "SELECT t.id, t.listing_id, t.buyer_id, t.seller_id, t.stage, "
+                    "pl.title AS property_title "
+                    "FROM transactions t "
+                    "LEFT JOIN property_listings pl ON pl.id = t.listing_id "
+                    "WHERE t.id = :id"
                 ),
                 {"id": transaction_id},
             )
@@ -46,4 +54,5 @@ class TransactionRepository:
             buyer_id=row.buyer_id,
             seller_id=row.seller_id,
             stage=row.stage,
+            property_title=row.property_title,
         )

@@ -142,7 +142,12 @@ class InspectionService:
             proposed_date=proposed_date,
             assignment_window_hours=self._window_hours,
         )
-        await self._notify_assigned(realtor_id=realtor_id, inspection_id=inspection.id)
+        await self._notify_assigned(
+            realtor_id=realtor_id,
+            inspection_id=inspection.id,
+            property_title=txn.property_title,
+            proposed_date=inspection.proposed_date,
+        )
         logger.info(
             "inspection.assigned",
             extra={"inspection_id": str(inspection.id), "transaction_id": str(transaction_id)},
@@ -246,11 +251,23 @@ class InspectionService:
                     extra={"inspection_id": str(inspection_id), "error": str(exc)},
                 )
 
-    async def _notify_assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
+    async def _notify_assigned(
+        self,
+        *,
+        realtor_id: UUID,
+        inspection_id: UUID,
+        property_title: str | None,
+        proposed_date: datetime,
+    ) -> None:
         """Best-effort + defensive — a notification failure never fails the
         assignment (the inspection row is the source of truth)."""
         try:
-            await self._notifier.assigned(realtor_id=realtor_id, inspection_id=inspection_id)
+            await self._notifier.assigned(
+                realtor_id=realtor_id,
+                inspection_id=inspection_id,
+                property_title=property_title,
+                proposed_date=proposed_date,
+            )
         except Exception as exc:  # noqa: BLE001 — never fail the assignment
             logger.warning(
                 "inspection.notify_failed",

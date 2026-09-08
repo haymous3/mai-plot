@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.routes.admin_deals import router as admin_deals_router
 from app.routes.escrow import router as escrow_router
 from app.routes.internal import router as internal_router
 from app.routes.offers import router as offers_router
@@ -30,6 +31,7 @@ app.include_router(transactions_router)
 app.include_router(offers_router)
 app.include_router(sales_router)
 app.include_router(escrow_router)
+app.include_router(admin_deals_router)
 app.include_router(payments_router)
 app.include_router(payout_accounts_router)
 app.include_router(wallet_router)

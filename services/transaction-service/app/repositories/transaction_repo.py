@@ -76,6 +76,28 @@ class CommissionGate:
 
 
 @dataclass(frozen=True)
+class AdminDealRow:
+    """One deal for the admin inspection picker (SCRUM-213).
+
+    Identity-light on purpose: an admin choosing which deal to send a realtor to
+    needs the PROPERTY and the stage, not who the parties are — and §10 keeps
+    buyer and seller masked from everyone but each other. Short refs are enough
+    to tell two deals on the same listing apart.
+    """
+
+    id: UUID
+    listing_id: UUID
+    stage: str
+    agreed_price_kobo: int
+    created_at: datetime
+    property_title: str | None
+    lga: str | None
+    state: str | None
+    buyer_id: UUID
+    seller_id: UUID
+
+
+@dataclass(frozen=True)
 class DealRow:
     """A buyer's deal for the "Your Active Deals" list (SCRUM-95). Title +
     sale_type join from property_listings (owned by listing-service)."""
@@ -270,6 +292,78 @@ class TransactionRepository:
             agreed_price_kobo=row.agreed_price_kobo,
             platform_fee_kobo=row.platform_fee_kobo,
         )
+
+    async def list_for_admin(
+        self, *, search: str | None = None, page: int = 1, page_size: int = 25
+    ) -> tuple[list[AdminDealRow], int]:
+        """Deals for the admin inspection picker (SCRUM-213), newest first.
+
+        `search` matches the property title, case-insensitively, or a transaction
+        id typed in full — an admin working from a support conversation has one
+        or the other, never a listing id.
+
+        Terminal deals are excluded: an inspection on a completed or cancelled
+        deal is never the intent, and offering them would fill the picker with
+        history. LEFT JOIN on the listing so a deal whose listing row is missing
+        still appears rather than vanishing from the only screen that could act
+        on it.
+        """
+        where = ["t.stage NOT IN ('completed', 'cancelled')"]
+        params: dict[str, object] = {"limit": page_size, "offset": (page - 1) * page_size}
+        if search:
+            term = search.strip()
+            where.append("(LOWER(pl.title) LIKE :term OR CAST(t.id AS text) = :exact)")
+            params["term"] = f"%{term.lower()}%"
+            params["exact"] = term
+        clause = " AND ".join(where)
+
+        total = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM transactions t
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE {clause}
+                    """
+                ),
+                params,
+            )
+        ).scalar_one()
+
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT t.id, t.listing_id, t.stage, t.agreed_price_kobo, t.created_at,
+                           t.buyer_id, t.seller_id,
+                           pl.title AS property_title, pl.lga, pl.state
+                    FROM transactions t
+                    LEFT JOIN property_listings pl ON pl.id = t.listing_id
+                    WHERE {clause}
+                    ORDER BY t.created_at DESC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                params,
+            )
+        ).all()
+        items = [
+            AdminDealRow(
+                id=r.id,
+                listing_id=r.listing_id,
+                stage=r.stage,
+                agreed_price_kobo=r.agreed_price_kobo,
+                created_at=r.created_at,
+                property_title=r.property_title,
+                lga=r.lga,
+                state=r.state,
+                buyer_id=r.buyer_id,
+                seller_id=r.seller_id,
+            )
+            for r in rows
+        ]
+        return items, int(total)
 
     async def list_for_buyer(self, buyer_id: UUID) -> list[DealRow]:
         """A buyer's deals (transactions), newest first, with the property title

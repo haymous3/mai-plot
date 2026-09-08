@@ -15,6 +15,9 @@ const TABS = [
   // Requests sits BEFORE reports: a request waiting for a realtor is work the
   // platform owes someone, where a report is work already done (SCRUM-208).
   { key: 'requests', label: 'Inspection requests', href: '/admin/inspections/requests' },
+  // Scheduling is an admin-initiated action rather than a queue, so it follows
+  // the queue it complements (SCRUM-213).
+  { key: 'schedule', label: 'Schedule inspection', href: '/admin/inspections/schedule' },
   { key: 'reports', label: 'Inspection reports', href: '/admin/inspections/reports' },
   { key: 'loans', label: 'Loans', href: '/admin/loans' },
   { key: 'audit', label: 'Audit log', href: '/admin/audit' },
@@ -36,6 +39,7 @@ export function AdminNav({
     | 'documents'
     | 'realtors'
     | 'requests'
+    | 'schedule'
     | 'reports'
     | 'loans'
     | 'audit'

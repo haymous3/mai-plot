@@ -161,7 +161,15 @@ class AdminInspectionService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        await self._notify(realtor_id=realtor_id, inspection_id=inspection_id)
+        # The title is a nicety on an alert that must go out regardless, so a
+        # missing transaction row costs the property name, not the notification.
+        txn = await self._transactions.get(placed.transaction_id)
+        await self._notify(
+            realtor_id=realtor_id,
+            inspection_id=inspection_id,
+            property_title=txn.property_title if txn else None,
+            proposed_date=placed.proposed_date,
+        )
         return placed
 
     async def create(
@@ -217,7 +225,12 @@ class AdminInspectionService:
             user_agent=user_agent,
             extra={"transaction_id": str(transaction_id), "auto_assigned": auto_assigned},
         )
-        await self._notify(realtor_id=realtor_id, inspection_id=inspection.id)
+        await self._notify(
+            realtor_id=realtor_id,
+            inspection_id=inspection.id,
+            property_title=txn.property_title,
+            proposed_date=inspection.proposed_date,
+        )
         return PlacementResult(
             inspection=inspection, realtor_id=realtor_id, auto_assigned=auto_assigned
         )
@@ -261,12 +274,24 @@ class AdminInspectionService:
             extra={"inspection_id": str(inspection_id), "realtor_id": str(realtor_id)},
         )
 
-    async def _notify(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
+    async def _notify(
+        self,
+        *,
+        realtor_id: UUID,
+        inspection_id: UUID,
+        property_title: str | None,
+        proposed_date: datetime,
+    ) -> None:
         """Best-effort: a broker outage must never undo a committed placement. The
         realtor still finds the assignment on their dashboard — the notification
         only makes it timely."""
         try:
-            await self._notifier.assigned(realtor_id=realtor_id, inspection_id=inspection_id)
+            await self._notifier.assigned(
+                realtor_id=realtor_id,
+                inspection_id=inspection_id,
+                property_title=property_title,
+                proposed_date=proposed_date,
+            )
         except Exception as exc:  # noqa: BLE001 — never fail a committed placement
             logger.warning(
                 "inspection.place.notify_failed",

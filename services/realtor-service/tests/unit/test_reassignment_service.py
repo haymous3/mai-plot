@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -69,9 +70,18 @@ class _StubRealtors:
 class _StubNotifier:
     def __init__(self) -> None:
         self.notified: list[UUID] = []
+        self.bodies: list[tuple[str | None, datetime | None]] = []
 
-    async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
+    async def assigned(
+        self,
+        *,
+        realtor_id: UUID,
+        inspection_id: UUID,
+        property_title: str | None = None,
+        proposed_date: datetime | None = None,
+    ) -> None:
         self.notified.append(realtor_id)
+        self.bodies.append((property_title, proposed_date))
 
 
 def _unassigned_row(*, declined: list[UUID] | None = None) -> LapsedInspection:
@@ -81,6 +91,8 @@ def _unassigned_row(*, declined: list[UUID] | None = None) -> LapsedInspection:
         realtor_id=None,
         listing_id=uuid4(),
         declined_realtor_ids=declined or [],
+        proposed_date=datetime.now(UTC) + timedelta(days=2),
+        property_title="4-bed duplex, Lekki",
     )
 
 
@@ -90,6 +102,8 @@ def _lapsed(*, realtor_id: UUID, declined: list[UUID] | None = None) -> LapsedIn
         realtor_id=realtor_id,
         listing_id=uuid4(),
         declined_realtor_ids=declined or [],
+        proposed_date=datetime.now(UTC) + timedelta(days=2),
+        property_title="4-bed duplex, Lekki",
     )
 
 

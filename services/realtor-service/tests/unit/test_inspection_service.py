@@ -39,6 +39,7 @@ def _txn() -> TransactionInfo:
         buyer_id=_BUYER.user_id,
         seller_id=uuid4(),
         stage="inspection_scheduled",
+        property_title="4-bed duplex, Lekki",
     )
 
 
@@ -151,10 +152,19 @@ class _StubInspectionRepo:
 class _RecordingNotifier:
     def __init__(self) -> None:
         self.assigned_to: list[UUID] = []
+        self.assigned_context: list[tuple[str | None, datetime | None]] = []
         self.time_proposed_to: list[UUID] = []
 
-    async def assigned(self, *, realtor_id: UUID, inspection_id: UUID) -> None:
+    async def assigned(
+        self,
+        *,
+        realtor_id: UUID,
+        inspection_id: UUID,
+        property_title: str | None = None,
+        proposed_date: datetime | None = None,
+    ) -> None:
         self.assigned_to.append(realtor_id)
+        self.assigned_context.append((property_title, proposed_date))
 
     async def time_proposed(self, *, user_id: UUID, inspection_id: UUID) -> None:
         self.time_proposed_to.append(user_id)
