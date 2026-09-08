@@ -36,9 +36,9 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
           ? 'This console is restricted to admin accounts.'
           : `Could not load this account (${result.code}).`;
     return (
-      <div className="min-h-screen bg-bone">
+      <div className="flex min-h-screen bg-bone">
         <AdminNav active="users" count={null} />
-        <main className="mx-auto max-w-3xl px-6 py-12">
+        <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">
           <BackLink />
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-6 py-10 text-center text-sm text-amber-800">
             {message}
@@ -52,10 +52,10 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
   const name = user.full_name?.trim() || 'Name not provided';
 
   return (
-    <div className="min-h-screen bg-bone">
+    <div className="flex min-h-screen bg-bone">
       <AdminNav active="users" count={null} />
 
-      <main className="mx-auto max-w-3xl px-6 py-12">
+      <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">
         <BackLink />
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-3">

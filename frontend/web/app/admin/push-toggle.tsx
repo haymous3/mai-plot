@@ -76,7 +76,7 @@ export function PushToggle() {
     return (
       <span
         title="Notifications are blocked in your browser settings."
-        className="text-xs text-ink-300"
+        className="px-4 text-xs text-ink-300"
       >
         Notifications blocked
       </span>
@@ -86,19 +86,25 @@ export function PushToggle() {
   const on = status === 'on';
   const busy = status === 'busy';
   return (
-    <div className="flex items-center gap-2">
-      {error && <span className="text-xs text-red-600">{error}</span>}
+    // Full-width rail row rather than the bordered pill it was in the old top
+    // bar (SCRUM-217); the label sits on one line at 256px.
+    <div className="flex flex-col gap-1">
+      {error && <span className="px-4 text-xs text-red-600">{error}</span>}
       <button
+        type="button"
         onClick={on ? disable : enable}
         disabled={busy}
         aria-pressed={on}
-        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+        className={`flex h-11 w-full items-center gap-3 rounded-xl px-4 text-sm font-semibold transition disabled:opacity-50 ${
           on
-            ? 'border-ink-300/60 text-ink-500 hover:border-ink-500 hover:text-ink-900'
-            : 'border-emerald-deep/40 text-emerald-deep hover:border-emerald-deep'
+            ? 'text-ink-500 hover:bg-surface-muted'
+            : 'text-emerald-deep hover:bg-emerald-deep/5'
         }`}
       >
-        {busy ? '…' : on ? 'Disable notifications' : 'Enable notifications'}
+        <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center">
+          {on ? '🔕' : '🔔'}
+        </span>
+        {busy ? '…' : on ? 'Mute browser alerts' : 'Enable browser alerts'}
       </button>
     </div>
   );

@@ -43,9 +43,9 @@ export default async function AdminListingDetailPage({ params }: { params: { id:
 
   if (!result.ok) {
     return (
-      <div className="min-h-screen bg-bone">
+      <div className="flex min-h-screen bg-bone">
         <AdminNav active="listings" count={null} />
-        <main className="mx-auto max-w-4xl px-6 py-12">
+        <main className="mx-auto min-w-0 flex-1 max-w-4xl px-6 py-12">
           <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
             {result.status === 403
               ? 'This console is restricted to admin reviewers.'
@@ -60,10 +60,10 @@ export default async function AdminListingDetailPage({ params }: { params: { id:
   const photos = listing.media.filter((m) => m.type === 'photo');
 
   return (
-    <div className="min-h-screen bg-bone">
+    <div className="flex min-h-screen bg-bone">
       <AdminNav active="listings" count={null} />
 
-      <main className="mx-auto max-w-4xl px-6 py-12">
+      <main className="mx-auto min-w-0 flex-1 max-w-4xl px-6 py-12">
         <Link href="/admin/listings" className="text-sm text-ink-500 underline">
           ← All listings
         </Link>

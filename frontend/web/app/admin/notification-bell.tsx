@@ -95,7 +95,7 @@ export function NotificationBell() {
         <>
           {/* Click-away backdrop. */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-ink-300/30 bg-white shadow-xl">
+          <div className="absolute left-0 z-20 mt-2 w-80 overflow-hidden rounded-xl border border-ink-300/30 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-ink-300/20 px-4 py-3">
               <h2 className="font-display text-sm text-ink-900">Notifications</h2>
               {unread > 0 && (

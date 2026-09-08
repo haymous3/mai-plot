@@ -33,10 +33,10 @@ export default async function AdminLoansPage({ searchParams }: { searchParams: S
   const items = result.ok ? result.data.items : [];
 
   return (
-    <div className="min-h-screen bg-bone">
+    <div className="flex min-h-screen bg-bone">
       <AdminNav active="loans" count={result.ok ? items.length : null} />
 
-      <main className="mx-auto max-w-6xl px-6 py-12">
+      <main className="mx-auto min-w-0 flex-1 max-w-6xl px-6 py-12">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-300">Loans</p>
         <h1 className="mt-2 font-display text-3xl text-ink-900">Active loans &amp; repayment status</h1>
         <p className="mt-3 max-w-prose text-sm text-ink-500">
