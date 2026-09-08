@@ -20,11 +20,18 @@ export function SignOutButton() {
   }
 
   return (
+    // Matches the sidebar nav row (44px, 12px radius, 16px inset) in
+    // `status-danger`, the same treatment as the seller and realtor rails
+    // (SCRUM-217). It was a small bordered pill while the nav was a top bar.
     <button
+      type="button"
       onClick={signOut}
       disabled={busy}
-      className="rounded-md border border-ink-300/50 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-ink-500 hover:text-ink-900 disabled:opacity-60"
+      className="flex h-11 w-full items-center gap-3 rounded-xl px-4 text-sm font-semibold text-status-danger transition hover:bg-status-danger/5 disabled:opacity-60"
     >
+      <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center">
+        ⎋
+      </span>
       {busy ? 'Signing out…' : 'Sign out'}
     </button>
   );
