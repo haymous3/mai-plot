@@ -94,7 +94,15 @@ export function QueueTable({
                 <tr key={item.id} className="border-b border-ink-300/20 last:border-0">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-ink-900">{item.title}</span>
+                      {/* SCRUM-215: the decision used to be made from this row
+                          alone — no photo, no description, no address. The
+                          title now opens the listing. */}
+                      <Link
+                        href={`/admin/listings/${item.id}`}
+                        className="font-medium text-ink-900 underline-offset-2 hover:underline"
+                      >
+                        {item.title}
+                      </Link>
                       {poa && (
                         <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                           PoA

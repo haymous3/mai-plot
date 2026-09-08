@@ -8,7 +8,11 @@ const TABS = [
   // Users first: it is the only tab that is a lookup rather than a queue, and
   // it is where an admin starts when somebody contacts support (SCRUM-209).
   { key: 'users', label: 'Users', href: '/admin/users' },
-  { key: 'listings', label: 'Listings', href: '/admin/listings/queue' },
+  // Browse before review: "find me this property" is the question an admin
+  // arrives with, and until SCRUM-215 nothing could answer it — the review
+  // queue only ever showed listings awaiting a first decision.
+  { key: 'listings', label: 'Listings', href: '/admin/listings' },
+  { key: 'listing-review', label: 'Listing review', href: '/admin/listings/queue' },
   { key: 'poa', label: 'Power of Attorney', href: '/admin/poa/queue' },
   { key: 'documents', label: 'Documents', href: '/admin/documents/queue' },
   { key: 'realtors', label: 'Realtors', href: '/admin/realtors/queue' },
@@ -35,6 +39,7 @@ export function AdminNav({
   active:
     | 'users'
     | 'listings'
+    | 'listing-review'
     | 'poa'
     | 'documents'
     | 'realtors'
