@@ -166,6 +166,71 @@ class OwnerStatus:
 
 
 @dataclass(frozen=True)
+class AdminListingRow:
+    """One listing in the admin browse list (SCRUM-215).
+
+    Wider than QueueRow because this list is not a review decision — it is the
+    admin's only way to FIND a property. The review queue gets away with five
+    columns because every row in it is about to be approved or rejected; a
+    browse list has to be recognisable, which is what the cover photo, the
+    document rollup and the counters are for.
+    """
+
+    id: UUID
+    seller_id: UUID
+    title: str
+    property_type: str
+    state: str
+    lga: str
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    status: str
+    doc_verification_status: str
+    view_count: int
+    interest_count: int
+    expires_at: datetime | None
+    created_at: datetime
+    seller_authority_type: str | None
+    cover_photo_url: str | None
+
+
+@dataclass(frozen=True)
+class AdminListingDetailRow:
+    """The full listing for the admin detail page (SCRUM-215).
+
+    Deliberately NOT the public `DetailRow`: that one is Redis-cached under
+    `listing:{id}` and bumps the view counter, so serving an admin from it would
+    both inflate a seller's view count and let an admin read a stale body. It
+    also omits `rejection_reason`, `doc_verification_status` and `updated_at` —
+    exactly the fields an admin is looking for.
+    """
+
+    id: UUID
+    seller_id: UUID
+    title: str
+    property_type: str
+    description: str | None
+    address_text: str
+    lat: float
+    lng: float
+    state: str
+    lga: str
+    size_sqm: Decimal | None
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    status: str
+    doc_verification_status: str
+    rejection_reason: str | None
+    view_count: int
+    interest_count: int
+    expires_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class QueueRow:
     id: UUID
     seller_id: UUID
@@ -419,6 +484,150 @@ class ListingRepository:
         ).scalar_one()
         assert isinstance(media_id, UUID)
         return media_id
+
+    async def list_for_admin(
+        self,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        authority_type: str | None = None,
+        state: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[AdminListingRow], int]:
+        """Every listing an admin can see, newest first (SCRUM-215).
+
+        `status` omitted means EVERY status — that is the whole point. The review
+        queue is pinned to `pending_review`, so the moment an admin approved a
+        listing it left the only admin screen that ever showed it: 13 of the 14
+        listings on staging were unreachable from the admin side entirely.
+
+        Soft-deleted rows stay hidden. A deleted listing is not one an admin acts
+        on, and surfacing it here would make `deleted_at` look advisory.
+
+        `search` matches the title or the address, case-insensitively — an admin
+        working from a support conversation has a street or a name, not an id.
+        """
+        where = ["pl.deleted_at IS NULL"]
+        params: dict[str, object] = {"limit": page_size, "offset": (page - 1) * page_size}
+        if status:
+            where.append("pl.status = :status")
+            params["status"] = status
+        if authority_type:
+            where.append("u.seller_authority_type = :authority_type")
+            params["authority_type"] = authority_type
+        if state:
+            where.append("pl.state = :state")
+            params["state"] = state
+        if search:
+            where.append("(LOWER(pl.title) LIKE :term OR LOWER(pl.address_text) LIKE :term)")
+            params["term"] = f"%{search.strip().lower()}%"
+        where_sql = " AND ".join(where)
+
+        total = (
+            await self._session.execute(
+                text(
+                    f"SELECT COUNT(*) FROM property_listings pl "
+                    f"LEFT JOIN users u ON u.id = pl.seller_id WHERE {where_sql}"
+                ),
+                params,
+            )
+        ).scalar_one()
+
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT pl.id, pl.seller_id, pl.title, pl.property_type, pl.state, pl.lga,
+                           pl.asking_price_kobo, pl.sale_type, pl.urgency_tag, pl.status,
+                           pl.doc_verification_status, pl.view_count, pl.interest_count,
+                           pl.expires_at, pl.created_at,
+                           u.seller_authority_type, m.cdn_url AS cover_photo_url
+                    FROM property_listings pl
+                    LEFT JOIN users u ON u.id = pl.seller_id
+                    LEFT JOIN LATERAL (
+                        SELECT cdn_url FROM listing_media
+                        WHERE listing_id = pl.id AND media_type = 'photo'
+                        ORDER BY sort_order LIMIT 1
+                    ) m ON TRUE
+                    WHERE {where_sql}
+                    ORDER BY pl.created_at DESC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                params,
+            )
+        ).all()
+        items = [
+            AdminListingRow(
+                id=r.id,
+                seller_id=r.seller_id,
+                title=r.title,
+                property_type=r.property_type,
+                state=r.state,
+                lga=r.lga,
+                asking_price_kobo=r.asking_price_kobo,
+                sale_type=r.sale_type,
+                urgency_tag=r.urgency_tag,
+                status=r.status,
+                doc_verification_status=r.doc_verification_status,
+                view_count=r.view_count,
+                interest_count=r.interest_count,
+                expires_at=r.expires_at,
+                created_at=r.created_at,
+                seller_authority_type=r.seller_authority_type,
+                cover_photo_url=r.cover_photo_url,
+            )
+            for r in rows
+        ]
+        return items, int(total)
+
+    async def get_admin_detail(self, listing_id: UUID) -> AdminListingDetailRow | None:
+        """The full listing for an admin: uncached, and without bumping views."""
+        row = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT pl.id, pl.seller_id, pl.title, pl.property_type, pl.description,
+                           pl.address_text,
+                           ST_Y(pl.location::geometry) AS lat, ST_X(pl.location::geometry) AS lng,
+                           pl.state, pl.lga, pl.size_sqm, pl.asking_price_kobo, pl.sale_type,
+                           pl.urgency_tag, pl.status, pl.doc_verification_status,
+                           pl.rejection_reason, pl.view_count, pl.interest_count,
+                           pl.expires_at, pl.created_at, pl.updated_at
+                    FROM property_listings pl
+                    WHERE pl.id = :id AND pl.deleted_at IS NULL
+                    """
+                ),
+                {"id": listing_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return AdminListingDetailRow(
+            id=row.id,
+            seller_id=row.seller_id,
+            title=row.title,
+            property_type=row.property_type,
+            description=row.description,
+            address_text=row.address_text,
+            lat=row.lat,
+            lng=row.lng,
+            state=row.state,
+            lga=row.lga,
+            size_sqm=row.size_sqm,
+            asking_price_kobo=row.asking_price_kobo,
+            sale_type=row.sale_type,
+            urgency_tag=row.urgency_tag,
+            status=row.status,
+            doc_verification_status=row.doc_verification_status,
+            rejection_reason=row.rejection_reason,
+            view_count=row.view_count,
+            interest_count=row.interest_count,
+            expires_at=row.expires_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def list_review_queue(
         self,
