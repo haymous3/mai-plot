@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -254,3 +254,87 @@ class ErrorResponse(BaseModel):
     error_code: str
     message: str
     details: dict[str, object] = Field(default_factory=dict)
+
+
+class AdminListingItem(BaseModel):
+    """One row of the admin listing browser (GET /admin/listings, SCRUM-215).
+
+    Not the same shape as `AdminQueueItem`: the queue is a decision surface where
+    every row is about to be approved or rejected, so five columns suffice. This
+    is a FIND surface — an admin looking for a property needs to recognise it,
+    which is what the photo, the type, the document rollup and the counters do.
+    """
+
+    id: UUID
+    seller_id: UUID
+    title: str
+    property_type: str
+    state: str
+    lga: str
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    status: str
+    doc_verification_status: str
+    view_count: int
+    interest_count: int
+    expires_at: datetime | None
+    created_at: datetime
+    seller_authority_type: str | None
+    cover_photo_url: str | None
+
+
+class AdminListingsResponse(BaseModel):
+    data: list[AdminListingItem]
+    pagination: Pagination
+
+
+class AdminAuditEntry(BaseModel):
+    """One recorded state change on the listing.
+
+    `actor_id` is a bare id, not a name: resolving it would mean a second
+    cross-service read on every history row, and the admin user console
+    (SCRUM-209) is one click away with the whole person behind it.
+    """
+
+    id: UUID
+    actor_id: UUID | None
+    actor_role: str | None
+    action: str
+    old_value: dict[str, Any] | None
+    new_value: dict[str, Any] | None
+    created_at: datetime
+
+
+class AdminListingDetailResponse(BaseModel):
+    """The full listing for an admin (GET /admin/listings/{id}, SCRUM-215).
+
+    Built to answer "should this be on the marketplace?" — which, before this,
+    an admin was expected to decide from a table row carrying the title, the
+    LGA and the price. No photo, no description, no address, no documents.
+    """
+
+    id: UUID
+    seller: SellerBlock
+    title: str
+    property_type: str
+    description: str | None
+    address_text: str
+    location: GeoPoint
+    state: str
+    lga: str
+    size_sqm: float | None
+    asking_price_kobo: int
+    sale_type: str
+    urgency_tag: str | None
+    status: str
+    doc_verification_status: str
+    # Set when the listing was rejected or taken down; the seller sees this text.
+    rejection_reason: str | None
+    view_count: int
+    interest_count: int
+    expires_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    media: list[MediaItem]
+    history: list[AdminAuditEntry]

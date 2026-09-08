@@ -22,6 +22,7 @@ from app.repositories.listing_repo import ListingRepository
 from app.repositories.saved_repo import SavedListingRepository
 from app.repositories.seller_repo import SellerRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
+from app.services.admin_listings import AdminListingsService
 from app.services.admin_queue import AdminQueueService
 from app.services.express_interest import ExpressInterestService
 from app.services.index_dispatch import IndexDispatcher, build_index_dispatcher
@@ -167,6 +168,14 @@ def get_admin_queue_service(
     listings: Annotated[ListingRepository, Depends(_listing_repo)],
 ) -> AdminQueueService:
     return AdminQueueService(listings=listings)
+
+
+def get_admin_listings_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    sellers: Annotated[SellerRepository, Depends(_seller_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+) -> AdminListingsService:
+    return AdminListingsService(listings=listings, sellers=sellers, audit=audit)
 
 
 def get_listing_review_service(
