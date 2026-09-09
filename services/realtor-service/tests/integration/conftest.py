@@ -141,6 +141,11 @@ def seed_realtor(db_engine: Engine) -> Callable[..., UUID]:
                         "name": full_name,
                     },
                 )
+            # esvarbon_number and government_id_s3_key are both set here on
+            # purpose: this seeds a realtor as they existed BEFORE SCRUM-207 and
+            # SCRUM-219 stopped collecting each. Neither is written by onboarding
+            # any more, and keeping populated rows in the fixtures is what proves
+            # the read paths still cope with them.
             conn.execute(
                 text(
                     "INSERT INTO realtors (id, esvarbon_number, coverage_states, "

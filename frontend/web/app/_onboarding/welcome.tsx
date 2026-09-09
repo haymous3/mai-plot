@@ -46,7 +46,7 @@ const COPY: Record<string, { profile: string; subtitle: string }> = {
     // export's copy would leave them expecting a working dashboard and, next
     // session, unable to explain why their email no longer signs them in.
     subtitle:
-      'We’re reviewing your credentials. We’ll email your Maihomme registration number once you’re verified — that’s what you’ll sign in with.',
+      'We’re reviewing your application. We’ll email your Maihomme registration number once you’re verified — that’s what you’ll sign in with.',
   },
 };
 

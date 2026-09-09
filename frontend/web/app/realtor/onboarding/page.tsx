@@ -10,7 +10,7 @@ import { sessionBackendGet } from '@/lib/session-api';
 export const metadata: Metadata = { title: 'Complete your profile · Maihomme Realtor' };
 
 /**
- * Realtor onboarding / credentials submission (SCRUM-156).
+ * Realtor onboarding / profile submission (SCRUM-156).
  *
  * SCRUM-185 put this step back in the post-verification funnel, so most
  * realtors now complete it at /onboarding. This route remains for the ones who

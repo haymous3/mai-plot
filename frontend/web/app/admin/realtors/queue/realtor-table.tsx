@@ -36,7 +36,6 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<RealtorQueueItem | null>(null);
-  const [viewing, setViewing] = useState<RealtorQueueItem | null>(null);
   // The number just issued, kept on screen after the row disappears from the
   // queue. The realtor is emailed it, but if that never arrives the reviewer is
   // the only one who can pass it on — and nothing else in the admin surface can
@@ -138,12 +137,6 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <button
-                        onClick={() => setViewing(item)}
-                        className="rounded-md border border-ink-300/60 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:border-ink-500"
-                      >
-                        View ID
-                      </button>
-                      <button
                         onClick={() => review(item.id, 'approve')}
                         disabled={busy}
                         className="rounded-md bg-emerald-deep px-3 py-1.5 text-xs font-medium text-bone transition hover:bg-emerald-accent disabled:opacity-50"
@@ -169,8 +162,6 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
         </table>
       </div>
 
-      {viewing && <DocumentModal item={viewing} onClose={() => setViewing(null)} />}
-
       {rejecting && (
         <RejectModal
           item={rejecting}
@@ -180,37 +171,6 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
         />
       )}
     </>
-  );
-}
-
-function DocumentModal({ item, onClose }: { item: RealtorQueueItem; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-20 flex items-center justify-center bg-ink-900/50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-ink-300/30 px-5 py-3">
-          <h2 className="font-display text-lg text-ink-900">
-            Government ID — {applicantName(item) ?? 'applicant'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-ink-500 transition hover:text-ink-900"
-          >
-            Close
-          </button>
-        </div>
-        <iframe
-          title="Government ID document"
-          src={`/api/admin/realtors/${item.id}/government-id`}
-          className="h-full w-full flex-1 bg-ink-300/10"
-        />
-      </div>
-    </div>
   );
 }
 
@@ -234,7 +194,7 @@ function RejectModal({
         <h2 className="font-display text-xl text-ink-900">Reject application</h2>
         <p className="mt-1 text-sm text-ink-500">
           The applicant is notified of the reason and can re-apply. A reason is required — use it to
-          request anything missing (e.g. a clearer ID).
+          say what needs to change (e.g. the coverage areas they claim).
         </p>
         <textarea
           autoFocus

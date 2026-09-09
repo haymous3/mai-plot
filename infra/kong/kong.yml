@@ -555,7 +555,9 @@ services:
     url: http://realtor-service:8000
     routes:
       # Admin realtor approval queue (SCRUM-62) — realtor-service mounts this
-      # at prefix="/admin/realtors": queue, review, government-id.
+      # at prefix="/admin/realtors": queue, review. (The government-id endpoint
+      # was removed by SCRUM-219; this is a PREFIX route, so dropping a sub-path
+      # needs no change here.)
       - name: admin-realtors
         paths:
           - /admin/realtors

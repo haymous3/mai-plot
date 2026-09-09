@@ -1,20 +1,26 @@
 """/realtors routes — realtor onboarding (SCRUM-71).
 
-POST /realtors lets a realtor-role user complete their profile (coverage +
-government-ID upload); GET /realtors/me returns the caller's profile.
-Registration is multipart (the ID file + form fields).
+POST /realtors lets a realtor-role user complete their profile (coverage areas);
+GET /realtors/me returns the caller's profile. Registration is still multipart —
+`coverage_states` is a repeated form field — so the frontend's FormData post is
+unchanged even though no file rides along any more.
 
 ⚠️ SCRUM-207 REMOVED the `esvarbon_number` form field. A realtor is no longer
 asked for an ESVARBON licence: the admin verifies the application and the
 platform issues a Maihomme registration number instead. The column survives for
 the realtors who supplied one before, so GET /realtors/me still returns it.
+
+⚠️ SCRUM-219 REMOVED the government-ID / "Professional Credentials" upload.
+Onboarding collects no document at all now, so there is no `file` param, and the
+503 STORAGE_UNAVAILABLE this route used to return went with it — nothing here
+touches object storage.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import JSONResponse
 
 from app.dependencies import (
@@ -33,7 +39,6 @@ from app.services.realtor_onboarding import (
     AlreadyRegistered,
     NotRealtorRole,
     RealtorOnboardingService,
-    StorageUnavailable,
 )
 
 router = APIRouter(prefix="/realtors", tags=["realtors"])
@@ -56,7 +61,6 @@ async def register_realtor(
     request: Request,
     caller: CurrentUserDep,
     service: OnboardingDep,
-    file: UploadFile,
     coverage_states: Annotated[list[str], Form()],
     years_of_experience: Annotated[int | None, Form()] = None,
     coverage_lgas: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI Form default
@@ -66,7 +70,6 @@ async def register_realtor(
     """Complete the caller's realtor profile → approval_status 'pending'. An
     optional base_lat/base_lng records the realtor's location for auto-assignment
     (SCRUM-72)."""
-    data = await file.read()
     try:
         realtor = await service.register(
             user_id=caller.user_id,
@@ -74,7 +77,6 @@ async def register_realtor(
             years_of_experience=years_of_experience,
             coverage_states=coverage_states,
             coverage_lgas=coverage_lgas,
-            id_document=data,
             base_lat=base_lat,
             base_lng=base_lng,
             ip_address=request.client.host if request.client else None,
@@ -90,12 +92,6 @@ async def register_realtor(
         )
     except InvalidCredential as exc:
         return _error(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.code, str(exc))
-    except StorageUnavailable:
-        return _error(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "STORAGE_UNAVAILABLE",
-            "Document storage is temporarily unavailable. Please retry.",
-        )
     return RealtorProfile.from_row(realtor)
 
 

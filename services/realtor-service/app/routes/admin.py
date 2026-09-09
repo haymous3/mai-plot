@@ -1,8 +1,14 @@
-"""/admin/realtors routes — credential review (SCRUM-71).
+"""/admin/realtors routes — application review (SCRUM-71).
 
 The admin/legal team reviews pending realtor applications: approve, reject (with
 reason), or suspend an approved realtor. Gated by require_admin (admin JWT + IP
 allowlist).
+
+⚠️ SCRUM-219 REMOVED `GET /admin/realtors/{id}/government-id`, the pre-signed-URL
+endpoint the queue's "View ID" modal read. Onboarding no longer collects a
+document, so the reviewer decides on the applicant's name, coverage and
+application date. Kong needs no change: `admin-realtors` is a PREFIX route, so
+dropping a sub-path removes nothing it declares.
 """
 
 from __future__ import annotations
@@ -15,21 +21,18 @@ from fastapi.responses import JSONResponse
 
 from app.adapters.registration_number import RegistrationNumberUnavailable
 from app.dependencies import (
-    get_credential_service,
     get_realtor_repo,
     get_review_service,
     require_admin,
 )
 from app.repositories.realtor_repo import RealtorRepository
 from app.schemas.realtor import (
-    GovernmentIdUrlResponse,
     RealtorQueueItem,
     RealtorQueueResponse,
     RealtorReviewRequest,
     RealtorReviewResponse,
 )
 from app.security import CurrentUser, parse_bearer
-from app.services.credential_service import CredentialAccessService, CredentialUnavailable
 from app.services.realtor_review import (
     RealtorNotActionable,
     RealtorNotFound,
@@ -42,7 +45,6 @@ router = APIRouter(prefix="/admin/realtors", tags=["admin-realtors"])
 AdminDep = Annotated[CurrentUser, Depends(require_admin)]
 ReviewServiceDep = Annotated[RealtorReviewService, Depends(get_review_service)]
 RealtorRepoDep = Annotated[RealtorRepository, Depends(get_realtor_repo)]
-CredentialServiceDep = Annotated[CredentialAccessService, Depends(get_credential_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -115,30 +117,3 @@ async def review_realtor(
         approval_status=result.approval_status,
         registration_number=result.registration_number,
     )
-
-
-@router.get("/{user_id}/government-id", response_model=None)
-async def government_id(
-    user_id: UUID,
-    request: Request,
-    admin: AdminDep,
-    service: CredentialServiceDep,
-) -> GovernmentIdUrlResponse | JSONResponse:
-    """A short-TTL pre-signed URL for the realtor's uploaded ID document, so the
-    reviewer can view the credential. Access is recorded in audit_log."""
-    try:
-        url = await service.government_id_url(
-            user_id=user_id,
-            viewer=admin,
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
-    except RealtorNotFound:
-        return _error(status.HTTP_404_NOT_FOUND, "REALTOR_NOT_FOUND", "No such realtor.")
-    except CredentialUnavailable:
-        return _error(
-            status.HTTP_404_NOT_FOUND,
-            "CREDENTIAL_UNAVAILABLE",
-            "This realtor has no ID document on file.",
-        )
-    return GovernmentIdUrlResponse(url=url)

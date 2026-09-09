@@ -1,6 +1,6 @@
 """Response/request schemas for realtor onboarding + review (SCRUM-71).
 
-Registration is multipart (the government-ID file + form fields), so its inputs
+Registration is multipart (repeated `coverage_states` form fields), so its inputs
 are Form() params on the route, not a JSON body model.
 """
 
@@ -81,9 +81,3 @@ class RealtorQueueItem(BaseModel):
 
 class RealtorQueueResponse(BaseModel):
     items: list[RealtorQueueItem]
-
-
-class GovernmentIdUrlResponse(BaseModel):
-    """A short-TTL pre-signed URL for a realtor's uploaded ID document."""
-
-    url: str

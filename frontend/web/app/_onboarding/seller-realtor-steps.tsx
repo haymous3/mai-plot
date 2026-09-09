@@ -20,20 +20,19 @@ import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
  */
 
 /**
- * The two uploads on these screens have DIFFERENT server rules, so they get
- * different accept lists (SCRUM-199). One shared constant was letting a seller
- * pick a PNG that auth-service always rejected.
+ * There is ONE upload left on these screens: the seller's Power of Attorney.
+ * auth-service `poa.detect_document_type()` sniffs the bytes and takes PDF or
+ * JPEG only — no PNG, which is why this is its own narrow accept list rather
+ * than a shared one (SCRUM-199: a shared constant was letting a seller pick a
+ * PNG the server always rejected).
  *
- *   PoA         auth-service `poa.detect_document_type()` — PDF or JPEG only
- *   credentials realtor-service `credentials.py`          — PDF, JPEG or PNG
- *
- * Both cap at 10MB (`poa_max_upload_bytes`, `gov_id_max_upload_bytes`).
+ * ⚠️ The realtor "Professional Credentials" upload that used to sit alongside it
+ * was removed by SCRUM-219 — realtor onboarding collects no document now — so
+ * `CREDENTIAL_ACCEPT` and realtor-service's ID-document validation went with it.
  */
 const POA_ACCEPT = 'application/pdf,image/jpeg';
-const CREDENTIAL_ACCEPT = 'application/pdf,image/png,image/jpeg';
 /**
- * 10MB, matching BOTH servers: auth-service `poa_max_upload_bytes` and
- * realtor-service `gov_id_max_upload_bytes`.
+ * 10MB, matching auth-service `poa_max_upload_bytes`.
  *
  * ⚠️ Was 5MB until SCRUM-201. SCRUM-199 corrected the visible subtitles to
  * "max 10MB" but missed this check, so the screens promised 10 and the button
@@ -242,13 +241,18 @@ export function SellerVerificationStep({
 }
 
 /**
- * Realtor Profile — credentials document and coverage area.
+ * Realtor Profile — identity and coverage area.
  *
  * ⚠️ NO ESVARBON FIELD (SCRUM-207). It used to be here — added back against the
  * export because `POST /realtors` required it — and the product has now removed
  * the licence number entirely: an admin verifies the application and the
  * platform issues a Maihomme registration number, emailed to the realtor, which
  * they sign in with. The screen finally matches the export it was drawn from.
+ *
+ * ⚠️ NO PROFESSIONAL CREDENTIALS UPLOAD (SCRUM-219). The document this step used
+ * to require is no longer collected anywhere: `POST /realtors` takes no file, and
+ * the admin queue's "View ID" modal was removed in the same change. The step is
+ * now NIN + address + coverage.
  *
  * Coverage is a comma-separated free-text field, matching the export's
  * "e.g., Lagos, Lekki, Victoria Island", and is split into the repeated
@@ -264,28 +268,24 @@ export function RealtorProfileStep({
 }) {
   // ⚠️ NIN was collected nowhere in the realtor flow before SCRUM-201: this
   // step asked for an ESVARBON licence, coverage and credentials, and the
-  // platform-wide identity check was simply absent for the role.
+  // platform-wide identity check was simply absent for the role. Since
+  // SCRUM-219 dropped the credentials document, the NIN is the only identity
+  // evidence this step gathers.
   const [nin, setNin] = useState('');
   const [address, setAddress] = useState('');
   const [coverage, setCoverage] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ninOk = /^\d{11}$/.test(nin.trim());
-  const canSubmit =
-    ninOk && address.trim().length > 0 && coverage.trim() !== '' && file !== null;
+  const canSubmit = ninOk && address.trim().length > 0 && coverage.trim() !== '';
 
   async function submit() {
-    if (file && file.size > MAX_BYTES) {
-      setError(`That document is larger than ${MAX_MB}MB. Please upload a smaller file.`);
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
-      // Identity first, then the professional credentials: a realtor row that
-      // exists without a verified NIN is the state SCRUM-201 set out to remove.
+      // Identity first, then the profile: a realtor row that exists without a
+      // verified NIN is the state SCRUM-201 set out to remove.
       const ninResp = await fetch('/api/auth/nin', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -315,21 +315,23 @@ export function RealtorProfileStep({
         return;
       }
 
+      // Still multipart: `coverage_states` is a REPEATED field, which is what
+      // FastAPI's `list[str] = Form()` reads. It carried the credentials file
+      // until SCRUM-219; the shape is unchanged without it.
       const form = new FormData();
       coverage
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
         .forEach((state) => form.append('coverage_states', state));
-      if (file) form.append('file', file);
 
       const resp = await fetch('/api/realtor/onboarding', { method: 'POST', body: form });
       if (!resp.ok) {
         const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
         setError(
-          (b.error_code ?? '').startsWith('CREDENTIAL')
-            ? `That document was not accepted. Use a PDF, PNG or JPG under ${MAX_MB}MB.`
-            : 'Could not submit your credentials. Please retry.',
+          b.error_code === 'COVERAGE_REQUIRED'
+            ? 'Name at least one area you cover.'
+            : 'Could not submit your profile. Please retry.',
         );
         return;
       }
@@ -372,21 +374,6 @@ export function RealtorProfileStep({
             value={address}
             onChange={setAddress}
             placeholder="e.g., 12 Admiralty Way, Lekki Phase 1, Lagos"
-            disabled={busy}
-          />
-        </div>
-
-        <div className="mt-9">
-          <FieldLabel htmlFor="credentials" required>
-            Professional Credentials
-          </FieldLabel>
-          <UploadDropzone
-            id="credentials"
-            file={file}
-            onFile={setFile}
-            title="Upload credentials"
-            subtitle="PDF, PNG, or JPG (max 10MB)"
-            accept={CREDENTIAL_ACCEPT}
             disabled={busy}
           />
         </div>

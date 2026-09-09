@@ -22,7 +22,6 @@ from app.repositories.transaction_repo import TransactionRepository
 from app.security import AdminAccessError, AuthenticationError, CurrentUser, parse_bearer
 from app.services.admin_inspection_service import AdminInspectionService
 from app.services.commission_service import CommissionService
-from app.services.credential_service import CredentialAccessService
 from app.services.inspection_notifier import InspectionNotifier, build_inspection_notifier
 from app.services.inspection_service import InspectionService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
@@ -78,17 +77,11 @@ def get_realtor_notifier(settings: SettingsDep) -> RealtorNotifier:
 
 
 def get_onboarding_service(
-    settings: SettingsDep,
     realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
     audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
-    storage: Annotated[DocumentStorage, Depends(get_storage)],
 ) -> RealtorOnboardingService:
-    return RealtorOnboardingService(
-        realtors=realtors,
-        audit=audit,
-        storage=storage,
-        max_upload_bytes=settings.gov_id_max_upload_bytes,
-    )
+    """No storage dependency since SCRUM-219 — onboarding uploads nothing."""
+    return RealtorOnboardingService(realtors=realtors, audit=audit)
 
 
 def get_registration_number_issuer(settings: SettingsDep) -> RegistrationNumberIssuer:
@@ -128,20 +121,6 @@ def get_realtor_repo(
     repo: Annotated[RealtorRepository, Depends(_realtor_repo)],
 ) -> RealtorRepository:
     return repo
-
-
-def get_credential_service(
-    settings: SettingsDep,
-    realtors: Annotated[RealtorRepository, Depends(_realtor_repo)],
-    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
-    storage: Annotated[DocumentStorage, Depends(get_storage)],
-) -> CredentialAccessService:
-    return CredentialAccessService(
-        realtors=realtors,
-        audit=audit,
-        storage=storage,
-        presign_ttl_seconds=settings.gov_id_presign_ttl_seconds,
-    )
 
 
 def _inspection_repo(session: SessionDep) -> InspectionRepository:
