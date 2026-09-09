@@ -128,11 +128,22 @@ class Settings(BaseSettings):
     bvn_timeout_seconds: float = 5.0
     bvn_pepper: str = "change-me-to-a-long-random-bvn-pepper"
 
-    # NIN verification (SCRUM-47). Same shape as BVN. nin_pepper is a
-    # separate server secret for the deterministic nin_lookup dedup column.
+    # NIN verification — Ninja (SCRUM-218, replaced the unimplemented generic
+    # bureau adapter from SCRUM-47). nin_pepper is a separate server secret for
+    # the deterministic nin_lookup dedup column and is unrelated to the vendor.
+    #
+    # The default URL is the SANDBOX, which never touches the live registry and
+    # costs nothing. Production must set the live host explicitly — a wrong
+    # value here fails loudly (502) rather than quietly verifying nobody.
+    #
+    # Only the SECRET key is read. Ninja also issues a public key, but that is
+    # solely for exchanging a 5-minute browser session token, and the NIN never
+    # goes near the browser's own credentials here: the frontend posts to our
+    # own route and auth-service makes the server-to-server call. Same reasoning
+    # that keeps us off Twilio Verify (§4) — the lifecycle stays server-side.
     nin_use_fake: bool = True
-    nin_api_url: str = ""
-    nin_api_key: str = ""
+    nin_api_url: str = "https://api.sandbox.ninja.boucloud.io"
+    nin_verification_secret_key: str = ""
     nin_timeout_seconds: float = 5.0
     nin_pepper: str = "change-me-to-a-long-random-nin-pepper"
 

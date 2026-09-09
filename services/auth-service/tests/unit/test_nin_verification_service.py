@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -27,14 +28,23 @@ class _StubUserRepo:
         authority: UserAuthority | None = _OWNER,
         has_nin: bool = False,
         lookup_owner: UUID | None = None,
+        full_name: str | None = "",
     ) -> None:
         self._authority = authority
         self._has_nin = has_nin
         self._lookup_owner = lookup_owner
+        self._full_name = full_name
         self.set_calls: list[dict[str, object]] = []
 
     async def get_authority(self, user_id: UUID) -> UserAuthority | None:
         return self._authority
+
+    async def get_account(self, user_id: UUID) -> SimpleNamespace | None:
+        """Only `full_name` is read by the service; a None stands for an
+        account row the service cannot see at all."""
+        if self._full_name is None:
+            return None
+        return SimpleNamespace(full_name=self._full_name)
 
     async def has_nin(self, user_id: UUID) -> bool:
         return self._has_nin
@@ -162,3 +172,79 @@ async def test_not_verified_result_does_not_store() -> None:
     result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
     assert result.status == "failed"
     assert repo.set_calls == []
+
+
+@pytest.mark.asyncio
+async def test_review_outcome_is_pending_and_does_not_store() -> None:
+    """Ninja's `review` must not advance the account. It is a partial name
+    match, so nothing is persisted and the caller can retry."""
+    repo = _StubUserRepo()
+    verifier = InMemoryNinVerifier(
+        outcome=NinVerificationOutcome(status="pending", mismatches=("last_name",))
+    )
+    result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+    assert result.status == "pending"
+    assert result.mismatches == ("last_name",)
+    assert repo.set_calls == []
+
+
+@pytest.mark.asyncio
+async def test_account_name_is_split_and_sent_to_the_registry() -> None:
+    repo = _StubUserRepo(full_name="Adaeze Ngozi Okonkwo")
+    verifier = InMemoryNinVerifier()
+    await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    # First and last token; the middle name is deliberately not guessed at.
+    assert verifier.last_first_name == "Adaeze"
+    assert verifier.last_last_name == "Okonkwo"
+
+
+@pytest.mark.asyncio
+async def test_account_name_wins_over_the_submitted_one() -> None:
+    """The name on the account is the one the deal documents carry, so a
+    request cannot talk the match into scoring against something else."""
+    repo = _StubUserRepo(full_name="Adaeze Okonkwo")
+    verifier = InMemoryNinVerifier()
+    await _service(repo, verifier).verify(
+        user_id=uuid4(), nin=_NIN, first_name="Someone", last_name="Else"
+    )
+
+    assert verifier.last_first_name == "Adaeze"
+    assert verifier.last_last_name == "Okonkwo"
+
+
+@pytest.mark.asyncio
+async def test_submitted_name_is_used_when_the_account_has_none() -> None:
+    """Onboarding verifies the NIN BEFORE it writes the profile, so full_name
+    is still the empty-string default at this point."""
+    repo = _StubUserRepo(full_name="")
+    verifier = InMemoryNinVerifier()
+    await _service(repo, verifier).verify(
+        user_id=uuid4(), nin=_NIN, first_name="  Adaeze ", last_name=" Okonkwo "
+    )
+
+    assert verifier.last_first_name == "Adaeze"
+    assert verifier.last_last_name == "Okonkwo"
+
+
+@pytest.mark.asyncio
+async def test_no_name_anywhere_degrades_to_an_existence_check() -> None:
+    """A phone+OTP account that never filled in a profile has no name at all.
+    That is not an error — the NIN is still checked for existence."""
+    repo = _StubUserRepo(full_name="")
+    verifier = InMemoryNinVerifier()
+    result = await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    assert verifier.last_first_name is None
+    assert verifier.last_last_name is None
+    assert result.status == "verified"
+
+
+@pytest.mark.asyncio
+async def test_single_token_name_sends_only_a_first_name() -> None:
+    repo = _StubUserRepo(full_name="Okonkwo")
+    verifier = InMemoryNinVerifier()
+    await _service(repo, verifier).verify(user_id=uuid4(), nin=_NIN)
+
+    assert verifier.last_first_name == "Okonkwo"
+    assert verifier.last_last_name is None
