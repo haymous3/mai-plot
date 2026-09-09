@@ -11,7 +11,8 @@ import { RealtorProfileStep } from '../../_onboarding/seller-realtor-steps';
  * SCRUM-185 folded this into the shared `RealtorProfileStep` rather than
  * keeping a second implementation of the same form. There used to be two,
  * and they had already drifted: this one asked for ESVARBON, the in-funnel
- * design did not. One component means one answer.
+ * design did not. One component means one answer — which is also why removing
+ * the credentials upload (SCRUM-219) was a single edit rather than two.
  */
 export function RealtorOnboardingForm() {
   const router = useRouter();

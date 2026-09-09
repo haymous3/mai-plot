@@ -1,16 +1,24 @@
 """Realtor onboarding (SCRUM-71).
 
-A user registered as a realtor completes their profile: coverage areas, years of
-experience, and a government-ID upload (private S3). The profile lands at
-approval_status='pending' for legal/admin review. A realtor who was previously
-rejected may re-submit; an already-pending/approved/suspended realtor cannot
-re-register (409).
+A user registered as a realtor completes their profile: coverage areas and years
+of experience. The profile lands at approval_status='pending' for legal/admin
+review. A realtor who was previously rejected may re-submit; an
+already-pending/approved/suspended realtor cannot re-register (409).
 
 ⚠️ NO ESVARBON LICENCE (SCRUM-207). It used to be collected and format-validated
 here; the product now verifies a realtor through admin review and issues them a
 Maihomme registration number at approval instead. `realtors.esvarbon_number`
 stays nullable and keeps the values realtors supplied before — this writes NULL
 into it rather than dropping the column, so no historic licence is destroyed.
+
+⚠️ NO GOVERNMENT-ID DOCUMENT (SCRUM-219). The upload the onboarding screen
+called "Professional Credentials" is no longer collected, so this service never
+touches object storage: no sniffing, no size check, no S3 put, and no
+StorageUnavailable. `realtors.government_id_s3_key` is treated the same way as
+esvarbon_number — left alone on both create and re-submit, so the documents
+already uploaded keep their keys and no S3 object is orphaned by a re-apply.
+The admin review that used to read those documents is gone too, so nothing in
+the product resolves a key any more.
 """
 
 from __future__ import annotations
@@ -18,16 +26,9 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from app.adapters.document_storage import DocumentStorage, DocumentStorageError
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.realtor_repo import RealtorRepository, RealtorRow
-from app.services.credentials import (
-    InvalidCredential,
-    build_id_object_key,
-    detect_id_document_type,
-    validate_coordinates,
-    validate_id_size,
-)
+from app.services.credentials import InvalidCredential, validate_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -46,23 +47,15 @@ class AlreadyRegistered(RealtorOnboardingError):
     """A non-rejected realtor profile already exists for this user."""
 
 
-class StorageUnavailable(RealtorOnboardingError):
-    """The ID document storage backend failed — retryable."""
-
-
 class RealtorOnboardingService:
     def __init__(
         self,
         *,
         realtors: RealtorRepository,
         audit: AuditLogRepository,
-        storage: DocumentStorage,
-        max_upload_bytes: int,
     ) -> None:
         self._realtors = realtors
         self._audit = audit
-        self._storage = storage
-        self._max_upload_bytes = max_upload_bytes
 
     async def register(
         self,
@@ -72,7 +65,6 @@ class RealtorOnboardingService:
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
-        id_document: bytes,
         base_lat: float | None = None,
         base_lng: float | None = None,
         ip_address: str | None = None,
@@ -85,22 +77,13 @@ class RealtorOnboardingService:
         if existing is not None and existing.approval_status != _RESUBMITTABLE_STATUS:
             raise AlreadyRegistered()
 
-        # Validate the credentials (InvalidCredential -> 422). Coverage must name
+        # Validate what is left (InvalidCredential -> 422). Coverage must name
         # at least one state — a realtor has to cover somewhere.
         if not coverage_states:
             raise InvalidCredential("COVERAGE_REQUIRED", "At least one coverage state is required.")
         has_location = base_lat is not None and base_lng is not None
         if has_location:
             validate_coordinates(base_lat, base_lng)  # type: ignore[arg-type]
-        validate_id_size(id_document, max_bytes=self._max_upload_bytes)
-        content_type, extension = detect_id_document_type(id_document)
-
-        key = build_id_object_key(user_id, extension=extension)
-        try:
-            stored = await self._storage.put(key=key, data=id_document, content_type=content_type)
-        except DocumentStorageError as exc:
-            logger.error("realtor.register.storage_unavailable", extra={"user_id": str(user_id)})
-            raise StorageUnavailable() from exc
 
         if existing is None:
             realtor = await self._realtors.create(
@@ -108,7 +91,6 @@ class RealtorOnboardingService:
                 years_of_experience=years_of_experience,
                 coverage_states=coverage_states,
                 coverage_lgas=coverage_lgas,
-                government_id_s3_key=key,
             )
         else:  # re-submit after a rejection
             realtor = await self._realtors.resubmit(
@@ -116,7 +98,6 @@ class RealtorOnboardingService:
                 years_of_experience=years_of_experience,
                 coverage_states=coverage_states,
                 coverage_lgas=coverage_lgas,
-                government_id_s3_key=key,
             )
 
         if has_location:
@@ -130,9 +111,7 @@ class RealtorOnboardingService:
             entity_id=user_id,
             new_value={
                 "approval_status": "pending",
-                "id_s3_key": key,
-                "content_type": stored.content_type,
-                "size": stored.size,
+                "coverage_states": coverage_states,
                 "resubmit": existing is not None,
             },
             ip_address=ip_address,

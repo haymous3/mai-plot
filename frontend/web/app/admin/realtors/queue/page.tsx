@@ -28,11 +28,11 @@ export default async function RealtorQueuePage() {
 
       <main className="mx-auto min-w-0 flex-1 max-w-6xl px-6 py-12">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-300">Onboarding</p>
-        <h1 className="mt-2 font-display text-3xl text-ink-900">Realtor credential review</h1>
+        <h1 className="mt-2 font-display text-3xl text-ink-900">Realtor application review</h1>
         <p className="mt-3 max-w-prose text-sm text-ink-500">
-          Review each applicant&apos;s uploaded ID before approving them to take inspections.
-          Approving issues their Maihomme registration number and emails it to them &mdash; it is
-          what they sign in with. A rejected applicant is told why and can re-apply.
+          Approve each applicant before they can take inspections. Approving issues their Maihomme
+          registration number and emails it to them &mdash; it is what they sign in with. A rejected
+          applicant is told why and can re-apply.
         </p>
 
         <div className="mt-8">

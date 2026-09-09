@@ -5,12 +5,14 @@ import { sessionAccessToken } from '@/lib/session-server';
 
 /**
  * Same-origin multipart proxy for realtor onboarding (SCRUM-132). The
- * "Realtor Profile" onboarding step posts its coverage area and credentials
- * document here (no ESVARBON number since SCRUM-207 — the realtor is verified
- * by an admin and issued a registration number instead); we forward the
- * FormData to realtor-service
- * POST /realtors with the session access token (role=realtor JWT). Multipart, so
- * we re-send the parsed FormData (fetch sets the boundary) rather than JSON.
+ * "Realtor Profile" onboarding step posts its coverage area here — no ESVARBON
+ * number since SCRUM-207 (the realtor is verified by an admin and issued a
+ * registration number instead) and no credentials document since SCRUM-219 — and
+ * we forward the FormData to realtor-service POST /realtors with the session
+ * access token (role=realtor JWT). Still multipart even with no file in it:
+ * `coverage_states` is a repeated field, which is what FastAPI's
+ * `list[str] = Form()` reads, so we re-send the parsed FormData (fetch sets the
+ * boundary) rather than JSON.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const token = sessionAccessToken();

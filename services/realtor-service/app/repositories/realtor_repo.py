@@ -63,6 +63,10 @@ class RealtorRow:
     coverage_lgas: list[str]
     completed_deals: int
     approval_status: str
+    # Historic only since SCRUM-219 — NULL for every realtor onboarded from here
+    # on, and nothing in the product resolves it any more. Kept on the row (and
+    # in the column list) so the keys of documents uploaded before the change are
+    # still reachable from the database rather than silently invisible.
     government_id_s3_key: str | None
     approved_by: UUID | None
     approved_at: datetime | None
@@ -97,13 +101,15 @@ class RealtorRepository:
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
-        government_id_s3_key: str,
     ) -> RealtorRow:
         """Insert a fresh realtor profile at approval_status='pending'.
 
         esvarbon_number is left to its NULL default (SCRUM-207). The column is
         UNIQUE, and Postgres allows any number of NULLs in a unique index, so
         every realtor from here on coexists happily.
+
+        government_id_s3_key is left NULL too (SCRUM-219): no document is
+        collected at onboarding any more.
         """
         row = (
             await self._session.execute(
@@ -111,9 +117,9 @@ class RealtorRepository:
                     f"""
                     INSERT INTO realtors
                         (id, years_of_experience, coverage_states,
-                         coverage_lgas, government_id_s3_key, approval_status)
+                         coverage_lgas, approval_status)
                     VALUES
-                        (:id, :years, :states, :lgas, :key, 'pending')
+                        (:id, :years, :states, :lgas, 'pending')
                     RETURNING {_COLUMNS}
                     """
                 ),
@@ -122,7 +128,6 @@ class RealtorRepository:
                     "years": years_of_experience,
                     "states": coverage_states,
                     "lgas": coverage_lgas,
-                    "key": government_id_s3_key,
                 },
             )
         ).one()
@@ -135,15 +140,16 @@ class RealtorRepository:
         years_of_experience: int | None,
         coverage_states: list[str],
         coverage_lgas: list[str],
-        government_id_s3_key: str,
     ) -> RealtorRow:
         """Re-apply after a rejection — overwrite the profile + reset to pending,
         clearing the prior decision.
 
-        Deliberately does NOT clear esvarbon_number. A realtor who supplied one
-        before SCRUM-207 keeps it on a re-submission: the field is no longer
-        collected, and blanking it here would delete a licence number the
-        platform was given, on a path that has nothing to do with it.
+        Deliberately does NOT clear esvarbon_number, and since SCRUM-219 does not
+        touch government_id_s3_key either. A realtor who supplied a licence before
+        SCRUM-207, or a document before SCRUM-219, keeps both on a re-submission:
+        neither field is collected any more, and blanking one here would delete
+        something the platform was given, on a path that has nothing to do with
+        it.
         """
         row = (
             await self._session.execute(
@@ -153,7 +159,6 @@ class RealtorRepository:
                         years_of_experience = :years,
                         coverage_states = :states,
                         coverage_lgas = :lgas,
-                        government_id_s3_key = :key,
                         approval_status = 'pending',
                         approved_by = NULL,
                         approved_at = NULL,
@@ -168,7 +173,6 @@ class RealtorRepository:
                     "years": years_of_experience,
                     "states": coverage_states,
                     "lgas": coverage_lgas,
-                    "key": government_id_s3_key,
                 },
             )
         ).one()

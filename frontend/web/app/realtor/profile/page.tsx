@@ -9,7 +9,7 @@ import type { Account } from '@/lib/settings';
 
 export const metadata: Metadata = { title: 'Profile · Maihomme Realtor' };
 
-/** Realtor Profile (SCRUM-144). A read view of the realtor's own credentials +
+/** Realtor Profile (SCRUM-144). A read view of the realtor's own profile +
  * coverage from the existing GET /realtors/me — coverage area, experience,
  * approval status, completed deals. Read-only; editing coverage would need a
  * backend PATCH (out of scope).
@@ -30,9 +30,9 @@ export default async function RealtorProfilePage() {
   if (!res.ok && res.status === 404) {
     return (
       <main className="mx-auto max-w-3xl px-8 py-8">
-        <RealtorHeader title="Profile" subtitle="Your realtor credentials and coverage" />
+        <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
         <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-10 text-center text-sm text-amber-800">
-          <p className="font-medium">You haven&rsquo;t submitted your credentials yet.</p>
+          <p className="font-medium">You haven&rsquo;t completed your realtor profile yet.</p>
           <Link
             href="/realtor/onboarding"
             className="mt-4 inline-flex rounded-md bg-emerald-deep px-4 py-2.5 text-sm font-medium text-bone transition hover:bg-emerald-accent"
@@ -47,7 +47,7 @@ export default async function RealtorProfilePage() {
   if (!res.ok) {
     return (
       <main className="mx-auto max-w-3xl px-8 py-8">
-        <RealtorHeader title="Profile" subtitle="Your realtor credentials and coverage" />
+        <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
         <div className="mt-8 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
           Could not load your profile. Please retry.
         </div>
@@ -64,7 +64,7 @@ export default async function RealtorProfilePage() {
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-8">
-      <RealtorHeader title="Profile" subtitle="Your realtor credentials and coverage" />
+      <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
 
       <div className="mt-6 space-y-6">
         <section className="rounded-card-sm border border-line bg-surface-card p-6">
@@ -80,7 +80,7 @@ export default async function RealtorProfilePage() {
             {profile.approval_status !== 'approved' && (
               <p className="max-w-xs text-right text-xs text-ink-500">
                 You&rsquo;ll start receiving inspection assignments once our team approves your
-                credentials. We&rsquo;ll email your Maihomme registration number then &mdash;
+                application. We&rsquo;ll email your Maihomme registration number then &mdash;
                 it&rsquo;s what you&rsquo;ll sign in with.
               </p>
             )}

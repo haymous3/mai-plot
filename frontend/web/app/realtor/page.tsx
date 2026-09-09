@@ -50,7 +50,7 @@ export default async function RealtorOverviewPage() {
     sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`),
   ]);
 
-  // /realtors/me 404s until the realtor submits their credentials (SCRUM-156):
+  // /realtors/me 404s until the realtor completes their profile (SCRUM-156):
   // send them to onboarding. Only a definite 404 redirects — a transient 502
   // must not bounce an already-onboarded realtor into onboarding.
   if (!profileRes.ok && profileRes.status === 404) redirect('/realtor/onboarding');
@@ -88,7 +88,7 @@ export default async function RealtorOverviewPage() {
               </p>
               <p className="mt-1">
                 You&apos;ll start receiving inspection assignments once our team approves your
-                credentials. We&apos;ll email your Maihomme registration number then &mdash; it&apos;s
+                application. We&apos;ll email your Maihomme registration number then &mdash; it&apos;s
                 what you&apos;ll sign in with from now on.
               </p>
             </div>
