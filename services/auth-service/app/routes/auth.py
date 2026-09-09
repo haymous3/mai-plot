@@ -763,7 +763,12 @@ async def verify_nin(
     service: Annotated[NinVerificationService, Depends(get_nin_verification_service)],
 ) -> NinVerifyResponse | JSONResponse:
     try:
-        result = await service.verify(user_id=current_user.user_id, nin=body.nin)
+        result = await service.verify(
+            user_id=current_user.user_id,
+            nin=body.nin,
+            first_name=body.first_name,
+            last_name=body.last_name,
+        )
     except InvalidNinError:
         # Never echo the NIN value in the error. Literal 422 sidesteps the
         # status.HTTP_422_* deprecation rename (see main.py).
@@ -785,7 +790,28 @@ async def verify_nin(
             "NIN verification is temporarily unavailable. Please retry.",
         )
 
-    return NinVerifyResponse(message="NIN verification initiated", status=result.status)
+    # ⚠️ A rejected NIN must NOT come back 2xx (SCRUM-218). This used to return
+    # 202 for every outcome, and every frontend checks only `resp.ok` — so with
+    # a real provider wired in, a NIN the registry REJECTED would have walked
+    # straight through onboarding looking verified. That is strictly worse than
+    # having no identity check at all, because it looks like one.
+    #
+    # `pending` (Ninja's `review`) stays 2xx on purpose: a partially matching
+    # name is not a fraud signal, so onboarding continues while the account is
+    # simply not advanced to id_verified.
+    if result.status == "failed":
+        return _error(
+            422,
+            "NIN_NOT_VERIFIED",
+            "That NIN could not be matched to your details.",
+            {"mismatches": list(result.mismatches)},
+        )
+
+    return NinVerifyResponse(
+        message="NIN verification initiated",
+        status=result.status,
+        mismatches=list(result.mismatches),
+    )
 
 
 @router.post("/poa/upload", status_code=status.HTTP_201_CREATED, response_model=PoaUploadResponse)

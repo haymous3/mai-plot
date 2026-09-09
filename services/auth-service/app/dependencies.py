@@ -143,13 +143,14 @@ async def get_bvn_verifier(settings: SettingsDep) -> BvnVerifier:
 
 
 async def get_nin_verifier(settings: SettingsDep) -> NinVerifier:
-    """Process-wide NIN verifier. The factory picks fake vs real bureau."""
+    """Process-wide NIN verifier. The factory picks fake vs the real Ninja
+    client."""
     global _nin_verifier
     if _nin_verifier is None:
         _nin_verifier = build_nin_verifier(
             use_fake=settings.nin_use_fake,
             api_url=settings.nin_api_url,
-            api_key=settings.nin_api_key,
+            secret_key=settings.nin_verification_secret_key,
             timeout_seconds=settings.nin_timeout_seconds,
         )
     return _nin_verifier

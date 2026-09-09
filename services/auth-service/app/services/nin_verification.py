@@ -1,12 +1,13 @@
 """NIN verification orchestration.
 
-Like BVN verification, but gated: per SCRUM-47 only a seller whose
-authority_type is `owner` may verify a NIN (PoA sellers go through the PoA
-document flow; buyers/realtors use BVN). Eligibility is checked from the
-DB because the JWT carries role but not seller_authority_type.
+Ungated since SCRUM-189 — see the note in `verify` for why. Since SCRUM-218 the
+check is a real registry MATCH rather than a bare existence lookup: the NIN is
+scored against the account holder's name, so submitting a valid NIN that
+belongs to somebody else no longer passes.
 
 The plaintext NIN never leaves this call or reaches a log, broker, or the
-database — only the bcrypt hash and the HMAC lookup are persisted.
+database — only the bcrypt hash and the HMAC lookup are persisted. Names are
+matched but never logged; only the NAMES of mismatched fields are.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from uuid import UUID
 
 from app.adapters.nin import NinVerificationError, NinVerifier
 from app.repositories.user_repo import UserRepository
-from app.services.nin import hash_nin, lookup_nin, validate_nin_format
+from app.services.nin import hash_nin, lookup_nin, split_full_name, validate_nin_format
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ class NinVerificationUnavailable(NinError):
 @dataclass(frozen=True)
 class NinVerifyResult:
     status: str
+    # Field NAMES the registry disagreed with, never their values. Surfaced so
+    # the route can tell the caller WHICH part did not line up.
+    mismatches: tuple[str, ...] = ()
 
 
 class NinVerificationService:
@@ -51,7 +55,14 @@ class NinVerificationService:
         self._verifier = verifier
         self._pepper = pepper
 
-    async def verify(self, *, user_id: UUID, nin: str) -> NinVerifyResult:
+    async def verify(
+        self,
+        *,
+        user_id: UUID,
+        nin: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+    ) -> NinVerifyResult:
         # ⚠️ NO ROLE GATE (SCRUM-189). This used to be restricted to sellers
         # with authority_type == "owner", which made NIN unusable as the
         # platform-wide identity check: buyers were hard-403'd, and so was any
@@ -77,19 +88,54 @@ class NinVerificationService:
             # Generic: don't reveal whether it's this user or another account.
             raise NinAlreadyVerified()
 
+        match_first, match_last = await self._resolve_name(
+            user_id, first_name=first_name, last_name=last_name
+        )
+
         try:
-            outcome = await self._verifier.verify(nin)
+            outcome = await self._verifier.verify(nin, first_name=match_first, last_name=match_last)
         except NinVerificationError as exc:
-            logger.error("nin.verify.bureau_unavailable", extra={"user_id": str(user_id)})
+            logger.error("nin.verify.provider_unavailable", extra={"user_id": str(user_id)})
             raise NinVerificationUnavailable() from exc
 
         if outcome.status == "verified":
             await self._users.set_nin_verified(user_id, nin_hash=hash_nin(nin), nin_lookup=lookup)
             logger.info("nin.verify.ok", extra={"user_id": str(user_id)})
         else:
+            # Nothing is persisted for a `failed` or `pending` outcome, so the
+            # caller can correct a typo and try again — and verified_status is
+            # left where it was rather than advancing to id_verified.
             logger.info(
                 "nin.verify.not_verified",
-                extra={"user_id": str(user_id), "status": outcome.status},
+                extra={
+                    "user_id": str(user_id),
+                    "status": outcome.status,
+                    # Field names only; the values are the caller's own PII.
+                    "mismatches": list(outcome.mismatches),
+                },
             )
 
-        return NinVerifyResult(status=outcome.status)
+        return NinVerifyResult(status=outcome.status, mismatches=outcome.mismatches)
+
+    async def _resolve_name(
+        self, user_id: UUID, *, first_name: str | None, last_name: str | None
+    ) -> tuple[str | None, str | None]:
+        """Pick the name the registry match is scored against.
+
+        The name ALREADY on the account wins, because that is the name the deal
+        documents will carry, and registration has collected one for every role
+        since SCRUM-197. A request cannot talk the match into scoring against
+        something else.
+
+        The request-supplied name is the fallback for accounts that have none:
+        a phone+OTP registration that never completed a profile still carries
+        the empty string migration 0001 defaults `full_name` to. When both are
+        absent the check degrades to existence-only — exactly what it was
+        before this ticket, so no caller gets worse off than they started.
+        """
+        account = await self._users.get_account(user_id)
+        if account is not None and account.full_name.strip():
+            return split_full_name(account.full_name)
+        supplied_first = (first_name or "").strip() or None
+        supplied_last = (last_name or "").strip() or None
+        return supplied_first, supplied_last

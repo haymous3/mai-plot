@@ -474,7 +474,14 @@ export function FinancialTab({
             text:
               b.error_code === 'NIN_FORMAT_INVALID'
                 ? 'NIN must be exactly 11 digits.'
-                : 'We could not verify that NIN. Please retry.',
+                : // A duplicate used to render as "could not verify", which
+                  // reads as a registry failure for what is really "this NIN
+                  // is already on an account" (SCRUM-218).
+                  b.error_code === 'NIN_ALREADY_VERIFIED'
+                  ? 'This NIN has already been verified.'
+                  : b.error_code === 'NIN_NOT_VERIFIED'
+                    ? 'That NIN did not match your name. Check both and retry.'
+                    : 'We could not verify that NIN. Please retry.',
           });
           return;
         }

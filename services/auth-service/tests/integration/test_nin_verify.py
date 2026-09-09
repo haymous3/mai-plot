@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.adapters.nin import InMemoryNinVerifier
+from app.adapters.nin import InMemoryNinVerifier, NinVerificationOutcome
 from app.adapters.twilio import InMemoryTwilioClient
 from tests.integration.conftest import assert_error_envelope, register_and_verify
 
@@ -182,3 +182,88 @@ async def test_nin_verify_requires_authentication(
     response = await http_client.post("/auth/verify/nin", json={"nin": _NIN})
     assert response.status_code == 401
     assert_error_envelope(response.json(), "UNAUTHORIZED")
+
+
+@pytest.mark.asyncio
+async def test_rejected_nin_returns_422_not_202(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """SCRUM-218. This route used to answer 202 for EVERY outcome, and every
+    frontend checks only `resp.ok` — so a NIN the registry rejected walked
+    through onboarding looking verified. Nothing may be persisted either."""
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
+    nin_fake.outcome = NinVerificationOutcome(status="failed", mismatches=("last_name",))
+
+    response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
+
+    assert response.status_code == 422
+    assert_error_envelope(response.json(), "NIN_NOT_VERIFIED")
+    assert response.json()["details"]["mismatches"] == ["last_name"]
+    assert _NIN not in response.text
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT nin_hash FROM user_pii WHERE user_id = :id"), {"id": user_id}
+        ).first()
+        assert row is not None and row.nin_hash is None
+        status_row = conn.execute(
+            text("SELECT verified_status FROM users WHERE id = :id"), {"id": user_id}
+        ).first()
+        assert status_row is not None
+        assert status_row.verified_status != "id_verified"
+
+
+@pytest.mark.asyncio
+async def test_review_outcome_is_202_pending_but_not_id_verified(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """A partial name match is not a fraud signal, so onboarding continues —
+    but the account must not be advanced on the strength of it."""
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
+    nin_fake.outcome = NinVerificationOutcome(status="pending", mismatches=("last_name",))
+
+    response = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
+
+    assert response.status_code == 202, response.text
+    assert response.json()["status"] == "pending"
+    assert response.json()["mismatches"] == ["last_name"]
+
+    with db_engine.connect() as conn:
+        status_row = conn.execute(
+            text("SELECT verified_status FROM users WHERE id = :id"), {"id": user_id}
+        ).first()
+        assert status_row is not None
+        assert status_row.verified_status != "id_verified"
+
+
+@pytest.mark.asyncio
+async def test_submitted_name_is_forwarded_to_the_registry(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+) -> None:
+    """Onboarding verifies the NIN before it writes the profile, so it sends
+    the name alongside — otherwise there would be nothing to match against."""
+    _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
+
+    response = await http_client.post(
+        "/auth/verify/nin",
+        json={"nin": _NIN, "first_name": "Adaeze", "last_name": "Okonkwo"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 202, response.text
+    assert nin_fake.last_first_name == "Adaeze"
+    assert nin_fake.last_last_name == "Okonkwo"

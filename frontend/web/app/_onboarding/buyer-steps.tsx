@@ -96,7 +96,9 @@ export function BuyerProfileStep({
               ? 'NIN must be exactly 11 digits.'
               : b.error_code === 'NIN_ALREADY_VERIFIED'
                 ? 'This NIN has already been verified.'
-                : 'We could not verify that NIN. Please check it and retry.',
+                : b.error_code === 'NIN_NOT_VERIFIED'
+                  ? 'That NIN did not match your name. Check both and retry.'
+                  : 'We could not verify that NIN. Please check it and retry.',
           );
           return;
         }

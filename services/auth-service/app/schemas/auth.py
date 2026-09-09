@@ -469,11 +469,21 @@ class NinVerifyRequest(BaseModel):
     # the 422 carries NIN_FORMAT_INVALID and the NIN is never echoed in a
     # Pydantic validation error.
     nin: str = Field(min_length=1, max_length=64)
+    # Optional, and only a FALLBACK (SCRUM-218): the match is scored against
+    # the name already on the account whenever there is one, and registration
+    # has collected it for every role since SCRUM-197. These exist for the
+    # accounts that have no name on file — phone+OTP registrations that never
+    # completed a profile — and for API clients that hold one before we do.
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
 
 
 class NinVerifyResponse(BaseModel):
     message: str = "NIN verification initiated"
     status: str = "pending"
+    # Field NAMES the registry disagreed with (e.g. ["last_name"]), never the
+    # values. Empty on success and on an existence-only check.
+    mismatches: list[str] = Field(default_factory=list)
 
 
 class PoaUploadResponse(BaseModel):
