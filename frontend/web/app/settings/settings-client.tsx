@@ -105,13 +105,22 @@ export function SettingsClient({
   payout,
   prefs,
   home,
+  role,
 }: {
   account: Account;
   payout: PayoutAccount | null;
   prefs: NotificationPrefs;
   home: string;
+  role: string;
 }) {
   const [tab, setTab] = useState<SettingsTab>('profile');
+
+  // Sellers have no Financial tab: their proceeds are settled through escrow on
+  // the transaction, not from a payout account they maintain here. Hiding the
+  // nav item is not enough on its own — the panel is guarded below too, so no
+  // state a future caller sets can render it.
+  const showFinancial = role !== 'seller';
+  const nav = showFinancial ? NAV : NAV.filter((item) => item.id !== 'financial');
 
   return (
     <main className="min-h-screen bg-[#fbfbfb]">
@@ -164,7 +173,7 @@ export function SettingsClient({
             className="h-fit rounded-2xl border border-line bg-white p-4"
           >
             <ul className="flex flex-col gap-1.5">
-              {NAV.map((item) => {
+              {nav.map((item) => {
                 const active = item.id === tab;
                 return (
                   <li key={item.id}>
@@ -189,7 +198,9 @@ export function SettingsClient({
 
           <div>
             {tab === 'profile' && <ProfileTab account={account} />}
-            {tab === 'financial' && <FinancialTab account={account} payout={payout} />}
+            {tab === 'financial' && showFinancial && (
+              <FinancialTab account={account} payout={payout} />
+            )}
             {tab === 'notifications' && <NotificationsTab initial={prefs} />}
             {tab === 'security' && <SecurityTab />}
           </div>
