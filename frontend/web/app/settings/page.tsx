@@ -42,11 +42,19 @@ export default async function SettingsPage() {
   // treat it as signed out rather than rendering an empty form.
   if (!account) redirect(SESSION_LOGIN);
 
+  const role = sessionRole() ?? 'buyer';
+
   // Both are optional context: a user with no payout account or no saved
   // preferences still gets a working page, so a failure here degrades to
   // defaults rather than blocking the whole screen.
+  //
+  // Sellers have no Financial tab, so their payout account is not fetched at
+  // all — skipping the request rather than fetching and discarding keeps the
+  // page off transaction-service for a panel it will never render.
   const [payout, prefs] = await Promise.all([
-    get<PayoutAccount>(`${transactionServiceUrl()}/payout-account`, token),
+    role === 'seller'
+      ? Promise.resolve(null)
+      : get<PayoutAccount>(`${transactionServiceUrl()}/payout-account`, token),
     get<NotificationPrefs>(`${notificationServiceUrl()}/notifications/preferences`, token),
   ]);
 
@@ -64,7 +72,8 @@ export default async function SettingsPage() {
           marketing_enabled: false,
         }
       }
-      home={roleHome(sessionRole() ?? 'buyer')}
+      home={roleHome(role)}
+      role={role}
     />
   );
 }
