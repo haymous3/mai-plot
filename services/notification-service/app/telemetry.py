@@ -24,8 +24,10 @@ the host without the full compose stack.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import sys
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -48,8 +50,111 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 DEFAULT_OTLP_ENDPOINT = "http://otel-collector:4317"
 
+# Attributes every LogRecord already carries. Anything NOT in here came from a
+# caller's `extra={...}` (or from OTel's LoggingInstrumentor, which injects
+# otelTraceID/otelSpanID) and is exactly the payload worth printing.
+_STD_RECORD_FIELDS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None)).keys()) | {
+    "asctime",
+    "message",
+    "taskName",
+}
+
+# uvicorn installs its own stdout handler for these and we flip propagate=True
+# below so their records still reach the OTLP exporter. Without this filter the
+# stdout handler would print every access line a second time.
+_UVICORN_LOGGERS = ("uvicorn", "uvicorn.access", "uvicorn.error")
+
+
+class _StdoutHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """Marker subclass so the hot-reload cleanup above can drop exactly the
+    handler this module added, without touching one a test or a host process
+    attached for its own reasons."""
+
+
+class _StdoutJsonFormatter(logging.Formatter):
+    """Render a record as one JSON line, INCLUDING its `extra` fields.
+
+    The default `%(message)s` formatting silently drops `extra`, which is
+    where every diagnostic value in this codebase lives — status codes,
+    durations, ids. A log line saying only "nin.provider.error_status" with
+    the status code thrown away is why SCRUM-220 exists.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        rendered = record.getMessage()
+        # structlog routes through stdlib logging with the event already
+        # rendered as a JSON object. Pass it straight through rather than
+        # nesting an encoded string inside another object.
+        if rendered.startswith("{"):
+            try:
+                if isinstance(json.loads(rendered), dict):
+                    return rendered
+            except ValueError:
+                pass
+
+        payload: dict[str, Any] = {
+            "level": record.levelname.lower(),
+            "logger": record.name,
+            "event": rendered,
+        }
+        for key, value in record.__dict__.items():
+            if key not in _STD_RECORD_FIELDS:
+                payload[key] = value
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        # default=str so a UUID or datetime in `extra` can never turn a log
+        # line into a TypeError inside the logging call itself.
+        return json.dumps(payload, default=str)
+
+
+def _log_level() -> int:
+    """LOG_LEVEL from env, defaulting to INFO.
+
+    `.split("#")` because a value carried in from a .env file keeps its inline
+    comment — the same trap that broke the `ENV == "local"` gate in SCRUM-179.
+    """
+    raw = os.environ.get("LOG_LEVEL", "INFO").split("#", 1)[0].strip().upper()
+    level = logging.getLevelNamesMapping().get(raw)
+    return level if isinstance(level, int) else logging.INFO
+
+
+def configure_stdout_logging() -> None:
+    """Attach the JSON stdout handler to the root logger.
+
+    ⚠️ STDOUT IS NOT OPTIONAL (SCRUM-220). Until this existed the root logger
+    carried ONLY the OTLP handler, so on any host without a collector running —
+    Railway, and every `docker run` of a single service — every application log
+    line was built, formatted and thrown away. Only uvicorn's access lines
+    appeared, because uvicorn installs its own handler. That made a live 502
+    undiagnosable from the platform's own log view: the NIN adapter was logging
+    the provider's exact status code and nobody could read it.
+
+    ⚠️ Called BEFORE the OTEL_SDK_DISABLED check in setup_telemetry, and
+    deliberately so. That flag turns off OpenTelemetry, not logging; a service
+    started with it set still has to be debuggable. Putting this after the
+    early return is the one edit that would silently undo the whole ticket.
+    """
+    level = _log_level()
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    # Idempotent: drop only the handler we added, never one a test or a host
+    # process attached for its own reasons.
+    root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, _StdoutHandler)]
+
+    handler = _StdoutHandler(sys.stdout)
+    handler.setLevel(level)
+    handler.setFormatter(_StdoutJsonFormatter())
+    # uvicorn installs its own stdout handler for these and we flip
+    # propagate=True below so their records still reach OTLP. Without this
+    # filter every access line would print twice.
+    handler.addFilter(lambda record: not record.name.startswith(_UVICORN_LOGGERS))
+    root_logger.addHandler(handler)
+
 
 def setup_telemetry(service_name: str, app: FastAPI) -> None:
+    # Logging first, and outside the kill switch below — see the docstring.
+    configure_stdout_logging()
+
     # OTEL_SDK_DISABLED is the canonical OTel kill switch (used in tests
     # and one-off scripts that import the FastAPI app without a running
     # collector). Bail out before we attach any exporters or instrument
@@ -99,11 +204,12 @@ def setup_telemetry(service_name: str, app: FastAPI) -> None:
     # carries the correlation key downstream backends can index.
     LoggingInstrumentor().instrument(set_logging_format=False)
 
+    level = _log_level()
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    # Avoid duplicates if setup runs twice (e.g. hot reload).
+    # Avoid duplicates if setup runs twice (e.g. hot reload). The stdout
+    # handler is managed by configure_stdout_logging() and left alone here.
     root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, LoggingHandler)]
-    root_logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
+    root_logger.addHandler(LoggingHandler(level=level, logger_provider=logger_provider))
 
     # structlog — emit JSON, route through stdlib logging so the same
     # records flow into the OTLP handler above.
