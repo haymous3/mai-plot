@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { PasswordField } from '../_components/password-field';
+import { ExistingAccountStep } from '../_onboarding/existing-account-step';
+import type { ExistingAccountAnswer } from '../_onboarding/existing-account-step';
 import { IntroCarousel } from '../_onboarding/intro-carousel';
 import { RolePicker } from '../_onboarding/role-picker';
 import { OnboardingShell } from '../_onboarding/ui';
@@ -39,9 +41,12 @@ const REGISTER_ERRORS: Record<string, string> = {
   VALIDATION_ERROR: 'Please check your details and try again.',
   INVALID_REQUEST: 'Please complete all required fields.',
   AUTH_SERVICE_UNAVAILABLE: 'Sign-up is temporarily unavailable. Please retry.',
+  // SCRUM-225. The person proved the NIN and name before reaching this, so
+  // naming the role back to them reveals nothing they did not supply.
+  ROLE_ALREADY_HELD: 'You already have an account in this role. Sign in to it instead.',
 };
 
-type Step = 'intro' | 'role' | 'account';
+type Step = 'intro' | 'role' | 'existing' | 'account';
 type VerificationChannel = 'email' | 'phone';
 
 export function RegisterFlow() {
@@ -57,6 +62,10 @@ export function RegisterFlow() {
   const [channel, setChannel] = useState<VerificationChannel>('email');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // "Do you already have a Maihomme account?" (SCRUM-226). Null until answered;
+  // the NIN is only sent when the answer is yes.
+  const [existingAnswer, setExistingAnswer] = useState<ExistingAccountAnswer | null>(null);
+  const [existingNin, setExistingNin] = useState('');
   // Set once the verification email is away — this is a terminal state for the
   // funnel, since the user continues by clicking the link, not by typing here.
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
@@ -76,6 +85,11 @@ export function RegisterFlow() {
           email: email.trim(),
           password,
           verification_channel: channel,
+          // Omitted entirely unless they said yes — an empty string would be a
+          // claim of an existing account that cannot match anything.
+          ...(existingAnswer === 'yes' && existingNin.trim()
+            ? { existing_account_nin: existingNin.trim() }
+            : {}),
         }),
       });
       if (resp.ok) {
@@ -108,6 +122,12 @@ export function RegisterFlow() {
       }
       const b = (await resp.json()) as { error_code?: string };
       setError(REGISTER_ERRORS[b.error_code ?? ''] ?? 'Could not create your account. Please retry.');
+      // A role conflict is about the NIN they gave two steps back, so send them
+      // to the screen that owns that field rather than showing the message on
+      // the account form, where nothing can be done about it (SCRUM-226).
+      if (b.error_code === 'ROLE_ALREADY_HELD') {
+        setStep('existing');
+      }
     } catch {
       setError('Could not reach the server. Please try again.');
     } finally {
@@ -121,7 +141,7 @@ export function RegisterFlow() {
     <OnboardingShell>
       {sentToEmail !== null ? (
         <FormColumn>
-          <CheckEmailStep email={sentToEmail} />
+          <CheckEmailStep email={sentToEmail} claimedExistingAccount={existingAnswer === 'yes'} />
         </FormColumn>
       ) : (
           <>
@@ -131,6 +151,27 @@ export function RegisterFlow() {
           <RolePicker
             role={role}
             setRole={setRole}
+            onContinue={() => {
+              setError(null);
+              setStep('existing');
+            }}
+          />
+        )}
+
+        {step === 'existing' && (
+          <ExistingAccountStep
+            answer={existingAnswer}
+            setAnswer={(a) => {
+              setError(null);
+              setExistingAnswer(a);
+            }}
+            nin={existingNin}
+            setNin={setExistingNin}
+            error={error}
+            onBack={() => {
+              setError(null);
+              setStep('role');
+            }}
             onContinue={() => {
               setError(null);
               setStep('account');
@@ -155,7 +196,7 @@ export function RegisterFlow() {
             error={error}
             onBack={() => {
               setError(null);
-              setStep('role');
+              setStep('existing');
             }}
             onContinue={() => {
               setError(null);
@@ -414,7 +455,23 @@ function AccountStep({
  * email/resend has existed since SCRUM-154 and a dead end here was the most
  * common reason to abandon signup.
  */
-function CheckEmailStep({ email }: { email: string }) {
+function CheckEmailStep({
+  email,
+  claimedExistingAccount = false,
+}: {
+  email: string;
+  /**
+   * They answered "yes, I already have an account" and gave a NIN.
+   *
+   * ⚠️ WE CANNOT SAY WHETHER IT MATCHED, and must not try. The register
+   * response is deliberately identical whether or not the NIN resolved to an
+   * account (SCRUM-225) — telling the frontend would hand anyone an oracle for
+   * "does this NIN have a Maihomme account?". So the copy below covers BOTH
+   * outcomes rather than asserting one, which is also why it cannot name the
+   * other address: we do not know it, by design.
+   */
+  claimedExistingAccount?: boolean;
+}) {
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -463,12 +520,23 @@ function CheckEmailStep({ email }: { email: string }) {
         </svg>
       </div>
 
-      <h1 className="mt-6 font-display text-2xl text-ink-900">Check your email</h1>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-500">
-        We&rsquo;ve sent a verification link to{' '}
-        <span className="font-medium text-ink-900">{email || 'your email address'}</span>. Open it
-        to activate your account and sign in.
-      </p>
+      <h1 className="mt-6 font-display text-2xl text-ink-900">
+        {claimedExistingAccount ? 'Check your inbox' : 'Check your email'}
+      </h1>
+      {claimedExistingAccount ? (
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-500">
+          If that NIN matches an existing Maihomme account, the confirmation link is in{' '}
+          <span className="font-medium text-ink-900">that account&rsquo;s inbox</span>. If it
+          doesn&rsquo;t, we&rsquo;ve sent it to{' '}
+          <span className="font-medium text-ink-900">{email || 'your email address'}</span>.
+        </p>
+      ) : (
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-500">
+          We&rsquo;ve sent a verification link to{' '}
+          <span className="font-medium text-ink-900">{email || 'your email address'}</span>. Open it
+          to activate your account and sign in.
+        </p>
+      )}
 
       <div className="mx-auto mt-7 max-w-sm space-y-2 rounded-xl bg-surface-warm px-4 py-3.5 text-left text-sm text-ink-500">
         <p>The link expires in 30 minutes and can only be used once.</p>
