@@ -267,3 +267,87 @@ async def test_submitted_name_is_forwarded_to_the_registry(
     assert response.status_code == 202, response.text
     assert nin_fake.last_first_name == "Adaeze"
     assert nin_fake.last_last_name == "Okonkwo"
+
+
+@pytest.mark.asyncio
+async def test_deleting_an_account_releases_its_nin(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+) -> None:
+    """SCRUM-227, reported from the live funnel: verify a NIN, delete the
+    account, then sign up again with the same NIN.
+
+    This used to answer 409 forever — the soft-deleted row kept the NIN
+    reserved, and nobody gets a new NIN, so deleting an account locked that
+    person out of the platform permanently. Migration 0018 scopes both the
+    index and the lookup to live rows.
+    """
+    _, token_a = await _register_verify_token(http_client, sms_fake, "08012345678")
+    first = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token_a))
+    assert first.status_code == 202, first.text
+
+    deleted = await http_client.post("/auth/account/delete", headers=_auth(token_a))
+    assert deleted.status_code == 200, deleted.text
+
+    # A brand-new account, same human, same NIN.
+    _, token_b = await _register_verify_token(
+        http_client, sms_fake, "08087654321", email="again@example.com"
+    )
+    second = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token_b))
+
+    assert second.status_code == 202, second.text
+
+
+@pytest.mark.asyncio
+async def test_a_live_account_still_blocks_its_nin(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+) -> None:
+    """The other half of SCRUM-227: releasing on delete must not weaken the
+    guard while the account is alive. One LIVE account per NIN is the whole
+    invariant the unique index exists for."""
+    _, token_a = await _register_verify_token(http_client, sms_fake, "08012345678")
+    assert (
+        await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token_a))
+    ).status_code == 202
+
+    _, token_b = await _register_verify_token(
+        http_client, sms_fake, "08087654321", email="second@example.com"
+    )
+    second = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token_b))
+
+    assert second.status_code == 409
+    assert_error_envelope(second.json(), "NIN_ALREADY_VERIFIED")
+
+
+@pytest.mark.asyncio
+async def test_the_deleted_accounts_hashes_are_kept(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """Only the RESERVATION is released. The hashes stay on the dead row —
+    AMLON/KYC history must survive a user deleting their account."""
+    user_id, token = await _register_verify_token(http_client, sms_fake, "08012345678")
+    await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
+    await http_client.post("/auth/account/delete", headers=_auth(token))
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT nin_hash, nin_lookup, deleted_at FROM user_pii WHERE user_id = :id"),
+            {"id": user_id},
+        ).first()
+        assert row is not None
+        assert row.nin_hash is not None
+        assert row.nin_lookup is not None
+        # The trigger from migration 0009 is what makes the partial index work.
+        assert row.deleted_at is not None
