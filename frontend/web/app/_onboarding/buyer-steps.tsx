@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 
-import { CONTROL, FieldError, FieldLabel, SecureNote, SelectField, TextField } from './fields';
+import { CONTROL, FieldError, FieldLabel, SelectField, TextField } from './fields';
+import { NinVerifyField, ninIsSettled, useNinVerification } from './nin-verify-field';
 import { OnboardingHeading, PrimaryButton } from './ui';
 import { MoneyInput } from '@/app/_components/money-input';
 import { nairaToKobo } from '@/lib/money-input';
@@ -70,38 +71,24 @@ export function BuyerProfileStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ninLooksValid = /^\d{11}$/.test(nin.trim());
-  const canSubmit = ninLooksValid && address.trim().length > 0;
+  // SCRUM-221: the NIN is checked when it is entered, not buried in submit().
+  const ninCheck = useNinVerification('/api/buyer/nin-verify');
+  // Continue waits on the CHECK, not just the shape — so a NIN that will be
+  // rejected is rejected here, beside the field, rather than after the user has
+  // filled in three more.
+  const canSubmit = ninIsSettled(ninCheck.status) && address.trim().length > 0;
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      // NIN is REQUIRED for every role from SCRUM-201; it used to be optional
-      // here, with a "Skip for now" beside it. Both are gone.
-      {
-        if (!ninLooksValid) {
-          setError('NIN must be exactly 11 digits.');
-          return;
-        }
-        const resp = await fetch('/api/buyer/nin-verify', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ nin: nin.trim() }),
-        });
-        if (!resp.ok) {
-          const b = (await resp.json().catch(() => ({}))) as { error_code?: string };
-          setError(
-            b.error_code === 'NIN_FORMAT_INVALID'
-              ? 'NIN must be exactly 11 digits.'
-              : b.error_code === 'NIN_ALREADY_VERIFIED'
-                ? 'This NIN has already been verified.'
-                : b.error_code === 'NIN_NOT_VERIFIED'
-                  ? 'That NIN did not match your name. Check both and retry.'
-                  : 'We could not verify that NIN. Please check it and retry.',
-          );
-          return;
-        }
+      // NIN is REQUIRED for every role from SCRUM-201, and since SCRUM-221 it
+      // is already verified by the time Continue is enabled — the POST that
+      // used to live here has moved to the field's own blur handler. This guard
+      // is the belt to that braces: `canSubmit` cannot be true without it.
+      if (!ninIsSettled(ninCheck.status)) {
+        setError('Please enter a NIN we can verify before continuing.');
+        return;
       }
 
       // Money as kobo, never a float (CLAUDE.md §4). Strip separators first so
@@ -148,19 +135,20 @@ export function BuyerProfileStep({
       />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        <FieldLabel htmlFor="nin" hint="(National Identification Number)">
-          NIN
-        </FieldLabel>
-        <TextField
-          id="nin"
+        <NinVerifyField
           value={nin}
-          onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-          placeholder="NIN should not be more than 11 digits"
-          inputMode="numeric"
-          maxLength={11}
+          onChange={(v) => {
+            setNin(v);
+            // Editing after a verdict invalidates it: the next blur must be
+            // free to spend a call on the new number.
+            if (ninCheck.status !== 'idle') ninCheck.reset();
+          }}
+          status={ninCheck.status}
+          message={ninCheck.message}
+          onBlurVerify={() => void ninCheck.verify(nin)}
+          onRetry={() => void ninCheck.verify(nin)}
           disabled={busy}
         />
-        <SecureNote>Your data is encrypted and used only for verification</SecureNote>
 
         <div className="mt-9">
           <FieldLabel htmlFor="address" required>

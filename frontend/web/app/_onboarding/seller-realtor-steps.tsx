@@ -3,7 +3,8 @@
 import { useState } from 'react';
 
 import { HouseIcon, UserCircleIcon } from './icons';
-import { FieldError, FieldLabel, SecureNote, TextField, UploadDropzone } from './fields';
+import { FieldError, FieldLabel, TextField, UploadDropzone } from './fields';
+import { NinVerifyField, ninIsSettled, useNinVerification } from './nin-verify-field';
 import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
 
 /**
@@ -72,9 +73,13 @@ export function SellerVerificationStep({
   const [error, setError] = useState<string | null>(null);
 
   const needsDocument = authority === 'power_of_attorney';
-  const ninOk = /^\d{11}$/.test(nin.trim());
+  // SCRUM-221: checked when entered, not inside submit().
+  const ninCheck = useNinVerification('/api/auth/seller/nin');
   const canSubmit =
-    ninOk && address.trim().length > 0 && authority !== '' && (!needsDocument || file !== null);
+    ninIsSettled(ninCheck.status) &&
+    address.trim().length > 0 &&
+    authority !== '' &&
+    (!needsDocument || file !== null);
 
   async function submit() {
     if (file && file.size > MAX_BYTES) {
@@ -84,9 +89,15 @@ export function SellerVerificationStep({
     setBusy(true);
     setError(null);
     try {
-      // Authority first: it is what gates listing publication, and the NIN
-      // check is only meaningful for an owner. Ordering them the other way
-      // would let a 202-accepted NIN sit against an undeclared authority.
+      // Authority first: it is what gates listing publication.
+      //
+      // ⚠️ This comment used to claim the ordering ALSO stopped a verified NIN
+      // sitting against an undeclared authority. That was already shaky — the
+      // owner-only gate it leaned on went with SCRUM-189 — and SCRUM-221 ends
+      // it outright: the NIN is verified on blur, long before this runs. The
+      // state it warned about is now reachable by abandoning the form, and is
+      // harmless: a verified NIN sets `id_verified`, publication is gated on
+      // `authority_type` separately, and a seller with neither can do nothing.
       const authResp = await fetch('/api/auth/seller/authority', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -97,30 +108,14 @@ export function SellerVerificationStep({
         return;
       }
 
-      // ⚠️ This used to run only for `authority === 'owner'` — a leftover from
-      // when /auth/verify/nin was hard-gated to owner-sellers and 403'd anyone
-      // else. SCRUM-189 removed that gate, but this condition stayed, so a PoA
-      // seller typed a NIN the form REQUIRED and it was silently discarded.
-      // Every seller's NIN is verified now (SCRUM-201).
-      {
-        const ninResp = await fetch('/api/auth/seller/nin', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ nin: nin.trim() }),
-        });
-        if (!ninResp.ok) {
-          const b = (await ninResp.json().catch(() => ({}))) as { error_code?: string };
-          setError(
-            b.error_code === 'NIN_FORMAT_INVALID'
-              ? 'NIN must be exactly 11 digits.'
-              : b.error_code === 'NIN_ALREADY_VERIFIED'
-                ? 'This NIN has already been verified.'
-                : b.error_code === 'NIN_NOT_VERIFIED'
-                  ? 'That NIN did not match your name. Check both and retry.'
-                  : 'We could not verify that NIN. Please retry.',
-          );
-          return;
-        }
+      // The NIN POST that used to sit here has moved to the field's own blur
+      // handler (SCRUM-221), so a bad number is caught beside the field rather
+      // than after the authority, address and PoA document are all filled in.
+      // Every seller's NIN is verified (SCRUM-201), PoA sellers included —
+      // SCRUM-189 removed the owner-only gate that used to skip them.
+      if (!ninIsSettled(ninCheck.status)) {
+        setError('Please enter a NIN we can verify before continuing.');
+        return;
       }
 
       // Address goes to the shared profile endpoint — user_pii, every role.
@@ -160,19 +155,18 @@ export function SellerVerificationStep({
       />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        <FieldLabel htmlFor="nin" required>
-          NIN
-        </FieldLabel>
-        <TextField
-          id="nin"
+        <NinVerifyField
           value={nin}
-          onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-          placeholder="NIN should not be more than 11 digits"
-          inputMode="numeric"
-          maxLength={11}
+          onChange={(v) => {
+            setNin(v);
+            if (ninCheck.status !== 'idle') ninCheck.reset();
+          }}
+          status={ninCheck.status}
+          message={ninCheck.message}
+          onBlurVerify={() => void ninCheck.verify(nin)}
+          onRetry={() => void ninCheck.verify(nin)}
           disabled={busy}
         />
-        <SecureNote>Your data is encrypted and used only for verification</SecureNote>
 
         <div className="mt-9">
           <FieldLabel htmlFor="address" required>
@@ -277,8 +271,9 @@ export function RealtorProfileStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ninOk = /^\d{11}$/.test(nin.trim());
-  const canSubmit = ninOk && address.trim().length > 0 && coverage.trim() !== '';
+  const ninCheck = useNinVerification('/api/auth/nin');
+  const canSubmit =
+    ninIsSettled(ninCheck.status) && address.trim().length > 0 && coverage.trim() !== '';
 
   async function submit() {
     setBusy(true);
@@ -286,22 +281,9 @@ export function RealtorProfileStep({
     try {
       // Identity first, then the profile: a realtor row that exists without a
       // verified NIN is the state SCRUM-201 set out to remove.
-      const ninResp = await fetch('/api/auth/nin', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ nin: nin.trim() }),
-      });
-      if (!ninResp.ok) {
-        const b = (await ninResp.json().catch(() => ({}))) as { error_code?: string };
-        setError(
-          b.error_code === 'NIN_FORMAT_INVALID'
-            ? 'NIN must be exactly 11 digits.'
-            : b.error_code === 'NIN_ALREADY_VERIFIED'
-              ? 'This NIN has already been verified.'
-              : b.error_code === 'NIN_NOT_VERIFIED'
-                ? 'That NIN did not match your name. Check both and retry.'
-                : 'We could not verify that NIN. Please retry.',
-        );
+      // Verified on blur since SCRUM-221; this is the guard behind `canSubmit`.
+      if (!ninIsSettled(ninCheck.status)) {
+        setError('Please enter a NIN we can verify before continuing.');
         return;
       }
 
@@ -351,19 +333,19 @@ export function RealtorProfileStep({
         {/* NIN and Address are not on the export either (SCRUM-201): the
             realtor flow collected no identity document at all, and no role
             collected an address. */}
-        <FieldLabel htmlFor="realtor-nin" required>
-          NIN
-        </FieldLabel>
-        <TextField
+        <NinVerifyField
           id="realtor-nin"
           value={nin}
-          onChange={(v) => setNin(v.replace(/[^\d]/g, ''))}
-          placeholder="NIN should not be more than 11 digits"
-          inputMode="numeric"
-          maxLength={11}
+          onChange={(v) => {
+            setNin(v);
+            if (ninCheck.status !== 'idle') ninCheck.reset();
+          }}
+          status={ninCheck.status}
+          message={ninCheck.message}
+          onBlurVerify={() => void ninCheck.verify(nin)}
+          onRetry={() => void ninCheck.verify(nin)}
           disabled={busy}
         />
-        <SecureNote>Your data is encrypted and used only for verification</SecureNote>
 
         <div className="mt-9">
           <FieldLabel htmlFor="realtor-address" required>
