@@ -19,9 +19,9 @@ import pytest
 
 from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.twilio import InMemoryTwilioClient
+from app.services.account_link import AccountLinkService
 from app.services.otp import verify_code
 from app.services.rate_limit import RateLimitResult
-from app.services.account_link import AccountLinkService
 from app.services.registration import (
     EmailAlreadyRegistered,
     OtpDispatchFailed,
