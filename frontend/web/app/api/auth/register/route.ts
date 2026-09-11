@@ -19,6 +19,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     password?: unknown;
     full_name?: unknown;
     seller_authority_type?: unknown;
+    existing_account_nin?: unknown;
   };
   try {
     payload = await request.json();
@@ -40,6 +41,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (typeof payload.full_name === 'string' && payload.full_name) forward.full_name = payload.full_name;
   if (role === 'seller' && typeof payload.seller_authority_type === 'string') {
     forward.seller_authority_type = payload.seller_authority_type;
+  }
+  // "I already have a Maihomme account" (SCRUM-226/225). ⚠️ This list is a
+  // WHITELIST — a field not named here never reaches auth-service, and does so
+  // silently. Forwarded as typed; auth-service validates the format and treats
+  // anything that does not resolve to an account as an ordinary signup.
+  if (typeof payload.existing_account_nin === 'string' && payload.existing_account_nin) {
+    forward.existing_account_nin = payload.existing_account_nin;
   }
 
   let resp: Response;

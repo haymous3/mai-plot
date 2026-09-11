@@ -84,6 +84,26 @@ export function BuildingIcon(props: IconProps) {
   );
 }
 
+/** "No, this is my first account" — a fresh start, not a linked one. */
+export function PlusIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </Svg>
+  );
+}
+
+/** Envelope — the confirmation-link rail on the existing-account step. */
+export function EnvelopeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3.5 6.5l8.5 6 8.5-6" />
+    </Svg>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Svg {...props}>
