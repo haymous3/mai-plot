@@ -21,6 +21,7 @@ from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.twilio import InMemoryTwilioClient
 from app.services.otp import verify_code
 from app.services.rate_limit import RateLimitResult
+from app.services.account_link import AccountLinkService
 from app.services.registration import (
     EmailAlreadyRegistered,
     OtpDispatchFailed,
@@ -112,6 +113,10 @@ def _build_service(
         rate_limiter=limiter or _StubLimiter(),  # type: ignore[arg-type]
         sms=sms or InMemoryTwilioClient(),
         email_sender=email_sender or InMemoryEmailClient(),
+        # Real service over the same stub repo: these tests never pass an
+        # `existing_account_nin`, so it short-circuits before touching it, and
+        # a stub here would hide the "no claim = untouched" path (SCRUM-225).
+        account_link=AccountLinkService(users=user_repo, pepper="unit-test-pepper"),  # type: ignore[arg-type]
         otp_expire_minutes=_OTP_EXPIRE_MINUTES,
         email_expire_minutes=_EMAIL_EXPIRE_MINUTES,
         verify_base_url=_VERIFY_BASE_URL,

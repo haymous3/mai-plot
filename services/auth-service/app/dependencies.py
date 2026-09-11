@@ -35,6 +35,7 @@ from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.account import AccountService
+from app.services.account_link import AccountLinkService
 from app.services.admin_nin import AdminNinService
 from app.services.admin_users import AdminUserService
 from app.services.avatar_upload import AvatarService
@@ -290,6 +291,7 @@ def get_registration_service(
         rate_limiter=rate_limiter,
         sms=sms,
         email_sender=email_sender,
+        account_link=AccountLinkService(users=users, pepper=settings.nin_pepper),
         otp_expire_minutes=settings.otp_expire_minutes,
         email_expire_minutes=settings.email_verification_expire_minutes,
         verify_base_url=settings.email_verification_base_url,

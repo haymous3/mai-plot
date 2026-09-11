@@ -81,6 +81,7 @@ from app.schemas.auth import (
 )
 from app.security import CurrentUser
 from app.services.account import AccountNotFound, AccountService
+from app.services.account_link import RoleAlreadyHeld
 from app.services.avatar import InvalidAvatar
 from app.services.avatar_upload import (
     AvatarService,
@@ -103,6 +104,7 @@ from app.services.change_password import (
 from app.services.delete_account import (
     AccountAlreadyGone,
     AccountHasActiveDeals,
+    AccountIsIdentityRoot,
     DeleteAccountService,
     DeleteCheckUnavailable,
 )
@@ -186,6 +188,7 @@ async def register(
             email=body.email,
             password=body.password,
             seller_authority_type=body.seller_authority_type,
+            existing_account_nin=body.existing_account_nin,
             full_name=body.full_name,
             verification_channel=body.verification_channel,
         )
@@ -200,6 +203,15 @@ async def register(
             status.HTTP_400_BAD_REQUEST,
             "PHONE_ALREADY_REGISTERED",
             "A user with this phone number already exists.",
+        )
+    except RoleAlreadyHeld:
+        # The one link failure worth telling the caller about. It reveals
+        # nothing they did not already supply: they proved the NIN and name
+        # match before reaching here, so this is their own account.
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "ROLE_ALREADY_HELD",
+            "You already have an account in this role. Sign in to it instead.",
         )
     except VerificationRateLimited:
         return _error(
@@ -942,6 +954,12 @@ async def delete_account(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "DELETE_UNAVAILABLE",
             "We could not confirm your account has no deals in progress. Please try again shortly.",
+        )
+    except AccountIsIdentityRoot:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "ACCOUNT_IS_IDENTITY_ROOT",
+            "Other accounts of yours are verified through this one. Delete those first.",
         )
     except AccountAlreadyGone:
         return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")

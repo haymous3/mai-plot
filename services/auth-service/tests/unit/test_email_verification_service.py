@@ -42,9 +42,17 @@ class _StubTokenRepo:
 
 
 class _StubUserRepo:
-    def __init__(self, user: UserCore | None) -> None:
+    def __init__(self, user: UserCore | None, *, inherits_identity: bool = False) -> None:
         self._user = user
+        self._inherits_identity = inherits_identity
         self.verified: list[UUID] = []
+        self.id_verified: list[UUID] = []
+
+    async def inherits_verified_identity(self, user_id: UUID) -> bool:
+        return self._inherits_identity
+
+    async def mark_id_verified(self, user_id: UUID) -> None:
+        self.id_verified.append(user_id)
 
     async def get_active_by_id(self, user_id: UUID) -> UserCore | None:
         return self._user

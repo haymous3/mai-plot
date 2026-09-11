@@ -41,6 +41,15 @@ class DeleteCheckUnavailable(DeleteAccountError):
     """The active-deal guard could not be evaluated, so deletion is refused."""
 
 
+class AccountIsIdentityRoot(DeleteAccountError):
+    """Other accounts link their verified identity to this one (SCRUM-225).
+
+    Deleting it would strand them: the NIN lives here, so the siblings would
+    keep an id_verified status backed by a row nobody can look up any more.
+    The person must delete the linked accounts first.
+    """
+
+
 class AccountAlreadyGone(DeleteAccountError):
     """No live account for this id — already deleted, or never existed."""
 
@@ -71,6 +80,14 @@ class DeleteAccountService:
                 raise AccountHasActiveDeals()
         except DealCheckUnavailable as exc:
             raise DeleteCheckUnavailable() from exc
+
+        # Also before any write: this account may be the identity ROOT that
+        # other accounts inherit their verification from (SCRUM-225). The FK is
+        # ON DELETE RESTRICT, but deletion here is SOFT, so the database would
+        # never fire — this check is the only thing standing between a delete
+        # and a set of siblings claiming a verified identity whose NIN has gone.
+        if await self._users.has_linked_children(user_id):
+            raise AccountIsIdentityRoot()
 
         deleted, avatar_key = await self._users.soft_delete(user_id)
         if not deleted:

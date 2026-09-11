@@ -61,6 +61,12 @@ class RegisterRequest(BaseModel):
     seller_authority_type: SellerAuthorityType | None = None
     # Defaults to email: it is the channel that can actually reach users today.
     verification_channel: VerificationChannel = "email"
+    # "I already have a Maihomme account" (SCRUM-225). Supplied only when the
+    # funnel's existing-account question was answered yes. On a match the
+    # new account is linked to the one holding this NIN and the confirmation
+    # link goes to THAT account's address — never the one in `email` above.
+    # A miss is not an error: registration proceeds as an ordinary signup.
+    existing_account_nin: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def _normalise_and_check_seller(self) -> RegisterRequest:
