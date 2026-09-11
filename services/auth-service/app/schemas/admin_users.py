@@ -185,3 +185,56 @@ class AdminUserDeleteResponse(BaseModel):
     # again with the same email or phone.
     sessions_revoked: bool = True
     identifiers_released: bool = True
+
+
+# --- NIN console (SCRUM-224) -------------------------------------------------
+#
+# The NIN is the one field the admin console may READ IN FULL, and only through
+# the reveal endpoint below — never on the detail response, never on the list.
+# ⚠️ Mandatory reasons. The reason is the audit row's answer to "why did this
+# admin look at / change this person's national identity number", and a
+# regulator reading the log later gets nothing from an empty one. Ten characters
+# is the floor because "support" and "asked" are not reasons.
+
+_REASON = Field(min_length=10, max_length=500)
+
+
+class AdminNinStatusResponse(BaseModel):
+    """The masked view. `recoverable` is false for a NIN verified before
+    migration 0016 — there is a hash but nothing to decrypt, and the only
+    remedy is Replace."""
+
+    nin_verified: bool
+    nin_last4: str | None
+    nin_verified_at: datetime | None
+    recoverable: bool
+
+
+class AdminNinRevealRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str = _REASON
+
+
+class AdminNinRevealResponse(BaseModel):
+    """The only response in the platform that carries a NIN. The client shows
+    it briefly and re-masks; it must not be persisted browser-side."""
+
+    nin: str
+    nin_last4: str
+
+
+class AdminNinSetRequest(BaseModel):
+    """Create or replace. The number is re-verified with the registry before
+    anything is stored, exactly as the user's own submission is."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    nin: str = Field(min_length=11, max_length=11)
+    reason: str = _REASON
+
+
+class AdminNinClearRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str = _REASON

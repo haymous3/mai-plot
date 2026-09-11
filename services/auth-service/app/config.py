@@ -146,6 +146,22 @@ class Settings(BaseSettings):
     nin_verification_secret_key: str = ""
     nin_timeout_seconds: float = 5.0
     nin_pepper: str = "change-me-to-a-long-random-nin-pepper"
+    # NIN at-rest encryption (SCRUM-224). The plaintext NIN is stored
+    # AES-256-GCM encrypted so an admin can reveal it (support, regulator and
+    # bank-partner requests, fixing a mistyped registration). This is a
+    # product-owner-accepted deviation from the original §4 hash-only rule.
+    #
+    # The 256-bit key is DERIVED (SHA-256) from this passphrase so any long
+    # random string works — same operational shape as the peppers above. It is
+    # a separate secret from nin_pepper: the pepper makes the dedup column
+    # queryable, this key makes the value recoverable, and compromising one
+    # must not compromise the other.
+    #
+    # ⚠️ Outside env=local the default is REFUSED (RuntimeError on first use)
+    # rather than silently encrypting production NINs under a key that is in
+    # the repository. A missing key fails the request loudly; it never falls
+    # back to storing the plaintext, and it never falls back to the default.
+    nin_encryption_key: str = "change-me-to-a-long-random-nin-encryption-key"
 
     # PoA document upload (SCRUM-48). PoA sellers upload a Power-of-Attorney
     # document to the PRIVATE documents bucket; it is served later only via

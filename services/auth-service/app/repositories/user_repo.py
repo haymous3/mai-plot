@@ -17,6 +17,24 @@ from app.models import RealtorRegistrationNumber, User, UserPii
 
 
 @dataclass(frozen=True)
+class NinRecord:
+    """The NIN columns of one account, for the admin NIN console (SCRUM-224).
+
+    `has_nin` comes from the bcrypt hash, which every verified NIN has;
+    `nin_encrypted` is None for NINs verified before migration 0016, which is
+    what the API reports as "not recoverable". The ciphertext is opaque here —
+    only the service holds the cipher.
+    """
+
+    user_id: UUID
+    deleted_at: datetime | None
+    has_nin: bool
+    nin_encrypted: bytes | None
+    nin_last4: str | None
+    nin_verified_at: datetime | None
+
+
+@dataclass(frozen=True)
 class UserWithPhone:
     """View struct for repo callers — avoids leaking the ORM into services."""
 
@@ -838,14 +856,91 @@ class UserRepository:
         stmt = select(UserPii.user_id).where(UserPii.nin_lookup == nin_lookup)
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
-    async def set_nin_verified(self, user_id: UUID, *, nin_hash: str, nin_lookup: str) -> None:
-        """Persist the NIN hashes and advance verified_status to id_verified
-        (unless already fully_verified). Writes only hashes — never the NIN."""
+    async def set_nin_verified(
+        self,
+        user_id: UUID,
+        *,
+        nin_hash: str,
+        nin_lookup: str,
+        nin_encrypted: bytes,
+        nin_last4: str,
+    ) -> None:
+        """Persist a registry-verified NIN and advance verified_status to
+        id_verified (unless already fully_verified).
+
+        Writes the bcrypt hash, the HMAC lookup and — since SCRUM-224 — the
+        AES-GCM ciphertext plus the last four digits. The plaintext still never
+        reaches this layer: the service encrypts before calling. Overwrites
+        whatever was there, which is how an admin Replace works; the user's
+        own path guards against re-submission before it gets here.
+        """
         pii = await self._session.get(UserPii, user_id)
         if pii is not None:
             pii.nin_hash = nin_hash
             pii.nin_lookup = nin_lookup
+            pii.nin_encrypted = nin_encrypted
+            pii.nin_last4 = nin_last4
+            pii.nin_verified_at = datetime.now(UTC)
             pii.updated_at = datetime.now(UTC)
         user = await self._session.get(User, user_id)
         if user is not None and user.verified_status != "fully_verified":
             user.verified_status = "id_verified"
+
+    async def get_nin_record(self, user_id: UUID) -> NinRecord | None:
+        """The NIN columns for one account, for the admin NIN console
+        (SCRUM-224). None when there is no such user at all (deleted accounts
+        ARE returned — a regulator request does not stop at deletion)."""
+        stmt = (
+            select(
+                User.deleted_at,
+                UserPii.nin_hash,
+                UserPii.nin_encrypted,
+                UserPii.nin_last4,
+                UserPii.nin_verified_at,
+            )
+            .join(UserPii, UserPii.user_id == User.id, isouter=True)
+            .where(User.id == user_id)
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return NinRecord(
+            user_id=user_id,
+            deleted_at=row.deleted_at,
+            has_nin=row.nin_hash is not None,
+            nin_encrypted=row.nin_encrypted,
+            nin_last4=row.nin_last4,
+            nin_verified_at=row.nin_verified_at,
+        )
+
+    async def clear_nin(self, user_id: UUID) -> bool:
+        """Remove every NIN column for one account (SCRUM-224).
+
+        verified_status is walked BACK: `id_verified` means "a national id was
+        confirmed", and once the NIN is gone that is only still true if a BVN
+        is on file. Leaving it at id_verified would make a cleared account read
+        as verified to every downstream gate. It lands on the rung below —
+        `phone_verified` or `email_verified` by the account's channel, since an
+        account only ever reached id_verified after confirming that channel —
+        not on `unverified`, which would also deny a contact the user did
+        prove. `fully_verified` is untouched: nothing in this service sets it,
+        so nothing here may unset it.
+
+        Returns False when the account has no user_pii row.
+        """
+        pii = await self._session.get(UserPii, user_id)
+        if pii is None:
+            return False
+        pii.nin_hash = None
+        pii.nin_lookup = None
+        pii.nin_encrypted = None
+        pii.nin_last4 = None
+        pii.nin_verified_at = None
+        pii.updated_at = datetime.now(UTC)
+        user = await self._session.get(User, user_id)
+        if user is not None and user.verified_status == "id_verified" and pii.bvn_hash is None:
+            user.verified_status = (
+                "phone_verified" if pii.verification_channel == "phone" else "email_verified"
+            )
+            user.updated_at = datetime.now(UTC)
+        return True

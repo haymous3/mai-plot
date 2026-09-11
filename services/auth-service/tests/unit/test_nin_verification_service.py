@@ -10,6 +10,7 @@ import pytest
 from app.adapters.nin import InMemoryNinVerifier, NinVerificationOutcome
 from app.repositories.user_repo import UserAuthority
 from app.services.nin import InvalidNinError, lookup_nin
+from app.services.nin_crypto import build_nin_cipher
 from app.services.nin_verification import (
     NinAlreadyVerified,
     NinVerificationService,
@@ -17,6 +18,7 @@ from app.services.nin_verification import (
 )
 
 _PEPPER = "unit-test-nin-pepper"
+_CIPHER = build_nin_cipher(passphrase="a" * 40, env="local")  # synthetic, see test_nin_crypto
 _NIN = "12345678901"
 _OWNER = UserAuthority(role="seller", seller_authority_type="owner")
 
@@ -52,8 +54,24 @@ class _StubUserRepo:
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
         return self._lookup_owner
 
-    async def set_nin_verified(self, user_id: UUID, *, nin_hash: str, nin_lookup: str) -> None:
-        self.set_calls.append({"user_id": user_id, "nin_hash": nin_hash, "nin_lookup": nin_lookup})
+    async def set_nin_verified(
+        self,
+        user_id: UUID,
+        *,
+        nin_hash: str,
+        nin_lookup: str,
+        nin_encrypted: bytes,
+        nin_last4: str,
+    ) -> None:
+        self.set_calls.append(
+            {
+                "user_id": user_id,
+                "nin_hash": nin_hash,
+                "nin_lookup": nin_lookup,
+                "nin_encrypted": nin_encrypted,
+                "nin_last4": nin_last4,
+            }
+        )
 
 
 def _service(repo: _StubUserRepo, verifier: InMemoryNinVerifier) -> NinVerificationService:
@@ -61,6 +79,7 @@ def _service(repo: _StubUserRepo, verifier: InMemoryNinVerifier) -> NinVerificat
         users=repo,  # type: ignore[arg-type]
         verifier=verifier,
         pepper=_PEPPER,
+        cipher=_CIPHER,
     )
 
 
@@ -77,6 +96,14 @@ async def test_happy_path_hashes_and_stores() -> None:
     assert call["nin_hash"] != _NIN
     assert str(call["nin_hash"]).startswith("$2")
     assert call["nin_lookup"] == lookup_nin(_NIN, pepper=_PEPPER)
+    # SCRUM-224: the value is ALSO stored encrypted, bound to the user, plus
+    # its last four for the masked admin view. Neither is the plaintext.
+    user_id = call["user_id"]
+    assert isinstance(user_id, UUID)
+    blob = call["nin_encrypted"]
+    assert isinstance(blob, bytes) and _NIN.encode() not in blob
+    assert _CIPHER.decrypt(blob, user_id=user_id) == _NIN
+    assert call["nin_last4"] == _NIN[-4:]
 
 
 @pytest.mark.asyncio

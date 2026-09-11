@@ -534,8 +534,10 @@ export interface AdminUserListResponse {
 
 /** One account in full (GET /admin/users/{id}, SCRUM-209).
  *
- * BVN and NIN are booleans and always will be: both are stored as bcrypt hashes
- * and the hash is as sensitive as the number (CLAUDE.md §4). */
+ * BVN is a boolean and always will be: it is stored as a bcrypt hash and the hash
+ * is as sensitive as the number (CLAUDE.md §4). NIN is a boolean HERE too — the
+ * number itself is reachable only through the NIN console (`AdminNinStatus` +
+ * the audited reveal, SCRUM-224), never on the detail or the list. */
 export interface AdminUserDetail {
   id: string;
   role: string;
@@ -554,6 +556,17 @@ export interface AdminUserDetail {
   created_at: string;
   updated_at: string;
   registration_number: string | null;
+}
+
+/** The masked NIN view (GET /admin/users/{id}/nin, SCRUM-224).
+ *
+ * `recoverable` is false for a NIN verified before recoverable storage existed:
+ * there is a hash but nothing to decrypt, and the only remedy is Replace. */
+export interface AdminNinStatus {
+  nin_verified: boolean;
+  nin_last4: string | null;
+  nin_verified_at: string | null;
+  recoverable: boolean;
 }
 
 /** A row in the admin realtor onboarding queue (GET /admin/realtors/queue).

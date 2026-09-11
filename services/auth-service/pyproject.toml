@@ -12,6 +12,11 @@ dependencies = [
     "pydantic-settings>=2.4",
     "pyjwt>=2.9",
     "bcrypt>=4.2",
+    # NIN at-rest encryption (SCRUM-224). AES-256-GCM via the `cryptography`
+    # package — declared as a RUNTIME dependency on purpose: it was already in
+    # the lock transitively, and a transitive dep can vanish on an unrelated
+    # upgrade with every check still green (see the dev-dep import trap).
+    "cryptography>=42",
     "httpx>=0.27",
     "redis>=5.0",
     # Cross-service notifications (SCRUM-113): a Celery producer enqueues the
