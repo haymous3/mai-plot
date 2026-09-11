@@ -27,8 +27,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_admin_user_service, require_admin
+from app.dependencies import get_admin_nin_service, get_admin_user_service, require_admin
 from app.schemas.admin_users import (
+    AdminNinClearRequest,
+    AdminNinRevealRequest,
+    AdminNinRevealResponse,
+    AdminNinSetRequest,
+    AdminNinStatusResponse,
     AdminUserDeleteRequest,
     AdminUserDeleteResponse,
     AdminUserDetailResponse,
@@ -40,6 +45,8 @@ from app.schemas.admin_users import (
     UserRoleFilter,
 )
 from app.security import CurrentUser, parse_bearer
+from app.services import admin_nin
+from app.services.admin_nin import AdminNinService, NinStatus
 from app.services.admin_users import (
     AdminUserService,
     AlreadyDeleted,
@@ -50,11 +57,13 @@ from app.services.admin_users import (
     UserHasActiveDeals,
     UserNotFound,
 )
+from app.services.nin import InvalidNinError
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 AdminDep = Annotated[CurrentUser, Depends(require_admin)]
 ServiceDep = Annotated[AdminUserService, Depends(get_admin_user_service)]
+NinServiceDep = Annotated[AdminNinService, Depends(get_admin_nin_service)]
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -283,3 +292,164 @@ async def delete_user(
             "please try again shortly.",
         )
     return AdminUserDeleteResponse(message="The account has been deleted.")
+
+
+# --- NIN console (SCRUM-224) -------------------------------------------------
+#
+# Four endpoints under the same /admin/users prefix (so Kong already routes
+# them): masked status, audited reveal, set/replace, clear. The detail response
+# above still carries only `nin_verified`; the number itself exists in exactly
+# one response, the reveal, and every reveal writes an audit row with the
+# admin's stated reason. See services/admin_nin.py for the protections.
+
+
+def _nin_status(status_: NinStatus) -> AdminNinStatusResponse:
+    return AdminNinStatusResponse(
+        nin_verified=status_.nin_verified,
+        nin_last4=status_.nin_last4,
+        nin_verified_at=status_.nin_verified_at,
+        recoverable=status_.recoverable,
+    )
+
+
+def _nin_error(exc: admin_nin.AdminNinError) -> JSONResponse:
+    """The error mapping shared by the four NIN handlers."""
+    match exc:
+        case admin_nin.UserNotFound():
+            return _error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "No such user.")
+        case admin_nin.UserDeleted():
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "USER_DELETED",
+                "This account is deleted; its NIN can be revealed but not changed.",
+            )
+        case admin_nin.NinNotOnFile():
+            return _error(status.HTTP_404_NOT_FOUND, "NIN_NOT_ON_FILE", "No NIN on file.")
+        case admin_nin.NinNotRecoverable():
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "NIN_NOT_RECOVERABLE",
+                "This NIN was verified before recoverable storage existed and cannot be "
+                "shown. Replace it to store a recoverable copy.",
+            )
+        case admin_nin.NinBelongsToAnotherAccount():
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "NIN_BELONGS_TO_ANOTHER_ACCOUNT",
+                "Another account already holds this NIN.",
+            )
+        case admin_nin.NinRejectedByRegistry():
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error_code": "NIN_NOT_VERIFIED",
+                    "message": "The registry did not confirm this NIN for this person.",
+                    "details": {"status": exc.status, "mismatches": list(exc.mismatches)},
+                },
+            )
+        case admin_nin.NinRegistryUnavailable():
+            return _error(
+                status.HTTP_502_BAD_GATEWAY,
+                "NIN_VERIFICATION_UNAVAILABLE",
+                "NIN verification is temporarily unavailable. Please retry.",
+            )
+    raise exc  # pragma: no cover - every subclass is matched above
+
+
+@router.get("/{user_id}/nin", response_model=None)
+async def get_user_nin(
+    user_id: UUID,
+    admin: AdminDep,
+    service: NinServiceDep,
+) -> AdminNinStatusResponse | JSONResponse:
+    """Masked NIN status: verified?, last four digits, when, and whether a
+    reveal would work. Never the number — that is the POST below."""
+    try:
+        return _nin_status(await service.get_status(user_id=user_id))
+    except admin_nin.AdminNinError as exc:
+        return _nin_error(exc)
+
+
+@router.post("/{user_id}/nin/reveal", response_model=None)
+async def reveal_user_nin(
+    user_id: UUID,
+    payload: AdminNinRevealRequest,
+    request: Request,
+    admin: AdminDep,
+    service: NinServiceDep,
+) -> AdminNinRevealResponse | JSONResponse:
+    """Return the NIN in full. AUDITED (`user.nin_revealed_by_admin`) with the
+    mandatory reason; the audit row and the decrypt share one transaction, so
+    there is no reveal without a record of it.
+
+    A POST rather than a GET on purpose: reading a national identity number is
+    an act with a reason attached, not a resource to be fetched, cached or
+    prefetched. Works on a deleted account — a regulator request does not stop
+    at deletion.
+    """
+    try:
+        nin = await service.reveal(
+            user_id=user_id,
+            admin=admin,
+            reason=payload.reason,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except admin_nin.AdminNinError as exc:
+        return _nin_error(exc)
+    return AdminNinRevealResponse(nin=nin, nin_last4=nin[-4:])
+
+
+@router.put("/{user_id}/nin", response_model=None)
+async def set_user_nin(
+    user_id: UUID,
+    payload: AdminNinSetRequest,
+    request: Request,
+    admin: AdminDep,
+    service: NinServiceDep,
+) -> AdminNinStatusResponse | JSONResponse:
+    """Create or replace the NIN. Re-verified with the registry first — an
+    admin cannot put an unconfirmed number on file — and refused with 409 if
+    another account already holds it. AUDITED (`user.nin_set_by_admin`) with
+    the old and new last-4 and the reason."""
+    try:
+        status_ = await service.set_nin(
+            user_id=user_id,
+            admin=admin,
+            nin=payload.nin,
+            reason=payload.reason,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except InvalidNinError:
+        # Never echo the value. Literal 422 sidesteps the status.HTTP_422_*
+        # deprecation rename (see main.py).
+        return _error(422, "NIN_FORMAT_INVALID", "NIN must be exactly 11 digits.")
+    except admin_nin.AdminNinError as exc:
+        return _nin_error(exc)
+    return _nin_status(status_)
+
+
+@router.delete("/{user_id}/nin", response_model=None)
+async def clear_user_nin(
+    user_id: UUID,
+    payload: AdminNinClearRequest,
+    request: Request,
+    admin: AdminDep,
+    service: NinServiceDep,
+) -> AdminNinStatusResponse | JSONResponse:
+    """Remove the NIN. `verified_status` walks back from `id_verified` to the
+    phone/email rung unless a BVN is still on file, so a cleared account cannot
+    keep passing identity gates. The user may verify again through onboarding afterwards. AUDITED
+    (`user.nin_cleared_by_admin`)."""
+    try:
+        status_ = await service.clear_nin(
+            user_id=user_id,
+            admin=admin,
+            reason=payload.reason,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except admin_nin.AdminNinError as exc:
+        return _nin_error(exc)
+    return _nin_status(status_)

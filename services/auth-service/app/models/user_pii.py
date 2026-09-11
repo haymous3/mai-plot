@@ -1,7 +1,8 @@
 """UserPii — sensitive fields kept out of the safely-cacheable users table.
 
 Per data-model.md design principle #1, the join from users → user_pii is
-the only place phone / full_name / BVN/NIN hashes live.
+the only place phone / full_name / BVN/NIN hashes (and, since SCRUM-224, the
+encrypted NIN) live.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -62,6 +63,15 @@ class UserPii(Base):
     nin_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     # Deterministic HMAC-SHA256(nin, pepper) for cross-account dedup; unique.
     nin_lookup: Mapped[str | None] = mapped_column(String(64), default=None, unique=True)
+    # The NIN itself, AES-256-GCM (SCRUM-224, migration 0016) — the one
+    # reversible copy, decrypted only by an audited admin reveal. NULL for any
+    # NIN verified before that migration: bcrypt cannot be reversed, so those
+    # rows are verified-but-unrecoverable until an admin replaces the number.
+    nin_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, default=None)
+    # Trailing four digits, so the console and the audit trail can name a NIN
+    # (`•••••••1234`) without decrypting it.
+    nin_last4: Mapped[str | None] = mapped_column(String(4), default=None)
+    nin_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # PoA document (SCRUM-48). Columns shipped in migration 0001; mapped here
     # when the upload handler first needs them. s3_key points at a PRIVATE
     # object served only via pre-signed URL — never a public URL.

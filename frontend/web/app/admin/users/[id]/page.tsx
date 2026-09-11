@@ -2,9 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { NinPanel } from './nin-panel';
 import { UserActions } from './user-actions';
 import { AdminNav } from '../../admin-nav';
-import type { AdminUserDetail } from '@/lib/api';
+import type { AdminNinStatus, AdminUserDetail } from '@/lib/api';
 import { authServiceUrl } from '@/lib/api';
 import { ADMIN_LOGIN } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
@@ -21,11 +22,15 @@ export const metadata: Metadata = {
  * ⚠️ Opening this page WRITES AN AUDIT ROW (`user.viewed_by_admin`) — this is the
  * platform's PII for one person, and reading about somebody is an act even when
  * nothing changes. Same reasoning as opening a document for review in SCRUM-192.
+ *
+ * The NIN console (SCRUM-224) is loaded alongside: the MASKED status only. The
+ * number itself is fetched by the panel, on demand, through the audited reveal.
  */
 export default async function AdminUserDetailPage({ params }: { params: { id: string } }) {
-  const result = await backendGet<AdminUserDetail>(
-    `${authServiceUrl()}/admin/users/${params.id}`,
-  );
+  const [result, ninResult] = await Promise.all([
+    backendGet<AdminUserDetail>(`${authServiceUrl()}/admin/users/${params.id}`),
+    backendGet<AdminNinStatus>(`${authServiceUrl()}/admin/users/${params.id}/nin`),
+  ]);
   if (!result.ok && result.status === 401) redirect(ADMIN_LOGIN);
 
   if (!result.ok) {
@@ -96,9 +101,10 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
             {user.seller_authority_type === 'power_of_attorney' && (
               <Field label="PoA status" value={user.poa_verified_status} />
             )}
-            {/* Booleans, never values: both identifiers are stored as bcrypt
-                hashes and the hash is as sensitive as the number (§4). */}
-            <Field label="NIN verified" value={user.nin_verified ? 'yes' : 'no'} />
+            {/* A boolean, never the value: the BVN is stored as a bcrypt hash and
+                the hash is as sensitive as the number (§4). The NIN has its own
+                panel below, where the number is reachable only via an audited
+                reveal. */}
             <Field label="BVN verified" value={user.bvn_verified ? 'yes' : 'no'} />
           </dl>
           <p className="mt-5 border-t border-ink-300/30 pt-4 text-xs leading-5 text-ink-500">
@@ -108,6 +114,15 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
             address, and for a realtor it would break the registration number they sign in with.
           </p>
         </section>
+
+        {ninResult.ok ? (
+          <NinPanel userId={user.id} status={ninResult.data} deleted={user.deleted_at !== null} />
+        ) : (
+          <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-800">
+            Could not load the NIN status for this account ({ninResult.code}). The account
+            itself loaded — refresh to try again.
+          </section>
+        )}
 
         <UserActions user={user} />
       </main>

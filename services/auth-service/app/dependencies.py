@@ -35,6 +35,7 @@ from app.repositories.refresh_token_repo import RefreshTokenRepository
 from app.repositories.user_repo import UserRepository
 from app.security import AuthenticationError, AuthorizationError, CurrentUser, parse_bearer
 from app.services.account import AccountService
+from app.services.admin_nin import AdminNinService
 from app.services.admin_users import AdminUserService
 from app.services.avatar_upload import AvatarService
 from app.services.buyer_profile import BuyerProfileService
@@ -45,6 +46,7 @@ from app.services.email_verification import EmailVerificationService
 from app.services.jwt_service import JwtService, TokenExpired, TokenInvalid
 from app.services.login import LoginService
 from app.services.logout import LogoutService
+from app.services.nin_crypto import NinCipher, build_nin_cipher
 from app.services.nin_verification import NinVerificationService
 from app.services.otp_attempts import OtpAttemptLimiter
 from app.services.otp_resend import OtpResendService
@@ -77,6 +79,7 @@ _sms_client: SmsClient | None = None
 _email_sender: EmailVerificationSender | None = None
 _bvn_verifier: BvnVerifier | None = None
 _nin_verifier: NinVerifier | None = None
+_nin_cipher: NinCipher | None = None
 _document_storage: DocumentStorage | None = None
 _poa_notifier: PoaNotifier | None = None
 _deal_checker: DealChecker | None = None
@@ -156,6 +159,17 @@ async def get_nin_verifier(settings: SettingsDep) -> NinVerifier:
     return _nin_verifier
 
 
+async def get_nin_cipher(settings: SettingsDep) -> NinCipher:
+    """Process-wide NIN cipher (SCRUM-224). Outside env=local the factory
+    REFUSES the repository default key, so a misconfigured environment answers
+    500 on the first NIN write or reveal rather than encrypting real NINs under
+    a key that is in git. There is no fake: the tests use the local default."""
+    global _nin_cipher
+    if _nin_cipher is None:
+        _nin_cipher = build_nin_cipher(passphrase=settings.nin_encryption_key, env=settings.env)
+    return _nin_cipher
+
+
 async def get_document_storage(settings: SettingsDep) -> DocumentStorage:
     """Process-wide PoA document storage. The factory picks the in-memory
     fake (local/CI) vs the real private-bucket S3 client (production)."""
@@ -191,6 +205,7 @@ SmsClientDep = Annotated[SmsClient, Depends(get_sms_client)]
 EmailSenderDep = Annotated[EmailVerificationSender, Depends(get_email_sender)]
 BvnVerifierDep = Annotated[BvnVerifier, Depends(get_bvn_verifier)]
 NinVerifierDep = Annotated[NinVerifier, Depends(get_nin_verifier)]
+NinCipherDep = Annotated[NinCipher, Depends(get_nin_cipher)]
 DocumentStorageDep = Annotated[DocumentStorage, Depends(get_document_storage)]
 DealCheckerDep = Annotated[DealChecker, Depends(get_deal_checker)]
 
@@ -487,12 +502,14 @@ def get_bvn_verification_service(
 def get_nin_verification_service(
     users: Annotated[UserRepository, Depends(_user_repo)],
     verifier: NinVerifierDep,
+    cipher: NinCipherDep,
     settings: SettingsDep,
 ) -> NinVerificationService:
     return NinVerificationService(
         users=users,
         verifier=verifier,
         pepper=settings.nin_pepper,
+        cipher=cipher,
     )
 
 
@@ -663,6 +680,25 @@ def get_admin_user_service(
         audit=audit,
         deals=deals,
         storage=storage,
+    )
+
+
+def get_admin_nin_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    verifier: NinVerifierDep,
+    cipher: NinCipherDep,
+    settings: SettingsDep,
+) -> AdminNinService:
+    """The admin NIN console (SCRUM-224). Shares the registry verifier and the
+    pepper with the user's own path so an admin-set NIN is checked and deduped
+    exactly the way a self-verified one is."""
+    return AdminNinService(
+        users=users,
+        audit=audit,
+        verifier=verifier,
+        cipher=cipher,
+        pepper=settings.nin_pepper,
     )
 
 

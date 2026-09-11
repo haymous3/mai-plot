@@ -78,7 +78,7 @@ def _reset_adapter_singletons() -> None:
     """Clear dependencies.py's memoised adapter clients."""
     from app import dependencies
 
-    for attr in ("_sms_client", "_email_sender", "_bvn_verifier", "_nin_verifier"):
+    for attr in ("_sms_client", "_email_sender", "_bvn_verifier", "_nin_verifier", "_nin_cipher"):
         if hasattr(dependencies, attr):
             setattr(dependencies, attr, None)
 

@@ -19,6 +19,7 @@ from uuid import UUID
 from app.adapters.nin import NinVerificationError, NinVerifier
 from app.repositories.user_repo import UserRepository
 from app.services.nin import hash_nin, lookup_nin, split_full_name, validate_nin_format
+from app.services.nin_crypto import NinCipher
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,12 @@ class NinVerificationService:
         users: UserRepository,
         verifier: NinVerifier,
         pepper: str,
+        cipher: NinCipher,
     ) -> None:
         self._users = users
         self._verifier = verifier
         self._pepper = pepper
+        self._cipher = cipher
 
     async def verify(
         self,
@@ -75,9 +78,9 @@ class NinVerificationService:
         # safely do this", so widening it removes a restriction rather than a
         # protection. Everything that actually protects the value is unchanged:
         # the caller can only ever verify THEIR OWN id (user_id comes from the
-        # JWT, never the body), the value is bcrypt-hashed and never returned
-        # (§4), `has_nin` still blocks re-submission, and the unique
-        # `nin_lookup` still blocks one NIN across two accounts.
+        # JWT, never the body), the value is never returned from this path,
+        # `has_nin` still blocks re-submission, and the unique `nin_lookup`
+        # still blocks one NIN across two accounts.
         validate_nin_format(nin)  # InvalidNinError -> 422, value never echoed
 
         if await self._users.has_nin(user_id):
@@ -99,7 +102,13 @@ class NinVerificationService:
             raise NinVerificationUnavailable() from exc
 
         if outcome.status == "verified":
-            await self._users.set_nin_verified(user_id, nin_hash=hash_nin(nin), nin_lookup=lookup)
+            await self._users.set_nin_verified(
+                user_id,
+                nin_hash=hash_nin(nin),
+                nin_lookup=lookup,
+                nin_encrypted=self._cipher.encrypt(nin, user_id=user_id),
+                nin_last4=nin[-4:],
+            )
             logger.info("nin.verify.ok", extra={"user_id": str(user_id)})
         else:
             # Nothing is persisted for a `failed` or `pending` outcome, so the
