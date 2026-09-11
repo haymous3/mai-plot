@@ -40,12 +40,16 @@ from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.email_verification_repo import EmailVerificationRepository
 from app.repositories.otp_repo import OtpRepository
 from app.repositories.user_repo import UserRepository
+from app.services.account_link import AccountLinkService, LinkDecision
 from app.services.email_token import build_verify_url, generate_token, hash_token
 from app.services.otp import generate_code, hash_code
 from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
 
 logger = logging.getLogger(__name__)
+
+# A registration that made no claim of an existing account.
+_NO_LINK = LinkDecision(root_user_id=None, notify_email=None)
 
 
 class RegistrationError(RuntimeError):
@@ -99,6 +103,7 @@ class RegistrationService:
         rate_limiter: OtpRateLimiter,
         sms: SmsClient,
         email_sender: EmailVerificationSender,
+        account_link: AccountLinkService,
         otp_expire_minutes: int,
         email_expire_minutes: int,
         verify_base_url: str,
@@ -110,6 +115,7 @@ class RegistrationService:
         self._rate_limiter = rate_limiter
         self._sms = sms
         self._email_sender = email_sender
+        self._account_link = account_link
         self._otp_expire_minutes = otp_expire_minutes
         self._email_expire_minutes = email_expire_minutes
         self._verify_base_url = verify_base_url
@@ -124,6 +130,7 @@ class RegistrationService:
         seller_authority_type: str | None,
         full_name: str | None = None,
         verification_channel: str = "email",
+        existing_account_nin: str | None = None,
     ) -> RegistrationResult:
         by_email = verification_channel == "email"
 
@@ -152,6 +159,18 @@ class RegistrationService:
         expire_minutes = self._email_expire_minutes if by_email else self._otp_expire_minutes
         expires_at = datetime.now(UTC) + timedelta(minutes=expire_minutes)
 
+        # "I already have a Maihomme account" (SCRUM-225). A miss is NOT an
+        # error: registration carries on as an ordinary new signup, so a
+        # mistyped NIN cannot dead-end the funnel, and the API response is
+        # identical either way so this cannot be used to enumerate NINs.
+        link = _NO_LINK
+        if existing_account_nin:
+            link = await self._account_link.decide(
+                nin=existing_account_nin,
+                claimed_full_name=full_name,
+                requested_role=role,
+            )
+
         user_id = await self._users.create_with_pii(
             phone=phone,
             role=role,
@@ -159,6 +178,7 @@ class RegistrationService:
             seller_authority_type=seller_authority_type,
             full_name=full_name or "",
             verification_channel=verification_channel,
+            linked_identity_user_id=link.root_user_id,
         )
         # Store the password hash if one was supplied, so the user can later
         # log in via email/password (SCRUM-45).
@@ -166,7 +186,19 @@ class RegistrationService:
             await self._credentials.upsert(user_id=user_id, password_hash=hash_password(password))
 
         if by_email:
-            await self._send_verification_email(user_id=user_id, email=email, expires_at=expires_at)
+            # ⚠️ THE SECURITY PROPERTY OF THE WHOLE LINK FEATURE IS THIS LINE.
+            # On a match the confirmation goes to the address on the EXISTING
+            # account, never the one just typed into the form, so only someone
+            # who can open the original mailbox can complete the signup. A NIN
+            # is not secret — it is on documents handed to banks, agents and
+            # landlords — so sending to `email` here would turn knowing a NIN
+            # and a name into a way to obtain a pre-verified account as that
+            # person. There is a test asserting this exact choice.
+            await self._send_verification_email(
+                user_id=user_id,
+                email=link.notify_email or email,
+                expires_at=expires_at,
+            )
         else:
             await self._send_otp(phone=phone, expires_at=expires_at)
 
@@ -180,6 +212,7 @@ class RegistrationService:
                 # this channel used.
                 "email_domain": _email_domain(email) if by_email else None,
                 "phone_suffix": None if by_email else phone[-4:],
+                "linked_to_existing": link.is_link,
             },
         )
         return RegistrationResult(

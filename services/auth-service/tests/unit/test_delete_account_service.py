@@ -27,9 +27,19 @@ _TOKEN = "header.payload.signature"
 
 
 class _StubUsers:
-    def __init__(self, *, deleted: bool = True, avatar_key: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        deleted: bool = True,
+        avatar_key: str | None = None,
+        linked_children: bool = False,
+    ) -> None:
         self._result = (deleted, avatar_key)
+        self._linked_children = linked_children
         self.calls: list[UUID] = []
+
+    async def has_linked_children(self, user_id: UUID) -> bool:
+        return self._linked_children
 
     async def soft_delete(self, user_id: UUID) -> tuple[bool, str | None]:
         self.calls.append(user_id)

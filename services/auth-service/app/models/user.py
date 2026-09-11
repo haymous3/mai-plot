@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -33,6 +33,17 @@ class User(Base):
     seller_authority_type: Mapped[str | None] = mapped_column(String(30), default=None)
     poa_verified_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="not_applicable"
+    )
+    # The account that owns this person's NIN, when this row is a SECOND account
+    # for someone who already had one (SCRUM-225, migration 0017). NULL means
+    # this row is its own root, which is every pre-existing account.
+    #
+    # One hop only: a sibling always points at the root, never at another
+    # sibling, so resolving an identity is a single lookup rather than a walk.
+    # The NIN itself stays on the root — `idx_user_pii_nin_lookup` is UNIQUE and
+    # this feature deliberately does not weaken it.
+    linked_identity_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), default=None
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

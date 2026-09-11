@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models import RealtorRegistrationNumber, User, UserPii
 
@@ -42,6 +43,27 @@ class UserWithPhone:
     role: str
     phone: str
     verified_status: str
+
+
+# The identity ROOT's PII row, joined alongside the caller's own so a linked
+# second account can read `nin_verified` off the account that actually holds
+# the NIN (SCRUM-225).
+_root_pii = aliased(UserPii, name="root_pii")
+
+
+@dataclass(frozen=True)
+class IdentityMatch:
+    """The account that owns a NIN, for the second-account link flow.
+
+    ⚠️ `email` is the address the confirmation link goes to, and that is the
+    whole security property: the person signing up types a DIFFERENT address,
+    so only whoever controls the ORIGINAL mailbox can complete the link.
+    """
+
+    user_id: UUID
+    email: str | None
+    role: str
+    full_name: str
 
 
 @dataclass(frozen=True)
@@ -218,12 +240,23 @@ class UserRepository:
                 UserPii.full_name,
                 # Presence only. The hashes themselves never leave the service.
                 UserPii.bvn_hash.is_not(None).label("bvn_verified"),
-                UserPii.nin_hash.is_not(None).label("nin_verified"),
+                # ⚠️ Read off the identity ROOT, not this row (SCRUM-225). A
+                # second account never stores the NIN — the UNIQUE index keeps
+                # it on the root — so deriving this from `UserPii.nin_hash`
+                # here would report a linked account as un-verified and send
+                # the user back through a NIN step they have already passed.
+                # coalesce() makes an unlinked account its own root, so the
+                # overwhelmingly common case joins the same row it always did.
+                _root_pii.nin_hash.is_not(None).label("nin_verified"),
                 UserPii.avatar_s3_key,
                 UserPii.location,
                 UserPii.address,
             )
             .join(UserPii, UserPii.user_id == User.id)
+            .outerjoin(
+                _root_pii,
+                _root_pii.user_id == func.coalesce(User.linked_identity_user_id, User.id),
+            )
             .where(
                 User.id == user_id,
                 User.deleted_at.is_(None),
@@ -360,11 +393,18 @@ class UserRepository:
         seller_authority_type: str | None,
         full_name: str = "",
         verification_channel: str = "email",
+        linked_identity_user_id: UUID | None = None,
     ) -> UUID:
         """Insert a users row and its user_pii row in the same DB transaction.
 
         The caller owns the surrounding transaction boundary (the route
         handler's get_session dependency commits on success).
+
+        `linked_identity_user_id` marks this row as a SECOND account for someone
+        who already has one (SCRUM-225). It must always be a ROOT's id — the
+        service layer resolves that before calling, so a chain cannot form. No
+        NIN is written here: the NIN stays on the root, where the UNIQUE index
+        keeps it.
         """
         poa_status = "pending" if seller_authority_type == "power_of_attorney" else "not_applicable"
         user = User(
@@ -372,6 +412,7 @@ class UserRepository:
             email=email,
             seller_authority_type=seller_authority_type,
             poa_verified_status=poa_status,
+            linked_identity_user_id=linked_identity_user_id,
         )
         self._session.add(user)
         await self._session.flush()
@@ -850,6 +891,101 @@ class UserRepository:
         if user is not None:
             user.poa_verified_status = status
             user.updated_at = datetime.now(UTC)
+
+    async def find_identity_by_nin_lookup(self, nin_lookup: str) -> IdentityMatch | None:
+        """The LIVE account that owns this NIN, with the two fields the link
+        flow has to check and use: the name to match against, and the address
+        the confirmation link is sent to (SCRUM-225).
+
+        Deliberately narrower than find_user_by_nin_lookup below: soft-deleted
+        and deactivated accounts are excluded, because linking to a dead account
+        would hand someone a verified identity nobody can still vouch for.
+        Nothing here decrypts the NIN — the HMAC lookup column is the key.
+        """
+        stmt = (
+            select(User.id, User.email, User.role, UserPii.full_name)
+            .join(UserPii, UserPii.user_id == User.id)
+            .where(
+                UserPii.nin_lookup == nin_lookup,
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+                UserPii.deleted_at.is_(None),
+            )
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return IdentityMatch(
+            user_id=row.id,
+            email=row.email,
+            role=row.role,
+            full_name=row.full_name or "",
+        )
+
+    async def roles_held_by_identity(self, root_user_id: UUID) -> set[str]:
+        """Every role already held by the root account and its siblings.
+
+        Used to refuse a second account in a role the person already has — the
+        feature exists so one person can be a seller AND a realtor, not so they
+        can hold two seller accounts.
+        """
+        stmt = select(User.role).where(
+            or_(User.id == root_user_id, User.linked_identity_user_id == root_user_id),
+            User.deleted_at.is_(None),
+        )
+        return {row.role for row in (await self._session.execute(stmt)).all()}
+
+    async def has_linked_children(self, user_id: UUID) -> bool:
+        """True if any live account points at this one as its identity root.
+
+        Deleting a root would strand its siblings' identity, so the delete
+        guard refuses (SCRUM-225).
+        """
+        stmt = select(User.id).where(
+            User.linked_identity_user_id == user_id,
+            User.deleted_at.is_(None),
+        )
+        return (await self._session.execute(stmt)).first() is not None
+
+    async def identity_root_id(self, user_id: UUID) -> UUID | None:
+        """The id of the account holding this person's NIN — itself when the
+        row is its own root. One hop, never a walk: siblings always point at
+        the root, which the service layer enforces on write."""
+        stmt = select(User.linked_identity_user_id).where(User.id == user_id)
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return row.linked_identity_user_id or user_id
+
+    async def inherits_verified_identity(self, user_id: UUID) -> bool:
+        """True when this account is LINKED to a root that holds a NIN.
+
+        The two halves both matter: an unlinked account inherits nothing, and a
+        linked one whose root never completed NIN verification has nothing to
+        inherit. Used to advance a second account to id_verified the moment its
+        confirmation link is clicked (SCRUM-225).
+        """
+        root = aliased(User, name="identity_root")
+        stmt = (
+            select(UserPii.nin_hash)
+            .select_from(User)
+            .join(root, root.id == User.linked_identity_user_id)
+            .join(UserPii, UserPii.user_id == root.id)
+            .where(
+                User.id == user_id,
+                User.linked_identity_user_id.is_not(None),
+                root.deleted_at.is_(None),
+            )
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def mark_id_verified(self, user_id: UUID) -> None:
+        """Advance to id_verified, leaving fully_verified alone — the same
+        guard set_nin_verified uses, so inheriting an identity can never walk a
+        more-verified account backwards."""
+        user = await self._session.get(User, user_id)
+        if user is not None and user.verified_status != "fully_verified":
+            user.verified_status = "id_verified"
 
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
         """Return the user_id that already owns this NIN, or None."""

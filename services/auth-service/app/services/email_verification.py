@@ -79,6 +79,15 @@ class EmailVerificationService:
         await self._tokens.mark_used(record.id)
         await self._users.mark_email_verified(user.id)
 
+        # A linked second account (SCRUM-225) inherits the identity its root
+        # already proved, so clicking the link is what completes BOTH the email
+        # check and identity. It is safe precisely because this link was sent to
+        # the ROOT's mailbox, not the address typed into the form — see
+        # RegistrationService._send_verification_email.
+        linked_and_identified = await self._users.inherits_verified_identity(user.id)
+        if linked_and_identified:
+            await self._users.mark_id_verified(user.id)
+
         tokens = self._jwt.issue_pair(user_id=user.id, role=user.role)
         await self._refresh_tokens.create(
             user_id=user.id,
@@ -91,10 +100,16 @@ class EmailVerificationService:
         verified_status = (
             "email_verified" if user.verified_status == "unverified" else user.verified_status
         )
+        if linked_and_identified:
+            verified_status = "id_verified"
 
         logger.info(
             "email_verification.ok",
-            extra={"user_id": str(user.id), "role": user.role},
+            extra={
+                "user_id": str(user.id),
+                "role": user.role,
+                "inherited_identity": linked_and_identified,
+            },
         )
         return EmailVerificationResult(
             user_id=user.id,
