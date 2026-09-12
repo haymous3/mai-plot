@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 type Phase = 'verifying' | 'success' | 'expired' | 'invalid' | 'missing' | 'error';
 
@@ -80,7 +81,7 @@ export function VerifyEmailClient() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+        <BrandLogo height={32} priority />
       </div>
 
       {phase === 'verifying' && <Verifying />}

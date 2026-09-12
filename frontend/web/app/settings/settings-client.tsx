@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { FinancialTab, NotificationsTab, ProfileTab, SecurityTab } from './tabs';
 import type { SettingsTab } from './settings-ui';
+import { BrandLogo } from '@/app/_components/brand-logo';
 import type { Account, NotificationPrefs, PayoutAccount } from '@/lib/settings';
 
 /**
@@ -146,19 +147,12 @@ export function SettingsClient({
             </svg>
           </Link>
           {/*
-            The design draws a bespoke leaf mark here. No such asset exists in
-            the repo — there is no logo SVG or image anywhere, and SCRUM-169
-            established that vector shapes must not be traced off a raster. The
-            rest of the app (buyer/seller/realtor navs) uses this "M" tile, so
-            Settings matches the shipped brand lockup rather than an invented
-            one. Swap both together if the mark is ever exported.
+            The design draws a bespoke leaf mark here. The logo the designer
+            actually delivered (SCRUM-230) is the house-on-H glyph, so that is
+            what renders — the leaf was never exported and SCRUM-169 ruled out
+            tracing one off a raster.
           */}
-          <span
-            aria-hidden
-            className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-emerald-deep font-display text-base text-bone"
-          >
-            M
-          </span>
+          <BrandLogo variant="mark" height={36} className="flex-none" />
           <div>
             <h1 className="text-2xl font-bold leading-8 text-ink-buyer">Settings</h1>
             <p className="text-sm leading-5 text-ink-500">Manage your account preferences</p>

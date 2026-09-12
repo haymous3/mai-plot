@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { RealtorSignOut } from './realtor-sign-out';
+import { BrandLogo } from '@/app/_components/brand-logo';
 import { ClipboardIcon, FileTextIcon, HouseIcon, UserIcon, WalletIcon } from './_icons';
 
 const NAV = [
@@ -25,12 +26,7 @@ export function RealtorNav({ pendingCount = 0 }: { pendingCount?: number }) {
     <aside className="flex w-64 flex-none flex-col border-r border-line bg-surface-card">
       <div className="flex h-[101px] flex-none flex-col gap-1 border-b border-line px-6 pt-6">
         <div className="flex h-8 items-center gap-2">
-          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-emerald-deep text-sm font-bold text-white">
-            M
-          </span>
-          <span className="font-display text-lg font-bold leading-7 text-emerald-deep">
-            Maihomme
-          </span>
+          <BrandLogo height={28} priority />
         </div>
         <span className="text-xs leading-4 text-ink-500">Realtor Portal</span>
       </div>

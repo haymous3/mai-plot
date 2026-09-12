@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { LoginForm } from './login-form';
+import { BrandLogo } from '@/app/_components/brand-logo';
 import { isNonAdminRole } from '@/lib/session';
 import { sessionAccessToken, sessionHome } from '@/lib/session-server';
 
@@ -47,11 +48,8 @@ export default function LoginPage({
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <section className="grain relative hidden overflow-hidden bg-emerald-deep px-12 py-14 text-bone lg:flex lg:flex-col lg:justify-between">
-        <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-sm bg-bone/10 font-display text-lg text-bone ring-1 ring-bone/20">
-            M
-          </span>
-          <span className="font-display text-xl tracking-tight">Maihomme</span>
+        <div className="relative z-10">
+          <BrandLogo tone="dark" height={32} priority />
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -68,7 +66,7 @@ export default function LoginPage({
       <section className="flex items-center justify-center px-6 py-16 sm:px-12">
         <div className="w-full max-w-sm animate-rise">
           <div className="mb-9 lg:hidden">
-            <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+            <BrandLogo height={32} priority />
           </div>
 
           <p className="text-xs uppercase tracking-[0.2em] text-ink-300">{copy.eyebrow}</p>

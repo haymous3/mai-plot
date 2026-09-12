@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { PasswordField } from '../_components/password-field';
+import { BrandLogo } from '@/app/_components/brand-logo';
 import {
   canSubmitReset,
   PASSWORD_RULES,
@@ -64,7 +65,7 @@ export function ResetPasswordClient() {
   return (
     <div className="w-full max-w-sm animate-rise">
       <div className="mb-9 lg:hidden">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+        <BrandLogo height={32} priority />
       </div>
 
       {phase === 'form' && (

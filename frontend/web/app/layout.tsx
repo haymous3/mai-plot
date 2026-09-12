@@ -19,6 +19,13 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
+  // The favicon, touch icon and link-preview image are the file-convention
+  // routes next to this layout (`icon.png`, `apple-icon.png`,
+  // `opengraph-image.png` — SCRUM-230); Next wires them up by filename.
+  // `metadataBase` is what makes the preview URL absolute: without it Next
+  // guesses from VERCEL_URL, which is the deployment's own hostname rather
+  // than the domain a shared link actually carries.
+  metadataBase: new URL('https://www.maihomme.com'),
   title: 'Maihomme',
   description: "Nigeria's distressed real estate marketplace",
 };
