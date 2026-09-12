@@ -32,10 +32,18 @@ import {
 export function OnboardingFlow({
   role,
   fullName,
+  ninVerified = false,
 }: {
   role: OnboardingRole;
   /** The account holder's name, from GET /auth/me. Null when never set. */
   fullName?: string | null;
+  /**
+   * The NIN is already verified — on this account, or on the one it is linked
+   * to (SCRUM-225). Every role's step skips its NIN field when true
+   * (SCRUM-228); without this a linked account was asked for a NIN the root
+   * already holds, and hit a 409 dead end it could not get past.
+   */
+  ninVerified?: boolean;
 }) {
   const [step, setStep] = useState<OnboardingStep>(() => firstStep(role) ?? 'welcome');
 
@@ -46,15 +54,15 @@ export function OnboardingFlow({
   return (
     <OnboardingShell>
       {step === 'buyer-profile' && (
-        <BuyerProfileStep onDone={() => advance('buyer-profile')} fullName={fullName} />
+        <BuyerProfileStep ninVerified={ninVerified} onDone={() => advance('buyer-profile')} fullName={fullName} />
       )}
 
       {step === 'seller-verification' && (
-        <SellerVerificationStep onDone={() => advance('seller-verification')} fullName={fullName} />
+        <SellerVerificationStep ninVerified={ninVerified} onDone={() => advance('seller-verification')} fullName={fullName} />
       )}
 
       {step === 'realtor-profile' && (
-        <RealtorProfileStep onDone={() => advance('realtor-profile')} fullName={fullName} />
+        <RealtorProfileStep ninVerified={ninVerified} onDone={() => advance('realtor-profile')} fullName={fullName} />
       )}
 
       {step === 'welcome' && <Welcome role={role} fullName={fullName} />}
