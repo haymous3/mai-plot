@@ -507,9 +507,20 @@ class UserRepository:
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
 
     async def find_user_by_bvn_lookup(self, bvn_lookup: str) -> UUID | None:
-        """Return the user_id that already owns this BVN (via the
-        deterministic lookup hash), or None. Used for cross-account dedup."""
-        stmt = select(UserPii.user_id).where(UserPii.bvn_lookup == bvn_lookup)
+        """Return the LIVE user_id that owns this BVN (via the deterministic
+        lookup hash), or None. Used for cross-account dedup.
+
+        Scoped to live rows for the same reason as the NIN twin above
+        (SCRUM-227): a soft-deleted account must not reserve an identifier its
+        owner cannot replace. Matches `idx_user_pii_bvn_lookup` (migration
+        0018). BVN is uncollected by any UI since SCRUM-189, so this is
+        currently unreachable — fixed alongside the NIN precisely because a
+        latent version of the same bug is the harder one to find later.
+        """
+        stmt = select(UserPii.user_id).where(
+            UserPii.bvn_lookup == bvn_lookup,
+            UserPii.deleted_at.is_(None),
+        )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def set_bvn_verified(self, user_id: UUID, *, bvn_hash: str, bvn_lookup: str) -> None:
@@ -988,8 +999,20 @@ class UserRepository:
             user.verified_status = "id_verified"
 
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
-        """Return the user_id that already owns this NIN, or None."""
-        stmt = select(UserPii.user_id).where(UserPii.nin_lookup == nin_lookup)
+        """Return the LIVE user_id that owns this NIN, or None.
+
+        ⚠️ `deleted_at IS NULL` is the whole point (SCRUM-227). Without it a
+        soft-deleted account held its NIN forever, so deleting an account locked
+        that person out of the platform permanently — and nobody gets a new NIN.
+        The predicate matches `idx_user_pii_nin_lookup` exactly (migration
+        0018); if one changes, the other must.
+
+        The dead row KEEPS its hashes. Only the reservation is released.
+        """
+        stmt = select(UserPii.user_id).where(
+            UserPii.nin_lookup == nin_lookup,
+            UserPii.deleted_at.is_(None),
+        )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def set_nin_verified(
