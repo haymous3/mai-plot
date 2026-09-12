@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AvatarMenu } from './avatar-menu';
 import { NotificationBell } from './notification-bell';
 import { BUYER_HOME } from '@/lib/buyer-auth';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -27,20 +28,16 @@ function greeting(): string {
 export function BuyerNav() {
   return (
     <header className="relative flex h-18 items-center justify-between border-b border-line bg-brand-header px-11">
-      <Link href={BUYER_HOME} className="flex items-center gap-2.5">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 font-display text-sm text-bone">
-          M
-        </span>
-        {/* The design was inconsistent here — "MaiHome" in 5 buyer export
-            frames, "Maiplot" in 2. Product owner chose "Maihomme" (SCRUM-173),
-            confirmed verbatim.
-
-            SCRUM-186 swept that name across every consumer-facing surface, so
-            this is no longer the odd one out. Only "Maiplot Technologies Ltd"
-            (the legal entity, in the landing footer) and internal identifiers
-            — the Postgres user/database, container and package names, the
-            `mai-plot` repo — deliberately keep the old name. */}
-        <span className="font-display text-lg tracking-tight text-bone">Maihomme</span>
+      {/* The design was inconsistent here — "MaiHome" in 5 buyer export
+          frames, "Maiplot" in 2. Product owner chose "Maihomme" (SCRUM-173),
+          confirmed verbatim, and SCRUM-186 swept that name across every
+          consumer-facing surface. Only "Maiplot Technologies Ltd" (the legal
+          entity, in the landing footer) and internal identifiers — the
+          Postgres user/database, container and package names, the `mai-plot`
+          repo — deliberately keep the old name. SCRUM-230 replaced the typed
+          wordmark with the designer's logo; the name it spells is the same. */}
+      <Link href={BUYER_HOME} className="flex items-center" aria-label="Maihomme home">
+        <BrandLogo tone="dark" height={28} priority />
       </Link>
       <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">
         {greeting()}

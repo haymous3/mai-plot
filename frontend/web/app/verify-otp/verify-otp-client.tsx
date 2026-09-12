@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { BrandLogo } from '@/app/_components/brand-logo';
 import {
   clearVerifyHandoff,
   OTP_TTL_SECONDS,
@@ -250,7 +251,7 @@ export function VerifyOtpClient() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+        <BrandLogo height={32} priority />
       </div>
 
       <Icon tone={expired || locked ? 'warn' : 'neutral'}>
@@ -476,7 +477,7 @@ function Success({ redirect }: { redirect: string | null }) {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+        <BrandLogo height={32} priority />
       </div>
       <Icon tone="success">
         <svg
@@ -514,7 +515,7 @@ function Missing() {
   return (
     <div className="w-full max-w-sm animate-rise text-center">
       <div className="mb-9">
-        <span className="font-display text-2xl tracking-tight text-emerald-deep">Maihomme</span>
+        <BrandLogo height={32} priority />
       </div>
       <Icon tone="error">
         <WarnGlyph />

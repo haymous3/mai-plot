@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { HouseIcon } from './icons';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 /**
  * Public top navigation — SCRUM-178.
@@ -25,7 +25,9 @@ import { HouseIcon } from './icons';
  *   row height    72px  (Get Started spans y16..55, so 40px centred in 72)
  *   logo          house glyph only — NO wordmark. The wordmark appears in the
  *                 footer lockup, not here. Verified on a contrast-stretched
- *                 crop; there is no faint text next to the icon.
+ *                 crop; there is no faint text next to the icon. Since
+ *                 SCRUM-230 the glyph is the logo's own house-on-H mark rather
+ *                 than a generic line icon; still glyph-only, as designed.
  *   link gaps     ~32px between items
  *   Get Started   118×40, 12px radius, `status-gold` fill
  *
@@ -79,7 +81,7 @@ export function Nav() {
     >
       <div className="mx-auto flex h-18 w-full max-w-[1280px] items-center justify-between px-8">
         <Link href="/" className="flex items-center text-white" aria-label="Maihomme home">
-          <HouseIcon className="h-7 w-7" strokeWidth={2} />
+          <BrandLogo variant="mark" tone="dark" height={30} priority />
         </Link>
 
         <nav aria-label="Primary" className="hidden lg:block">

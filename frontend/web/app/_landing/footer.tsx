@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import {
   FacebookIcon,
-  HouseIcon,
   InstagramIcon,
   LinkedInIcon,
   MailIcon,
@@ -10,6 +9,7 @@ import {
   TwitterIcon,
 } from './icons';
 import { Shell } from './sections';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 /**
  * Landing page footer — Figma node 627:973 (1577×489). Artboard is 1:1.
@@ -74,16 +74,11 @@ export function Footer() {
         <div className="grid gap-12 border-b border-white/10 pb-12 lg:grid-cols-5">
           {/* Brand column spans 2 of the 5 tracks — node 627:976. */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className="flex h-9 w-9 flex-none items-center justify-center rounded-card-sm bg-white/10 text-white"
-              >
-                <HouseIcon className="h-5 w-5" strokeWidth={2} />
-              </span>
-              <span className="font-display text-xl font-bold leading-7 tracking-[-0.5px] text-white">
-                Maihomme
-              </span>
+            {/* The design's tile-plus-wordmark lockup stood in for a logo that
+                did not exist yet; SCRUM-230 renders the real one at the same
+                36px row height. */}
+            <div className="flex h-9 items-center">
+              <BrandLogo tone="dark" height={30} />
             </div>
 
             <p className="mt-5 max-w-[320px] text-sm leading-[22.75px] text-white/65">

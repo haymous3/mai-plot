@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 import {
   BanknoteIcon,
@@ -156,12 +157,7 @@ export function AdminNav({ active, count }: { active: AdminNavKey; count: number
       <div className="flex h-[101px] flex-none items-start justify-between gap-2 border-b border-line px-6 pt-6">
         <div className="flex flex-col gap-1">
           <div className="flex h-8 items-center gap-2">
-            <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-emerald-deep text-sm font-bold text-white">
-              M
-            </span>
-            <span className="font-display text-lg font-bold leading-7 text-emerald-deep">
-              Maihomme
-            </span>
+            <BrandLogo height={28} priority />
           </div>
           <span className="text-xs leading-4 text-ink-500">Admin Console</span>
         </div>

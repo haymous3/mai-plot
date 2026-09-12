@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
 import { VerifyOtpClient } from './verify-otp-client';
+import { BrandLogo } from '@/app/_components/brand-logo';
 
 export const metadata: Metadata = {
   title: 'Enter your code · Maihomme',
@@ -24,11 +25,8 @@ export default function VerifyOtpPage() {
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <section className="grain relative hidden overflow-hidden bg-emerald-deep px-12 py-14 text-bone lg:flex lg:flex-col lg:justify-between">
-        <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-sm bg-bone/10 font-display text-lg text-bone ring-1 ring-bone/20">
-            M
-          </span>
-          <span className="font-display text-xl tracking-tight">Maihomme</span>
+        <div className="relative z-10">
+          <BrandLogo tone="dark" height={32} priority />
         </div>
 
         <div className="relative z-10 max-w-md">
