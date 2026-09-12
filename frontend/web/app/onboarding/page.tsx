@@ -31,25 +31,42 @@ export default async function OnboardingPage() {
   // threaded out of a step in client state — that only ever worked for buyers,
   // and only until a reload. Best-effort: a failure here degrades to a plain
   // "Welcome!", never to a broken onboarding.
-  const fullName = await accountFullName();
+  const { fullName, ninVerified } = await accountSnapshot();
 
-  return <OnboardingFlow role={role} fullName={fullName} />;
+  return <OnboardingFlow role={role} fullName={fullName} ninVerified={ninVerified} />;
 }
 
-async function accountFullName(): Promise<string | null> {
+/**
+ * The two facts onboarding needs from GET /auth/me, in one read.
+ *
+ * ⚠️ THE TWO FIELDS FAIL IN OPPOSITE DIRECTIONS, ON PURPOSE. A failed read
+ * degrades `fullName` to null (a plain "Welcome!") and `ninVerified` to FALSE
+ * (the NIN field is shown). Defaulting `ninVerified` to true on a failure would
+ * silently skip a required identity step; showing the field to someone who has
+ * already verified merely costs them a 409 they can read. Fail closed.
+ *
+ * `nin_verified` resolves through the identity link (SCRUM-225): a second
+ * account whose root holds the NIN reads as verified here, which is what lets
+ * SCRUM-228 skip the field for them rather than dead-ending them on a 409.
+ */
+async function accountSnapshot(): Promise<{ fullName: string | null; ninVerified: boolean }> {
+  const absent = { fullName: null, ninVerified: false };
   const token = sessionAccessToken();
-  if (!token) return null;
+  if (!token) return absent;
   try {
     const resp = await fetch(`${authServiceUrl()}/auth/me`, {
       headers: { authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
-    if (!resp.ok) return null;
-    const body = (await resp.json()) as { full_name?: string | null };
-    // Registration stores `full_name or ""`, so an account that predates
-    // SCRUM-197 has an empty string rather than null. Treat it as absent.
-    return body.full_name?.trim() || null;
+    if (!resp.ok) return absent;
+    const body = (await resp.json()) as { full_name?: string | null; nin_verified?: boolean };
+    return {
+      // Registration stores `full_name or ""`, so an account that predates
+      // SCRUM-197 has an empty string rather than null. Treat it as absent.
+      fullName: body.full_name?.trim() || null,
+      ninVerified: body.nin_verified === true,
+    };
   } catch {
-    return null;
+    return absent;
   }
 }

@@ -89,6 +89,45 @@ export function useNinVerification(endpoint: NinEndpoint) {
   return { status, message, verify, reset } as const;
 }
 
+/**
+ * What stands in for the NIN field when the account is already verified —
+ * on this account, or through the one it is linked to (SCRUM-225/228).
+ *
+ * Shown INSTEAD of the field, never alongside a disabled one: an empty,
+ * disabled input reads as broken. A one-line explanation is what makes the gap
+ * in the form legible. Same call Settings made (`account.nin_verified ?`).
+ */
+export function NinAlreadyVerified() {
+  return (
+    <div>
+      <FieldLabel htmlFor="nin-verified" hint="(National Identification Number)">
+        NIN
+      </FieldLabel>
+      <div
+        id="nin-verified"
+        role="status"
+        className="mt-3 flex h-[68px] w-full items-center gap-3 rounded-2xl border border-emerald-deep/40 bg-[#f3f5f4] px-6 text-base text-ink-buyer"
+      >
+        <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-emerald-deep text-white">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+        <span>Identity verified through your existing account</span>
+      </div>
+    </div>
+  );
+}
+
 export function NinVerifyField({
   id = 'nin',
   value,

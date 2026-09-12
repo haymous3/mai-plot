@@ -4,7 +4,12 @@ import { useState } from 'react';
 
 import { HouseIcon, UserCircleIcon } from './icons';
 import { FieldError, FieldLabel, TextField, UploadDropzone } from './fields';
-import { NinVerifyField, ninIsSettled, useNinVerification } from './nin-verify-field';
+import {
+  NinAlreadyVerified,
+  NinVerifyField,
+  ninIsSettled,
+  useNinVerification,
+} from './nin-verify-field';
 import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
 
 /**
@@ -60,8 +65,11 @@ const MAX_BYTES = MAX_MB * 1024 * 1024;
 export function SellerVerificationStep({
   onDone,
   fullName,
+  ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
+  /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
+  ninVerified?: boolean;
   /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
   fullName?: string | null;
 }) {
@@ -75,11 +83,11 @@ export function SellerVerificationStep({
   const needsDocument = authority === 'power_of_attorney';
   // SCRUM-221: checked when entered, not inside submit().
   const ninCheck = useNinVerification('/api/auth/seller/nin');
+  // Settled up front when the account — or the one it is linked to — already
+  // holds a verified NIN (SCRUM-228); otherwise a linked seller was stuck here.
+  const ninSettled = ninVerified || ninIsSettled(ninCheck.status);
   const canSubmit =
-    ninIsSettled(ninCheck.status) &&
-    address.trim().length > 0 &&
-    authority !== '' &&
-    (!needsDocument || file !== null);
+    ninSettled && address.trim().length > 0 && authority !== '' && (!needsDocument || file !== null);
 
   async function submit() {
     if (file && file.size > MAX_BYTES) {
@@ -113,7 +121,7 @@ export function SellerVerificationStep({
       // than after the authority, address and PoA document are all filled in.
       // Every seller's NIN is verified (SCRUM-201), PoA sellers included —
       // SCRUM-189 removed the owner-only gate that used to skip them.
-      if (!ninIsSettled(ninCheck.status)) {
+      if (!ninSettled) {
         setError('Please enter a NIN we can verify before continuing.');
         return;
       }
@@ -155,18 +163,22 @@ export function SellerVerificationStep({
       />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        <NinVerifyField
-          value={nin}
-          onChange={(v) => {
-            setNin(v);
-            if (ninCheck.status !== 'idle') ninCheck.reset();
-          }}
-          status={ninCheck.status}
-          message={ninCheck.message}
-          onBlurVerify={() => void ninCheck.verify(nin)}
-          onRetry={() => void ninCheck.verify(nin)}
-          disabled={busy}
-        />
+        {ninVerified ? (
+          <NinAlreadyVerified />
+        ) : (
+          <NinVerifyField
+            value={nin}
+            onChange={(v) => {
+              setNin(v);
+              if (ninCheck.status !== 'idle') ninCheck.reset();
+            }}
+            status={ninCheck.status}
+            message={ninCheck.message}
+            onBlurVerify={() => void ninCheck.verify(nin)}
+            onRetry={() => void ninCheck.verify(nin)}
+            disabled={busy}
+          />
+        )}
 
         <div className="mt-9">
           <FieldLabel htmlFor="address" required>
@@ -255,8 +267,11 @@ export function SellerVerificationStep({
 export function RealtorProfileStep({
   onDone,
   fullName,
+  ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
+  /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
+  ninVerified?: boolean;
   /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
   fullName?: string | null;
 }) {
@@ -272,8 +287,8 @@ export function RealtorProfileStep({
   const [error, setError] = useState<string | null>(null);
 
   const ninCheck = useNinVerification('/api/auth/nin');
-  const canSubmit =
-    ninIsSettled(ninCheck.status) && address.trim().length > 0 && coverage.trim() !== '';
+  const ninSettled = ninVerified || ninIsSettled(ninCheck.status);
+  const canSubmit = ninSettled && address.trim().length > 0 && coverage.trim() !== '';
 
   async function submit() {
     setBusy(true);
@@ -282,7 +297,7 @@ export function RealtorProfileStep({
       // Identity first, then the profile: a realtor row that exists without a
       // verified NIN is the state SCRUM-201 set out to remove.
       // Verified on blur since SCRUM-221; this is the guard behind `canSubmit`.
-      if (!ninIsSettled(ninCheck.status)) {
+      if (!ninSettled) {
         setError('Please enter a NIN we can verify before continuing.');
         return;
       }
@@ -333,19 +348,23 @@ export function RealtorProfileStep({
         {/* NIN and Address are not on the export either (SCRUM-201): the
             realtor flow collected no identity document at all, and no role
             collected an address. */}
-        <NinVerifyField
-          id="realtor-nin"
-          value={nin}
-          onChange={(v) => {
-            setNin(v);
-            if (ninCheck.status !== 'idle') ninCheck.reset();
-          }}
-          status={ninCheck.status}
-          message={ninCheck.message}
-          onBlurVerify={() => void ninCheck.verify(nin)}
-          onRetry={() => void ninCheck.verify(nin)}
-          disabled={busy}
-        />
+        {ninVerified ? (
+          <NinAlreadyVerified />
+        ) : (
+          <NinVerifyField
+            id="realtor-nin"
+            value={nin}
+            onChange={(v) => {
+              setNin(v);
+              if (ninCheck.status !== 'idle') ninCheck.reset();
+            }}
+            status={ninCheck.status}
+            message={ninCheck.message}
+            onBlurVerify={() => void ninCheck.verify(nin)}
+            onRetry={() => void ninCheck.verify(nin)}
+            disabled={busy}
+          />
+        )}
 
         <div className="mt-9">
           <FieldLabel htmlFor="realtor-address" required>

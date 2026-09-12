@@ -3,7 +3,12 @@
 import { useState } from 'react';
 
 import { CONTROL, FieldError, FieldLabel, SelectField, TextField } from './fields';
-import { NinVerifyField, ninIsSettled, useNinVerification } from './nin-verify-field';
+import {
+  NinAlreadyVerified,
+  NinVerifyField,
+  ninIsSettled,
+  useNinVerification,
+} from './nin-verify-field';
 import { OnboardingHeading, PrimaryButton } from './ui';
 import { MoneyInput } from '@/app/_components/money-input';
 import { nairaToKobo } from '@/lib/money-input';
@@ -53,8 +58,11 @@ const EMPLOYMENT = [
 export function BuyerProfileStep({
   onDone,
   fullName,
+  ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
+  /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
+  ninVerified?: boolean;
   /**
    * The name registration collected (SCRUM-197), passed down from the page's
    * GET /auth/me. POST /auth/profile requires full_name, so saving an address
@@ -76,7 +84,11 @@ export function BuyerProfileStep({
   // Continue waits on the CHECK, not just the shape — so a NIN that will be
   // rejected is rejected here, beside the field, rather than after the user has
   // filled in three more.
-  const canSubmit = ninIsSettled(ninCheck.status) && address.trim().length > 0;
+  // A NIN verified on this account — or through the one it is linked to — is
+  // settled before the user types anything (SCRUM-228). Without this a linked
+  // account was blocked here, and typing the NIN only earned a 409.
+  const ninSettled = ninVerified || ninIsSettled(ninCheck.status);
+  const canSubmit = ninSettled && address.trim().length > 0;
 
   async function submit() {
     setBusy(true);
@@ -86,7 +98,7 @@ export function BuyerProfileStep({
       // is already verified by the time Continue is enabled — the POST that
       // used to live here has moved to the field's own blur handler. This guard
       // is the belt to that braces: `canSubmit` cannot be true without it.
-      if (!ninIsSettled(ninCheck.status)) {
+      if (!ninSettled) {
         setError('Please enter a NIN we can verify before continuing.');
         return;
       }
@@ -135,20 +147,24 @@ export function BuyerProfileStep({
       />
 
       <div className="mx-auto mt-14 max-w-[672px]">
-        <NinVerifyField
-          value={nin}
-          onChange={(v) => {
-            setNin(v);
-            // Editing after a verdict invalidates it: the next blur must be
-            // free to spend a call on the new number.
-            if (ninCheck.status !== 'idle') ninCheck.reset();
-          }}
-          status={ninCheck.status}
-          message={ninCheck.message}
-          onBlurVerify={() => void ninCheck.verify(nin)}
-          onRetry={() => void ninCheck.verify(nin)}
-          disabled={busy}
-        />
+        {ninVerified ? (
+          <NinAlreadyVerified />
+        ) : (
+          <NinVerifyField
+            value={nin}
+            onChange={(v) => {
+              setNin(v);
+              // Editing after a verdict invalidates it: the next blur must be
+              // free to spend a call on the new number.
+              if (ninCheck.status !== 'idle') ninCheck.reset();
+            }}
+            status={ninCheck.status}
+            message={ninCheck.message}
+            onBlurVerify={() => void ninCheck.verify(nin)}
+            onRetry={() => void ninCheck.verify(nin)}
+            disabled={busy}
+          />
+        )}
 
         <div className="mt-9">
           <FieldLabel htmlFor="address" required>
