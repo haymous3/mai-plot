@@ -78,6 +78,24 @@ class NinBelongsToAnotherAccount(AdminNinError):
     pass
 
 
+class NinHeldByLinkedAccount(AdminNinError):
+    """This row is a linked second account (SCRUM-225); the NIN lives on its
+    root. Reveal, set and clear are refused here ON PURPOSE (SCRUM-229):
+
+    * the reveal audit (`user.nin_revealed_by_admin`) must be written against
+      the account that actually HOLDS the number, or a regulator reading the
+      trail sees a reveal on a row that carries no NIN;
+    * exactly one row owns a NIN — the UNIQUE index enforces it and the whole
+      linking model rests on it — and writing through a sibling would blur that.
+
+    The admin manages the NIN on the root, which `held_by` names.
+    """
+
+    def __init__(self, held_by: UUID) -> None:
+        super().__init__(str(held_by))
+        self.held_by = held_by
+
+
 class NinRejectedByRegistry(AdminNinError):
     """Ninja answered but did not confirm the number (or the name mismatched)."""
 
@@ -97,6 +115,10 @@ class NinStatus:
     nin_last4: str | None
     nin_verified_at: datetime | None
     recoverable: bool
+    # The root account when this one is a linked second account (SCRUM-229).
+    # Everything above then describes the ROOT's NIN, and the console shows a
+    # pointer to it in place of the reveal/set/clear controls.
+    held_by_user_id: UUID | None = None
 
     @classmethod
     def from_record(cls, record: NinRecord) -> NinStatus:
@@ -104,7 +126,10 @@ class NinStatus:
             nin_verified=record.has_nin,
             nin_last4=record.nin_last4,
             nin_verified_at=record.nin_verified_at,
-            recoverable=record.nin_encrypted is not None,
+            # From the record's own flag, NOT `nin_encrypted is not None`: a
+            # linked account's record never carries the ciphertext.
+            recoverable=record.recoverable,
+            held_by_user_id=record.held_by_user_id,
         )
 
 
@@ -149,6 +174,11 @@ class AdminNinService:
         record = await self._users.get_nin_record(user_id)
         if record is None:
             raise UserNotFound()
+        # Before anything else: a sibling's record carries no ciphertext by
+        # construction, so this is the guard that gives the admin a useful
+        # answer rather than a misleading "not recoverable".
+        if record.held_by_user_id is not None:
+            raise NinHeldByLinkedAccount(record.held_by_user_id)
         if not record.has_nin:
             raise NinNotOnFile()
         if record.nin_encrypted is None:
@@ -193,6 +223,10 @@ class AdminNinService:
             raise UserNotFound()
         if record.deleted_at is not None:
             raise UserDeleted()
+        # Writing a NIN onto a sibling could only ever collide with the root's
+        # under idx_user_pii_nin_lookup. Say so, and say where to go instead.
+        if record.held_by_user_id is not None:
+            raise NinHeldByLinkedAccount(record.held_by_user_id)
 
         lookup = lookup_nin(nin, pepper=self._pepper)
         owner = await self._users.find_user_by_nin_lookup(lookup)
@@ -260,6 +294,9 @@ class AdminNinService:
             raise UserNotFound()
         if record.deleted_at is not None:
             raise UserDeleted()
+        # There is nothing on this row to clear; the NIN is the root's.
+        if record.held_by_user_id is not None:
+            raise NinHeldByLinkedAccount(record.held_by_user_id)
         if not record.has_nin:
             raise NinNotOnFile()
 

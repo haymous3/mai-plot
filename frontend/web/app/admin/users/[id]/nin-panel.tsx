@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -214,7 +215,25 @@ export function NinPanel({
         </div>
       </dl>
 
-      {status.nin_verified && !status.recoverable && (
+      {/* A linked second account (SCRUM-225/229). The status above is the
+          ROOT's, and every write or reveal is refused here on purpose: the
+          reveal audit belongs on the row that holds the number, and exactly
+          one row owns a NIN. So: a pointer, not the controls. */}
+      {status.held_by_user_id && (
+        <p className="mt-4 rounded-md bg-emerald-deep/10 px-3.5 py-2.5 text-sm text-emerald-deep">
+          This is a linked second account. Its identity is verified through another account of
+          the same person, which holds the NIN.{' '}
+          <Link
+            href={`/admin/users/${status.held_by_user_id}`}
+            className="font-medium underline underline-offset-2 hover:no-underline"
+          >
+            Manage the NIN there
+          </Link>
+          .
+        </p>
+      )}
+
+      {status.nin_verified && !status.recoverable && !status.held_by_user_id && (
         <p className="mt-4 rounded-md bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
           This NIN was verified before recoverable storage existed. It counts as verified, but
           it cannot be shown. Use <strong>Replace</strong> to re-verify the number with the
@@ -235,7 +254,7 @@ export function NinPanel({
       )}
       {done && <p className="mt-4 text-sm text-emerald-deep">{done}</p>}
 
-      {mode === 'idle' ? (
+      {status.held_by_user_id ? null : mode === 'idle' ? (
         <div className="mt-5 flex flex-wrap gap-2">
           {status.nin_verified && status.recoverable && revealed === null && (
             <button

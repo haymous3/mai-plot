@@ -14,6 +14,7 @@ from app.security import CurrentUser
 from app.services.admin_nin import (
     AdminNinService,
     NinBelongsToAnotherAccount,
+    NinHeldByLinkedAccount,
     NinNotOnFile,
     NinNotRecoverable,
     NinRegistryUnavailable,
@@ -46,10 +47,13 @@ class _StubUserRepo:
         recoverable: bool = True,
         other_owner_of: str | None = None,
         full_name: str = "Ada Lovelace",
+        held_by: UUID | None = None,
     ) -> None:
         self.user_id = uuid4()
         self._exists = exists
         self._deleted = deleted
+        # A linked second account (SCRUM-229): the NIN lives on `held_by`.
+        self._held_by = held_by
         self._full_name = full_name
         self._nin_hash: str | None = "$2b$hash" if nin else None
         self._nin_encrypted: bytes | None = (
@@ -71,9 +75,13 @@ class _StubUserRepo:
             user_id=user_id,
             deleted_at=datetime.now(UTC) if self._deleted else None,
             has_nin=self._nin_hash is not None,
-            nin_encrypted=self._nin_encrypted,
+            # Mirrors the real repo: a sibling's record never carries the
+            # ciphertext, even when the root's NIN is recoverable.
+            nin_encrypted=None if self._held_by else self._nin_encrypted,
             nin_last4=self._nin_last4,
             nin_verified_at=datetime.now(UTC) if self._nin_hash else None,
+            recoverable=self._nin_encrypted is not None,
+            held_by_user_id=self._held_by,
         )
 
     async def get_account(self, user_id: UUID) -> SimpleNamespace | None:
@@ -356,3 +364,62 @@ async def test_clear_refuses_a_deleted_account() -> None:
     service, _ = _service(repo)
     with pytest.raises(UserDeleted):
         await service.clear_nin(user_id=repo.user_id, admin=_ADMIN, reason=_REASON)
+
+
+# ---------------------------------------------------------------------------
+# Linked second accounts (SCRUM-229)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_status_of_a_linked_account_reports_the_roots_nin() -> None:
+    """The detail page one screen up says "verified"; the console must not
+    then say "no NIN on file"."""
+    root = uuid4()
+    repo = _StubUserRepo(nin="12345678901", held_by=root)
+    service, _ = _service(repo)
+    status = await service.get_status(user_id=repo.user_id)
+
+    assert status.nin_verified is True
+    assert status.nin_last4 == "8901"
+    assert status.recoverable is True
+    assert status.held_by_user_id == root
+
+
+@pytest.mark.asyncio
+async def test_reveal_on_a_linked_account_is_refused_and_names_the_root() -> None:
+    """Refused ON PURPOSE: the reveal audit must be written against the row
+    that holds the number, and the sibling's record carries no ciphertext."""
+    root = uuid4()
+    repo = _StubUserRepo(nin="12345678901", held_by=root)
+
+    service, _ = _service(repo)
+    with pytest.raises(NinHeldByLinkedAccount) as exc:
+        await service.reveal(user_id=repo.user_id, admin=_ADMIN, reason="support call")
+    assert exc.value.held_by == root
+
+
+@pytest.mark.asyncio
+async def test_set_on_a_linked_account_is_refused_before_any_registry_call() -> None:
+    """Writing a NIN onto a sibling could only collide with the root's under
+    the unique index; refuse before spending a registry call on it."""
+    root = uuid4()
+    repo = _StubUserRepo(nin="12345678901", held_by=root)
+    verifier = InMemoryNinVerifier()
+
+    service, _ = _service(repo, verifier=verifier)
+    with pytest.raises(NinHeldByLinkedAccount):
+        await service.set_nin(user_id=repo.user_id, admin=_ADMIN, nin="99999999999", reason="typo")
+    assert verifier.calls == 0
+    assert repo.set_calls == []
+
+
+@pytest.mark.asyncio
+async def test_clear_on_a_linked_account_is_refused() -> None:
+    root = uuid4()
+    repo = _StubUserRepo(nin="12345678901", held_by=root)
+
+    service, _ = _service(repo)
+    with pytest.raises(NinHeldByLinkedAccount):
+        await service.clear_nin(user_id=repo.user_id, admin=_ADMIN, reason="x")
+    assert repo.clear_calls == 0

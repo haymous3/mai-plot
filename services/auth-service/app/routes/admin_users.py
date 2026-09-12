@@ -309,6 +309,7 @@ def _nin_status(status_: NinStatus) -> AdminNinStatusResponse:
         nin_last4=status_.nin_last4,
         nin_verified_at=status_.nin_verified_at,
         recoverable=status_.recoverable,
+        held_by_user_id=status_.held_by_user_id,
     )
 
 
@@ -337,6 +338,21 @@ def _nin_error(exc: admin_nin.AdminNinError) -> JSONResponse:
                 status.HTTP_409_CONFLICT,
                 "NIN_BELONGS_TO_ANOTHER_ACCOUNT",
                 "Another account already holds this NIN.",
+            )
+        case admin_nin.NinHeldByLinkedAccount():
+            # Carries the root so the console can link straight to it. Built
+            # inline like NinRejectedByRegistry below: this module's _error
+            # has no `details` parameter (auth.py's does — easy to conflate).
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "error_code": "NIN_HELD_BY_LINKED_ACCOUNT",
+                    "message": (
+                        "This is a linked second account; its identity is held by "
+                        "another account of the same person. Manage the NIN there."
+                    ),
+                    "details": {"held_by_user_id": str(exc.held_by)},
+                },
             )
         case admin_nin.NinRejectedByRegistry():
             return JSONResponse(

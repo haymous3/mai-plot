@@ -93,6 +93,10 @@ class AdminUserDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     registration_number: str | None
+    # The account holding this person's NIN when this is a linked second account
+    # (SCRUM-225). `nin_verified` above already resolves through it (SCRUM-229);
+    # this is what lets the UI explain a verified badge on a row with no NIN.
+    linked_identity_user_id: UUID | None
 
     @classmethod
     def from_detail(cls, detail: AdminUserDetail) -> AdminUserDetailResponse:
@@ -114,6 +118,7 @@ class AdminUserDetailResponse(BaseModel):
             created_at=detail.created_at,
             updated_at=detail.updated_at,
             registration_number=detail.registration_number,
+            linked_identity_user_id=detail.linked_identity_user_id,
         )
 
 
@@ -208,6 +213,10 @@ class AdminNinStatusResponse(BaseModel):
     nin_last4: str | None
     nin_verified_at: datetime | None
     recoverable: bool
+    # Set when this is a linked second account (SCRUM-225/229): the fields
+    # above describe the ROOT's NIN, and reveal/set/clear answer 409 here — the
+    # console shows a pointer to the root instead of those controls.
+    held_by_user_id: UUID | None = None
 
 
 class AdminNinRevealRequest(BaseModel):
