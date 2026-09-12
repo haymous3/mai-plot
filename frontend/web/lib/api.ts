@@ -556,6 +556,9 @@ export interface AdminUserDetail {
   created_at: string;
   updated_at: string;
   registration_number: string | null;
+  /** The account holding this person's NIN when this is a linked second account
+   * (SCRUM-225). `nin_verified` already resolves through it (SCRUM-229). */
+  linked_identity_user_id: string | null;
 }
 
 /** The masked NIN view (GET /admin/users/{id}/nin, SCRUM-224).
@@ -567,6 +570,9 @@ export interface AdminNinStatus {
   nin_last4: string | null;
   nin_verified_at: string | null;
   recoverable: boolean;
+  /** Set for a linked second account (SCRUM-229): the fields above describe the
+   * ROOT's NIN, and reveal/set/clear answer 409 here — manage it on the root. */
+  held_by_user_id: string | null;
 }
 
 /** A row in the admin realtor onboarding queue (GET /admin/realtors/queue).

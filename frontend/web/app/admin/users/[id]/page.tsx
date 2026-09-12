@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -106,6 +107,25 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
                 panel below, where the number is reachable only via an audited
                 reveal. */}
             <Field label="BVN verified" value={user.bvn_verified ? 'yes' : 'no'} />
+            {/* SCRUM-229: a linked second account carries no NIN of its own,
+                so a bare "verified" would be baffling. Say where it comes from. */}
+            {user.linked_identity_user_id && (
+              <Field
+                label="Identity"
+                value={
+                  <>
+                    Verified through{' '}
+                    <Link
+                      href={`/admin/users/${user.linked_identity_user_id}`}
+                      className="font-medium text-emerald-deep underline underline-offset-2 hover:no-underline"
+                    >
+                      a linked account
+                    </Link>{' '}
+                    of the same person, which holds the NIN.
+                  </>
+                }
+              />
+            )}
           </dl>
           <p className="mt-5 border-t border-ink-300/30 pt-4 text-xs leading-5 text-ink-500">
             Role, email and phone are not editable here. A role change would be a way to grant
@@ -144,7 +164,8 @@ function Field({
   mono = false,
 }: {
   label: string;
-  value: string | null;
+  /** Usually a string; a node when the value needs a link inside it (SCRUM-229). */
+  value: ReactNode;
   mono?: boolean;
 }) {
   return (

@@ -18,9 +18,14 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.adapters.email_verification import InMemoryEmailClient
 from app.adapters.nin import InMemoryNinVerifier, NinVerificationOutcome
 from app.adapters.twilio import InMemoryTwilioClient
-from tests.integration.conftest import assert_error_envelope, register_and_verify
+from tests.integration.conftest import (
+    assert_error_envelope,
+    extract_email_token,
+    register_and_verify,
+)
 from tests.integration.test_admin_users import _auth, _staff_token
 
 _NIN = "12345678901"
@@ -119,6 +124,8 @@ async def test_status_is_masked_and_detail_still_carries_only_a_boolean(
         "nin_last4": "8901",
         "nin_verified_at": body["nin_verified_at"],
         "recoverable": True,
+        # Null for a root account: it holds its own NIN (SCRUM-229).
+        "held_by_user_id": None,
     }
     assert body["nin_verified_at"] is not None
     assert _NIN not in resp.text
@@ -146,6 +153,7 @@ async def test_status_without_a_nin(
         "nin_last4": None,
         "nin_verified_at": None,
         "recoverable": False,
+        "held_by_user_id": None,
     }
 
 
@@ -284,6 +292,7 @@ async def test_pre_migration_row_is_verified_but_not_recoverable(
         "nin_last4": None,
         "nin_verified_at": None,
         "recoverable": False,
+        "held_by_user_id": None,
     }
 
     reveal = await http_client.post(
@@ -480,6 +489,7 @@ async def test_clear_removes_the_nin_and_walks_verified_status_back(
         "nin_last4": None,
         "nin_verified_at": None,
         "recoverable": False,
+        "held_by_user_id": None,
     }
     row = _pii_row(db_engine, user_id)
     assert row is not None
@@ -561,3 +571,130 @@ async def test_clear_404s_when_nothing_on_file_and_409s_when_deleted(
         f"/admin/users/{deleted}/nin/reveal", json={"reason": _REASON}, headers=_auth(admin)
     )
     assert reveal.status_code == 200 and reveal.json()["nin"] == _NIN
+
+
+# ---------------------------------------------------------------------------
+# Linked second accounts (SCRUM-229)
+# ---------------------------------------------------------------------------
+
+
+async def _linked_pair(
+    http_client: AsyncClient,
+    sms: InMemoryTwilioClient,
+    email_fake: InMemoryEmailClient,
+) -> tuple[str, str]:
+    """A root holding the NIN, and a confirmed second account linked to it
+    (SCRUM-225). Returns (root_id, linked_id)."""
+    root_body = await register_and_verify(
+        http_client, sms, phone="08010000001", role="buyer", email="root@example.com"
+    )
+    root_token = root_body["access_token"]
+    await http_client.post(
+        "/auth/profile",
+        json={"full_name": "Adaeze Okonkwo", "address": "12 Marina, Lagos"},
+        headers=_auth(root_token),
+    )
+    nin = await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(root_token))
+    assert nin.status_code == 202, nin.text
+
+    email_fake.sent.clear()
+    reg = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": "08087654321",
+            "role": "realtor",
+            "email": "second@example.com",
+            "full_name": "Adaeze Okonkwo",
+            "verification_channel": "email",
+            "existing_account_nin": _NIN,
+        },
+    )
+    assert reg.status_code == 201, reg.text
+    token = extract_email_token(email_fake.sent[-1].verify_url)
+    verify = await http_client.post(
+        "/auth/verify/email", json={"token": token, "purpose": "registration"}
+    )
+    assert verify.status_code == 200, verify.text
+    return root_body["user"]["id"], verify.json()["user"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_admin_detail_of_a_linked_account_shows_verified_and_names_the_root(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """Before SCRUM-229 the detail derived nin_verified from the row's own hash
+    and told an admin "not verified" about an account whose identity IS."""
+    root_id, linked_id = await _linked_pair(http_client, sms_fake, email_verification_fake)
+    _, admin = _staff_token(db_engine)
+
+    resp = await http_client.get(f"/admin/users/{linked_id}", headers=_auth(admin))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["nin_verified"] is True
+    assert resp.json()["linked_identity_user_id"] == root_id
+
+
+@pytest.mark.asyncio
+async def test_console_status_of_a_linked_account_reports_the_root(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    root_id, linked_id = await _linked_pair(http_client, sms_fake, email_verification_fake)
+    _, admin = _staff_token(db_engine)
+
+    resp = await http_client.get(f"/admin/users/{linked_id}/nin", headers=_auth(admin))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["nin_verified"] is True
+    assert body["nin_last4"] == "8901"
+    assert body["held_by_user_id"] == root_id
+    assert _NIN not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_reveal_set_and_clear_on_a_linked_account_all_point_at_the_root(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    email_verification_fake: InMemoryEmailClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """Refused on purpose: the reveal audit belongs on the row that holds the
+    number, and exactly one row owns a NIN. Each refusal names the root."""
+    root_id, linked_id = await _linked_pair(http_client, sms_fake, email_verification_fake)
+    _, admin = _staff_token(db_engine)
+    base = f"/admin/users/{linked_id}/nin"
+
+    reveal = await http_client.post(
+        f"{base}/reveal", json={"reason": _REASON}, headers=_auth(admin)
+    )
+    set_ = await http_client.put(
+        base, json={"nin": _OTHER_NIN, "reason": _REASON}, headers=_auth(admin)
+    )
+    clear = await http_client.request(
+        "DELETE", base, json={"reason": _REASON}, headers=_auth(admin)
+    )
+
+    for resp in (reveal, set_, clear):
+        assert resp.status_code == 409, resp.text
+        assert_error_envelope(resp.json(), "NIN_HELD_BY_LINKED_ACCOUNT")
+        assert resp.json()["details"]["held_by_user_id"] == root_id
+    assert _NIN not in reveal.text
+
+    # And nothing was written to the sibling, nor revealed anywhere.
+    assert _pii_row(db_engine, linked_id).nin_hash is None
+    assert _audit_rows(db_engine, "user.nin_revealed_by_admin") == []

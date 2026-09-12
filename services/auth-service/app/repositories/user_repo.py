@@ -33,6 +33,17 @@ class NinRecord:
     nin_encrypted: bytes | None
     nin_last4: str | None
     nin_verified_at: datetime | None
+    # Whether a reveal could work. Split out from `nin_encrypted` (SCRUM-229)
+    # because for a LINKED account the ciphertext is deliberately NOT carried
+    # on this record — see get_nin_record — while the status view still has to
+    # say whether the root's NIN is recoverable.
+    recoverable: bool
+    # The root account holding this person's NIN, when this row is a linked
+    # second account (SCRUM-225). None for a root. When set, `has_nin`,
+    # `nin_last4`, `nin_verified_at` and `recoverable` describe the ROOT's NIN
+    # (so the masked status reads correctly), and every write or reveal is
+    # refused by the service — the NIN is managed on the account that owns it.
+    held_by_user_id: UUID | None
 
 
 @dataclass(frozen=True)
@@ -158,6 +169,10 @@ class AdminUserDetail:
     created_at: datetime
     updated_at: datetime
     registration_number: str | None
+    # The account holding this person's NIN, when this row is a linked second
+    # account (SCRUM-225). None for a root. Exposed so the admin UI can say WHY
+    # `nin_verified` is true for a row that carries no NIN of its own.
+    linked_identity_user_id: UUID | None
 
 
 @dataclass(frozen=True)
@@ -738,10 +753,21 @@ class UserRepository:
                 UserPii.location,
                 UserPii.address,
                 UserPii.bvn_hash.is_not(None).label("bvn_verified"),
-                UserPii.nin_hash.is_not(None).label("nin_verified"),
+                # Off the identity ROOT, as get_account does (SCRUM-229). A
+                # linked second account carries no NIN of its own — the UNIQUE
+                # index keeps it on the root — so reading this row's hash told
+                # an admin "not verified" about an account whose identity IS
+                # verified, one screen away from a console that would then
+                # offer to Set a NIN that could only ever collide.
+                _root_pii.nin_hash.is_not(None).label("nin_verified"),
+                User.linked_identity_user_id,
                 RealtorRegistrationNumber.registration_number,
             )
             .join(UserPii, UserPii.user_id == User.id, isouter=True)
+            .outerjoin(
+                _root_pii,
+                _root_pii.user_id == func.coalesce(User.linked_identity_user_id, User.id),
+            )
             .join(
                 RealtorRegistrationNumber,
                 (RealtorRegistrationNumber.user_id == User.id)
@@ -771,6 +797,7 @@ class UserRepository:
             created_at=row.created_at,
             updated_at=row.updated_at,
             registration_number=row.registration_number,
+            linked_identity_user_id=row.linked_identity_user_id,
         )
 
     async def admin_update_profile(
@@ -1049,27 +1076,43 @@ class UserRepository:
         """The NIN columns for one account, for the admin NIN console
         (SCRUM-224). None when there is no such user at all (deleted accounts
         ARE returned — a regulator request does not stop at deletion)."""
+        # NIN columns are read off the identity ROOT (SCRUM-229) — for an
+        # unlinked account that is its own row, so nothing changes there. For a
+        # linked second account this is what makes the console say "verified,
+        # ends in 1234" instead of "no NIN on file" while the detail page one
+        # screen up says the opposite.
         stmt = (
             select(
                 User.deleted_at,
-                UserPii.nin_hash,
-                UserPii.nin_encrypted,
-                UserPii.nin_last4,
-                UserPii.nin_verified_at,
+                User.linked_identity_user_id,
+                _root_pii.nin_hash,
+                _root_pii.nin_encrypted,
+                _root_pii.nin_last4,
+                _root_pii.nin_verified_at,
             )
-            .join(UserPii, UserPii.user_id == User.id, isouter=True)
+            .outerjoin(
+                _root_pii,
+                _root_pii.user_id == func.coalesce(User.linked_identity_user_id, User.id),
+            )
             .where(User.id == user_id)
         )
         row = (await self._session.execute(stmt)).first()
         if row is None:
             return None
+        linked = row.linked_identity_user_id is not None
         return NinRecord(
             user_id=user_id,
             deleted_at=row.deleted_at,
             has_nin=row.nin_hash is not None,
-            nin_encrypted=row.nin_encrypted,
+            # ⚠️ The ciphertext NEVER rides on a linked account's record. The
+            # service refuses reveal/set/clear on a sibling, but this makes a
+            # forgotten guard unable to decrypt anything rather than merely
+            # impolite: there is nothing here to decrypt.
+            nin_encrypted=None if linked else row.nin_encrypted,
             nin_last4=row.nin_last4,
             nin_verified_at=row.nin_verified_at,
+            recoverable=row.nin_encrypted is not None,
+            held_by_user_id=row.linked_identity_user_id,
         )
 
     async def clear_nin(self, user_id: UUID) -> bool:
