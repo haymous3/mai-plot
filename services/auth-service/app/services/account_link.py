@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.repositories.user_repo import UserRepository
-from app.services.nin import InvalidNinError, lookup_nin, split_full_name, validate_nin_format
+from app.services.nin import InvalidNinError, lookup_nin, name_parts, validate_nin_format
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,8 @@ class AccountLinkService:
         self,
         *,
         nin: str,
-        claimed_full_name: str | None,
+        claimed_first_name: str | None,
+        claimed_last_name: str | None,
         requested_role: str,
     ) -> LinkDecision:
         """Resolve a claimed existing account to a root, or to "no match".
@@ -92,7 +93,8 @@ class AccountLinkService:
             logger.info("account_link.no_match", extra={"reason": "nin_unknown"})
             return _NO_MATCH
 
-        if not self._names_agree(match.full_name, claimed_full_name):
+        stored_first, stored_last = name_parts(match.first_name, match.last_name, match.full_name)
+        if not self._names_agree(stored_first, stored_last, claimed_first_name, claimed_last_name):
             # Knowing the NIN is not enough; the name has to agree with the one
             # already on file. Logged WITHOUT either name — both are PII.
             logger.info(
@@ -115,17 +117,21 @@ class AccountLinkService:
         return LinkDecision(root_user_id=root_id, notify_email=match.email)
 
     @staticmethod
-    def _names_agree(stored_full_name: str, claimed_full_name: str | None) -> bool:
-        """Compare on first and last token, the same shape the registry match
-        uses (SCRUM-218), so a middle name present in one and not the other
-        does not fail the comparison.
+    def _names_agree(
+        stored_first: str | None,
+        stored_last: str | None,
+        claimed_first: str | None,
+        claimed_last: str | None,
+    ) -> bool:
+        """Compare the two parts the caller typed against the two on the root.
 
-        A root with no name on file cannot be matched against — there is
-        nothing to check, and accepting on an empty string would mean the NIN
-        alone was sufficient.
+        Since SCRUM-231 both sides arrive as parts; a root from before migration
+        0019 has already been split by `name_parts` upstream. A root with no
+        name on file cannot be matched against — there is nothing to check, and
+        accepting on an empty string would mean the NIN alone was sufficient.
         """
-        stored_first, stored_last = split_full_name(stored_full_name)
-        claimed_first, claimed_last = split_full_name(claimed_full_name or "")
+        claimed_first = (claimed_first or "").strip() or None
+        claimed_last = (claimed_last or "").strip() or None
         if not stored_first or not claimed_first:
             return False
         if stored_first.casefold() != claimed_first.casefold():

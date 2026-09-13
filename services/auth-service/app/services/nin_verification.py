@@ -18,7 +18,7 @@ from uuid import UUID
 
 from app.adapters.nin import NinVerificationError, NinVerifier
 from app.repositories.user_repo import UserRepository
-from app.services.nin import hash_nin, lookup_nin, split_full_name, validate_nin_format
+from app.services.nin import hash_nin, lookup_nin, name_parts, validate_nin_format
 from app.services.nin_crypto import NinCipher
 
 logger = logging.getLogger(__name__)
@@ -143,8 +143,12 @@ class NinVerificationService:
         before this ticket, so no caller gets worse off than they started.
         """
         account = await self._users.get_account(user_id)
-        if account is not None and account.full_name.strip():
-            return split_full_name(account.full_name)
+        if account is not None and (
+            account.first_name or account.last_name or account.full_name.strip()
+        ):
+            # Stored parts first (SCRUM-231) — exactly what the person typed
+            # against "match your NIN slip" — else the pre-0019 split fallback.
+            return name_parts(account.first_name, account.last_name, account.full_name)
         supplied_first = (first_name or "").strip() or None
         supplied_last = (last_name or "").strip() or None
         return supplied_first, supplied_last

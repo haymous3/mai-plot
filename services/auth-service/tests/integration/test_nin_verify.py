@@ -247,26 +247,31 @@ async def test_review_outcome_is_202_pending_but_not_id_verified(
 
 
 @pytest.mark.asyncio
-async def test_submitted_name_is_forwarded_to_the_registry(
+async def test_the_account_name_wins_over_a_submitted_one(
     clean_auth_tables: None,
     disable_rate_limit: None,
     sms_fake: InMemoryTwilioClient,
     nin_fake: InMemoryNinVerifier,
     http_client: AsyncClient,
 ) -> None:
-    """Onboarding verifies the NIN before it writes the profile, so it sends
-    the name alongside — otherwise there would be nothing to match against."""
+    """The name ON THE ACCOUNT wins over one supplied in the request — a caller
+    cannot talk the registry match into scoring against a different name.
+
+    Since SCRUM-231 every API-registered account has stored parts, so the
+    request-supplied fallback is only reachable for pre-0019 rows; that path
+    is covered by the unit test `test_submitted_name_is_used_when_the_account_has_none`."""
     _, token = await _register_verify_token(http_client, sms_fake, "08012345678")
 
     response = await http_client.post(
         "/auth/verify/nin",
-        json={"nin": _NIN, "first_name": "Adaeze", "last_name": "Okonkwo"},
+        json={"nin": _NIN, "first_name": "Someone", "last_name": "Else"},
         headers=_auth(token),
     )
 
     assert response.status_code == 202, response.text
-    assert nin_fake.last_first_name == "Adaeze"
-    assert nin_fake.last_last_name == "Okonkwo"
+    # The helper registers as "Ada Obi"; the request said "Someone Else".
+    assert nin_fake.last_first_name == "Ada"
+    assert nin_fake.last_last_name == "Obi"
 
 
 @pytest.mark.asyncio
@@ -351,3 +356,99 @@ async def test_the_deleted_accounts_hashes_are_kept(
         assert row.nin_lookup is not None
         # The trigger from migration 0009 is what makes the partial index work.
         assert row.deleted_at is not None
+
+
+# ---------------------------------------------------------------------------
+# First and last name collected separately (SCRUM-231)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_registration_stores_the_parts_and_derives_full_name(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    body = await register_and_verify(
+        http_client, sms_fake, phone="08012345678", first_name="Ada", last_name="Van der Berg"
+    )
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT first_name, last_name, full_name FROM user_pii WHERE user_id = :id"),
+            {"id": body["user"]["id"]},
+        ).first()
+    assert row is not None
+    assert (row.first_name, row.last_name) == ("Ada", "Van der Berg")
+    assert row.full_name == "Ada Van der Berg"
+
+
+@pytest.mark.asyncio
+async def test_the_nin_match_uses_the_stored_parts_not_a_split(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+) -> None:
+    """The whole point of SCRUM-231. `split_full_name("Ada Van der Berg")`
+    yields last="Berg"; the stored parts yield last="Van der Berg"."""
+    body = await register_and_verify(
+        http_client, sms_fake, phone="08012345678", first_name="Ada", last_name="Van der Berg"
+    )
+
+    resp = await http_client.post(
+        "/auth/verify/nin", json={"nin": _NIN}, headers=_auth(body["access_token"])
+    )
+
+    assert resp.status_code == 202, resp.text
+    assert nin_fake.last_first_name == "Ada"
+    assert nin_fake.last_last_name == "Van der Berg"
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_full_name_update_clears_stale_parts(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+) -> None:
+    """A client that updates full_name ALONE must not leave the old parts in
+    place — the matcher prefers parts, so the person would rename themselves
+    and still be matched against their previous name."""
+    body = await register_and_verify(
+        http_client, sms_fake, phone="08012345678", first_name="Ada", last_name="Obi"
+    )
+    token = body["access_token"]
+
+    profile = await http_client.post(
+        "/auth/profile", json={"full_name": "Chidi Okafor"}, headers=_auth(token)
+    )
+    assert profile.status_code == 200, profile.text
+
+    await http_client.post("/auth/verify/nin", json={"nin": _NIN}, headers=_auth(token))
+
+    # Falls back to splitting the NEW full_name, not the stale "Ada"/"Obi".
+    assert nin_fake.last_first_name == "Chidi"
+    assert nin_fake.last_last_name == "Okafor"
+
+
+@pytest.mark.asyncio
+async def test_registration_refuses_a_lone_part(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    http_client: AsyncClient,
+) -> None:
+    resp = await http_client.post(
+        "/auth/register",
+        json={
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": "lone@example.com",
+            "first_name": "Ada",
+        },
+    )
+    assert resp.status_code == 422, resp.text

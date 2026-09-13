@@ -190,6 +190,8 @@ async def register(
             seller_authority_type=body.seller_authority_type,
             existing_account_nin=body.existing_account_nin,
             full_name=body.full_name,
+            first_name=body.first_name,
+            last_name=body.last_name,
             verification_channel=body.verification_channel,
         )
     except EmailAlreadyRegistered:
@@ -523,6 +525,8 @@ async def get_me(
             "email": account.email,
             "phone": account.phone,
             "full_name": account.full_name,
+            "first_name": account.first_name,
+            "last_name": account.last_name,
             "seller_authority_type": account.seller_authority_type,
             "poa_verified_status": account.poa_verified_status,
             "bvn_verified": account.bvn_verified,
@@ -608,6 +612,8 @@ async def update_profile(
         await service.update(
             user_id=current_user.user_id,
             full_name=body.full_name,
+            first_name=body.first_name,
+            last_name=body.last_name,
             email=body.email,
             location=body.location,
             # "Did the caller send this field?" — an omitted location leaves the

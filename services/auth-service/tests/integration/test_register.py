@@ -107,7 +107,13 @@ async def test_register_normalises_email_case(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": "  Buyer@Example.COM "},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": "  Buyer@Example.COM ",
+        },
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -130,6 +136,8 @@ async def test_register_seller_without_authority_is_allowed(
     response = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "seller",
             "email": "seller@example.com",
@@ -152,6 +160,8 @@ async def test_register_seller_with_authority_type_succeeds(
     response = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "seller",
             "email": "seller@example.com",
@@ -182,6 +192,8 @@ async def test_register_duplicate_email_returns_400(
     first = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": _EMAIL,
@@ -194,6 +206,8 @@ async def test_register_duplicate_email_returns_400(
     second = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08087654321",
             "role": "buyer",
             "email": _EMAIL,
@@ -216,6 +230,8 @@ async def test_register_duplicate_phone_returns_400(
     first = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": _EMAIL,
@@ -228,6 +244,8 @@ async def test_register_duplicate_phone_returns_400(
     second = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": "other@example.com",
@@ -248,7 +266,7 @@ async def test_register_missing_email_returns_422(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer"},
+        json={"first_name": "Ada", "last_name": "Obi", "phone": "08012345678", "role": "buyer"},
     )
     assert response.status_code == 422
     assert_error_envelope(response.json(), "VALIDATION_ERROR")
@@ -263,7 +281,13 @@ async def test_register_invalid_email_returns_422(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": "not-an-email"},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": "not-an-email",
+        },
     )
     assert response.status_code == 422
     assert_error_envelope(response.json(), "VALIDATION_ERROR")
@@ -278,7 +302,13 @@ async def test_register_invalid_role_returns_422(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "bank_partner", "email": _EMAIL},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "bank_partner",
+            "email": _EMAIL,
+        },
     )
     assert response.status_code == 422
     assert_error_envelope(response.json(), "VALIDATION_ERROR")
@@ -293,7 +323,13 @@ async def test_register_invalid_phone_returns_422(
 ) -> None:
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "+15551234567", "role": "buyer", "email": _EMAIL},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "+15551234567",
+            "role": "buyer",
+            "email": _EMAIL,
+        },
     )
     assert response.status_code == 422
     assert_error_envelope(response.json(), "VALIDATION_ERROR")
@@ -309,7 +345,13 @@ async def test_register_trace_id_is_echoed(
     trace_id = "550e8400-e29b-41d4-a716-446655440000"
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": _EMAIL},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": _EMAIL,
+        },
         headers={"X-Trace-ID": trace_id},
     )
     assert response.status_code == 201
@@ -331,6 +373,8 @@ async def test_register_email_channel_mints_a_link(
     response = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": _EMAIL,
@@ -381,7 +425,13 @@ async def test_register_defaults_to_email_when_channel_is_omitted(
     silent flip of this default would strand every new signup."""
     response = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": _EMAIL},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": _EMAIL,
+        },
     )
 
     assert response.status_code == 201, response.text
@@ -400,6 +450,8 @@ async def test_register_rejects_an_unknown_channel(
     response = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": _EMAIL,
@@ -421,6 +473,8 @@ async def test_email_link_from_register_actually_verifies(
     reg = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08012345678",
             "role": "buyer",
             "email": _EMAIL,
@@ -456,6 +510,8 @@ async def test_email_channel_allows_a_phone_already_used_by_another_account(
     first = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "first@example.com",
@@ -467,6 +523,8 @@ async def test_email_channel_allows_a_phone_already_used_by_another_account(
     second = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "second@example.com",
@@ -491,6 +549,8 @@ async def test_email_channel_still_rejects_a_duplicate_email(
         first = await http_client.post(
             "/auth/register",
             json={
+                "first_name": "Ada",
+                "last_name": "Obi",
                 "phone": "08012345678",
                 "role": "buyer",
                 "email": _EMAIL,
@@ -502,6 +562,8 @@ async def test_email_channel_still_rejects_a_duplicate_email(
     second = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": "08087654321",
             "role": "buyer",
             "email": _EMAIL,
@@ -523,6 +585,8 @@ async def test_phone_channel_still_rejects_a_duplicate_phone(
     first = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "first@example.com",
@@ -534,6 +598,8 @@ async def test_phone_channel_still_rejects_a_duplicate_phone(
     second = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "second@example.com",
@@ -560,6 +626,8 @@ async def test_phone_channel_may_claim_a_phone_held_by_an_email_account(
         await http_client.post(
             "/auth/register",
             json={
+                "first_name": "Ada",
+                "last_name": "Obi",
                 "phone": shared,
                 "role": "buyer",
                 "email": "byemail@example.com",
@@ -571,6 +639,8 @@ async def test_phone_channel_may_claim_a_phone_held_by_an_email_account(
     byphone = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "byphone@example.com",
@@ -583,6 +653,8 @@ async def test_phone_channel_may_claim_a_phone_held_by_an_email_account(
     third = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "third@example.com",
@@ -608,6 +680,8 @@ async def test_otp_verifies_the_phone_account_not_the_email_one(
     by_email = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "buyer",
             "email": "byemail@example.com",
@@ -617,6 +691,8 @@ async def test_otp_verifies_the_phone_account_not_the_email_one(
     by_phone = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": shared,
             "role": "seller",
             "email": "byphone@example.com",

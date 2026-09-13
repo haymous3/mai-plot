@@ -27,6 +27,8 @@ class _StubUsers:
         *,
         full_name: str,
         email: str | None,
+        first_name: str | None = None,
+        last_name: str | None = None,
         location: str | None = None,
         set_location: bool = False,
         address: str | None = None,

@@ -38,6 +38,9 @@ class Account:
     email: str | None
     phone: str
     full_name: str
+    # The stored parts (SCRUM-231); None on a pre-0019 account.
+    first_name: str | None
+    last_name: str | None
     seller_authority_type: str | None
     poa_verified_status: str
     bvn_verified: bool
@@ -103,6 +106,8 @@ class AccountService:
             email=account.email,
             phone=account.phone,
             full_name=account.full_name,
+            first_name=account.first_name,
+            last_name=account.last_name,
             seller_authority_type=account.seller_authority_type,
             poa_verified_status=account.poa_verified_status,
             bvn_verified=account.bvn_verified,

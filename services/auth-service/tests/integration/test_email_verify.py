@@ -34,6 +34,8 @@ async def _register(
     response = await http_client.post(
         "/auth/register",
         json={
+            "first_name": "Ada",
+            "last_name": "Obi",
             "phone": phone,
             "role": "buyer",
             "email": email,

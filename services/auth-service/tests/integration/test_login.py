@@ -20,7 +20,14 @@ async def _register_with_password(
 ) -> None:
     reg = await http_client.post(
         "/auth/register",
-        json={"phone": phone, "role": "buyer", "email": email, "password": password},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": phone,
+            "role": "buyer",
+            "email": email,
+            "password": password,
+        },
     )
     assert reg.status_code == 201, reg.text
 
@@ -91,7 +98,13 @@ async def test_login_phone_only_user_has_no_password(
     # login must fail with the same generic error (no enumeration).
     reg = await http_client.post(
         "/auth/register",
-        json={"phone": "08012345678", "role": "buyer", "email": _EMAIL},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08012345678",
+            "role": "buyer",
+            "email": _EMAIL,
+        },
     )
     assert reg.status_code == 201
 

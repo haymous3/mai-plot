@@ -233,8 +233,13 @@ async def register_only(
     password: str | None = None,
     seller_authority_type: str | None = None,
     verification_channel: str = "phone",
+    first_name: str = "Ada",
+    last_name: str = "Obi",
 ) -> dict[str, Any]:
     """POST /auth/register and assert a 201; return the response body.
+
+    Sends a first and last name by default: both are REQUIRED at registration
+    since SCRUM-231, so a helper that omitted them would 422 on every call.
 
     Split out of register_and_verify for tests that need an account left in
     the `unverified` state (the email-resend path, for instance).
@@ -250,6 +255,8 @@ async def register_only(
         "role": role,
         "email": email,
         "verification_channel": verification_channel,
+        "first_name": first_name,
+        "last_name": last_name,
     }
     if password is not None:
         payload["password"] = password
@@ -270,6 +277,8 @@ async def register_and_verify(
     email: str = "user@example.com",
     password: str | None = None,
     seller_authority_type: str | None = None,
+    first_name: str = "Ada",
+    last_name: str = "Obi",
 ) -> dict[str, Any]:
     """Register a user then confirm the OTP from the captured SMS; return the
     /auth/otp/verify response body (access_token, refresh_token, user{...}).
@@ -283,6 +292,8 @@ async def register_and_verify(
         email=email,
         password=password,
         seller_authority_type=seller_authority_type,
+        first_name=first_name,
+        last_name=last_name,
         # This helper completes verification by OTP, so it must request the
         # phone channel explicitly now that email is the API default.
         verification_channel="phone",

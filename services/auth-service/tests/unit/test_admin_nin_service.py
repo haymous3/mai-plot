@@ -85,7 +85,7 @@ class _StubUserRepo:
         )
 
     async def get_account(self, user_id: UUID) -> SimpleNamespace | None:
-        return SimpleNamespace(full_name=self._full_name)
+        return SimpleNamespace(full_name=self._full_name, first_name=None, last_name=None)
 
     async def find_user_by_nin_lookup(self, nin_lookup: str) -> UUID | None:
         return self._lookup_owner.get(nin_lookup)

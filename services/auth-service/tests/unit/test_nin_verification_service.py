@@ -46,7 +46,7 @@ class _StubUserRepo:
         account row the service cannot see at all."""
         if self._full_name is None:
             return None
-        return SimpleNamespace(full_name=self._full_name)
+        return SimpleNamespace(full_name=self._full_name, first_name=None, last_name=None)
 
     async def has_nin(self, user_id: UUID) -> bool:
         return self._has_nin

@@ -13,6 +13,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.repositories.user_repo import UserRepository
+from app.services.nin import join_name
 
 
 class InvalidFullName(RuntimeError):
@@ -31,14 +32,27 @@ class ProfileService:
         self,
         *,
         user_id: UUID,
-        full_name: str,
+        full_name: str | None,
         email: str | None,
+        first_name: str | None = None,
+        last_name: str | None = None,
         location: str | None = None,
         set_location: bool = False,
         address: str | None = None,
         set_address: bool = False,
     ) -> None:
-        name = full_name.strip()
+        # SCRUM-231: parts are the source of truth when given; full_name is
+        # derived. A lone part is rejected — it is neither a usable match key
+        # nor a usable greeting. Only when NEITHER part is present does the
+        # legacy single field stand in (stored as-is, parts left untouched).
+        first = (first_name or "").strip() or None
+        last = (last_name or "").strip() or None
+        if bool(first) != bool(last):
+            raise InvalidFullName
+        if first and last:
+            name = join_name(first, last)
+        else:
+            name = (full_name or "").strip()
         if not name:
             raise InvalidFullName
         normalised_email = email.strip().lower() if email and email.strip() else None
@@ -54,6 +68,8 @@ class ProfileService:
             user_id,
             full_name=name,
             email=normalised_email,
+            first_name=first,
+            last_name=last,
             location=normalised_location,
             set_location=set_location,
             address=normalised_address,
