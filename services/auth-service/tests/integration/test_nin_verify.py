@@ -452,3 +452,38 @@ async def test_registration_refuses_a_lone_part(
         },
     )
     assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_an_address_only_profile_update_leaves_the_name_alone(
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    nin_fake: InMemoryNinVerifier,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    """Onboarding saves an address AFTER registration stored the parts. It
+    must not have to echo a name back to do so — and an echoed, derived
+    full_name would have wiped the parts the matcher relies on (SCRUM-231)."""
+    body = await register_and_verify(
+        http_client, sms_fake, phone="08012345678", first_name="Ada", last_name="Van der Berg"
+    )
+    token = body["access_token"]
+
+    resp = await http_client.post(
+        "/auth/profile", json={"address": "12 Marina, Lagos"}, headers=_auth(token)
+    )
+    assert resp.status_code == 200, resp.text
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT first_name, last_name, full_name, address FROM user_pii WHERE user_id = :id"
+            ),
+            {"id": body["user"]["id"]},
+        ).first()
+    assert row is not None
+    assert (row.first_name, row.last_name) == ("Ada", "Van der Berg")
+    assert row.full_name == "Ada Van der Berg"
+    assert row.address == "12 Marina, Lagos"

@@ -53,7 +53,8 @@ export function RegisterFlow() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
   const [role, setRole] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -81,7 +82,10 @@ export function RegisterFlow() {
         body: JSON.stringify({
           phone: `+234${local}`,
           role,
-          full_name: fullName.trim(),
+          // The two parts, not one string (SCRUM-231): they are what the NIN
+          // registry match is scored against, so they go up exactly as typed.
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           email: email.trim(),
           password,
           verification_channel: channel,
@@ -182,8 +186,10 @@ export function RegisterFlow() {
         {step === 'account' && (
           <FormColumn>
           <AccountStep
-            fullName={fullName}
-            setFullName={setFullName}
+            firstName={firstName}
+            setFirstName={setFirstName}
+            lastName={lastName}
+            setLastName={setLastName}
             email={email}
             setEmail={setEmail}
             phone={phone}
@@ -254,8 +260,10 @@ function looksLikeEmail(value: string): boolean {
 }
 
 function AccountStep({
-  fullName,
-  setFullName,
+  firstName,
+  setFirstName,
+  lastName,
+  setLastName,
   email,
   setEmail,
   phone,
@@ -269,8 +277,10 @@ function AccountStep({
   onBack,
   onContinue,
 }: {
-  fullName: string;
-  setFullName: (v: string) => void;
+  firstName: string;
+  setFirstName: (v: string) => void;
+  lastName: string;
+  setLastName: (v: string) => void;
   email: string;
   setEmail: (v: string) => void;
   phone: string;
@@ -294,7 +304,7 @@ function AccountStep({
   const strengthColor = passed <= 1 ? 'bg-red-500' : passed === 2 ? 'bg-amber-500' : 'bg-emerald-deep';
 
   const local = phone.replace(/\D/g, '').replace(/^0/, '');
-  const nameOk = fullName.trim().length > 0;
+  const nameOk = firstName.trim().length > 0 && lastName.trim().length > 0;
   const emailOk = looksLikeEmail(email);
   const phoneOk = local.length === 10;
   const passwordOk = strong && confirm === password;
@@ -332,18 +342,49 @@ function AccountStep({
 
         Asking once, here, is what every role has in common. The buyer's
         Personal-details step is removed in the same change so nobody is asked
-        twice. `RegisterRequest.full_name` was already Optional, so the API is
-        unchanged; the requirement is enforced in this form.
+        twice.
+
+        Split into FIRST and LAST name in SCRUM-231. These are what the NIN
+        registry match is scored against — the backend used to split one
+        string on whitespace, which got "Ada Van der Berg" wrong — so they are
+        collected as two fields, sent exactly as typed, and the copy below says
+        why. Both are required.
       */}
-      <label className="mt-8 block text-sm font-medium text-ink-700">Full Name</label>
-      <input
-        type="text"
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-        placeholder="Ada Obi"
-        autoComplete="name"
-        className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
-      />
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="first-name" className="block text-sm font-medium text-ink-700">
+            First name
+          </label>
+          <input
+            id="first-name"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Ada"
+            autoComplete="given-name"
+            className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+          />
+        </div>
+        <div>
+          <label htmlFor="last-name" className="block text-sm font-medium text-ink-700">
+            Last name
+          </label>
+          <input
+            id="last-name"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Obi"
+            autoComplete="family-name"
+            className="mt-1.5 w-full rounded-md border border-ink-300/60 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-emerald-accent focus:ring-2 focus:ring-emerald-accent/20"
+          />
+        </div>
+      </div>
+      {/* Load-bearing copy, not decoration: the names ARE the identity check. */}
+      <p className="mt-1.5 text-xs text-ink-500">
+        Enter your names exactly as they appear on your NIN slip &mdash; we use them to verify
+        your identity.
+      </p>
 
       <label className="mt-5 block text-sm font-medium text-ink-700">Email Address</label>
       <input

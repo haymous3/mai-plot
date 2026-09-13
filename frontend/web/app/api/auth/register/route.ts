@@ -18,6 +18,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     email?: unknown;
     password?: unknown;
     full_name?: unknown;
+    first_name?: unknown;
+    last_name?: unknown;
     seller_authority_type?: unknown;
     existing_account_nin?: unknown;
   };
@@ -39,6 +41,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const forward: Record<string, unknown> = { phone, role, email };
   if (typeof payload.password === 'string' && payload.password) forward.password = payload.password;
   if (typeof payload.full_name === 'string' && payload.full_name) forward.full_name = payload.full_name;
+  // The two parts (SCRUM-231) — what the NIN registry match is scored against.
+  // ⚠️ Same WHITELIST as everything below: a field not named here reaches
+  // nothing, silently. That is how the NIN nearly went missing in SCRUM-226.
+  if (typeof payload.first_name === 'string' && payload.first_name) forward.first_name = payload.first_name;
+  if (typeof payload.last_name === 'string' && payload.last_name) forward.last_name = payload.last_name;
   if (role === 'seller' && typeof payload.seller_authority_type === 'string') {
     forward.seller_authority_type = payload.seller_authority_type;
   }
