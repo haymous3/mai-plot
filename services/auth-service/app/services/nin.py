@@ -36,8 +36,36 @@ def validate_nin_format(nin: str) -> None:
         raise InvalidNinError("NIN must be exactly 11 digits.")
 
 
+def name_parts(
+    first_name: str | None, last_name: str | None, full_name: str
+) -> tuple[str | None, str | None]:
+    """The (first, last) the NIN registry match is scored against.
+
+    Stored parts win when present — they are exactly what the person typed
+    against a form that told them to match their NIN slip (SCRUM-231). Only
+    an account from before migration 0019, which carries `full_name` alone,
+    falls through to the token-splitting heuristic below; a new account never
+    does. Every matcher goes through here so the precedence lives in one place.
+    """
+    first = (first_name or "").strip() or None
+    last = (last_name or "").strip() or None
+    if first or last:
+        return first, last
+    return split_full_name(full_name)
+
+
+def join_name(first_name: str, last_name: str) -> str:
+    """The display `full_name` derived from the two parts, with the whitespace
+    a person might paste in stripped so the greeting never reads "Ada  Obi"."""
+    return " ".join(p for p in (first_name.strip(), last_name.strip()) if p)
+
+
 def split_full_name(full_name: str) -> tuple[str | None, str | None]:
     """Split a stored full name into (first, last) for the registry match.
+
+    ⚠️ FALLBACK ONLY since SCRUM-231 — reached for accounts that predate
+    migration 0019 and carry no stored parts. Go through `name_parts`, never
+    call this directly from a matcher.
 
     ``user_pii.full_name`` is ONE column but the registry match wants the two
     names separately. Nigerian names do not split reliably — three tokens may

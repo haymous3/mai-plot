@@ -54,9 +54,16 @@ class RegisterRequest(BaseModel):
     # password is optional at register; when supplied it is stored so the user
     # can log in via email/password (SCRUM-45).
     password: str | None = Field(default=None, min_length=8, max_length=128)
-    # full_name is optional at register (SCRUM-155): the funnel collects it up
-    # front now that there is no post-OTP session step to capture it. Persisted
-    # to user_pii via create_with_pii; blank-after-strip is treated as absent.
+    # The name as two parts (SCRUM-231). These are what the NIN registry match
+    # is scored against, and the form tells the person so — "exactly as on your
+    # NIN slip". Both required for a new registration; `full_name` is derived.
+    #
+    # `full_name` is still ACCEPTED, as a fallback for one release, so a client
+    # in flight during the deploy does not 422. A request that sends only
+    # full_name gets the pre-0019 behaviour: stored as-is, parts left null,
+    # matched by splitting. The validator below enforces one or the other.
+    first_name: str | None = Field(default=None, max_length=120)
+    last_name: str | None = Field(default=None, max_length=120)
     full_name: str | None = Field(default=None, max_length=120)
     seller_authority_type: SellerAuthorityType | None = None
     # Defaults to email: it is the channel that can actually reach users today.
@@ -70,6 +77,16 @@ class RegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def _normalise_and_check_seller(self) -> RegisterRequest:
+        # Parts are required together; a lone first or last name is neither a
+        # usable match key nor a usable display name. Only when NEITHER part is
+        # present may the legacy single field stand in (SCRUM-231).
+        first = (self.first_name or "").strip()
+        last = (self.last_name or "").strip()
+        if bool(first) != bool(last):
+            raise ValueError("first_name and last_name must be supplied together.")
+        if not first and not (self.full_name or "").strip():
+            raise ValueError("first_name and last_name are required.")
+
         try:
             object.__setattr__(self, "phone", normalise_nigerian_phone(self.phone))
         except InvalidPhoneError as exc:
@@ -295,6 +312,11 @@ class AccountResponse(BaseModel):
     email: str | None
     phone: str
     full_name: str
+    # The stored parts (SCRUM-231), so Settings can prefill two fields. Null on
+    # an account from before migration 0019 — the client should then offer the
+    # parts empty and let the person fill them in, not split full_name itself.
+    first_name: str | None
+    last_name: str | None
     seller_authority_type: str | None
     poa_verified_status: str
     bvn_verified: bool
@@ -371,7 +393,14 @@ class ProfileUpdateRequest(BaseModel):
     # OTP verification. full_name is required by the design; email is optional
     # (it is what /auth/login authenticates on, so users who skip it here can
     # add it later). Blank-after-strip full_name is rejected in ProfileService.
-    full_name: str = Field(min_length=1, max_length=120)
+    # SCRUM-231: the two parts are what the NIN match uses and what Settings
+    # edits. `full_name` remains accepted as a legacy single field; the service
+    # derives it from the parts whenever they are given. One form or the other
+    # must be present — enforced in ProfileService, not here, so the 422 can
+    # carry a stable error code rather than a pydantic location path.
+    first_name: str | None = Field(default=None, max_length=120)
+    last_name: str | None = Field(default=None, max_length=120)
+    full_name: str | None = Field(default=None, max_length=120)
     email: str | None = Field(default=None, max_length=254)
     # SCRUM-193. Tri-state on purpose, and NOT the same convention as `email`:
     # omitted leaves the stored value alone, while an explicit null or blank

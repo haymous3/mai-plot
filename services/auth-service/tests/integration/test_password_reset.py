@@ -42,6 +42,8 @@ async def _register(
     password: str | None = _PASSWORD,
 ) -> str:
     body: dict[str, object] = {
+        "first_name": "Ada",
+        "last_name": "Obi",
         "phone": phone,
         "role": "buyer",
         "email": email,

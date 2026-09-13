@@ -48,6 +48,10 @@ def _match(**overrides: object) -> IdentityMatch:
         "email": "root@example.com",
         "role": "seller",
         "full_name": "Adaeze Okonkwo",
+        # Pre-0019 shape by default: parts absent, only full_name. Tests that
+        # want the stored-parts path override these.
+        "first_name": None,
+        "last_name": None,
     }
     base.update(overrides)
     return IdentityMatch(**base)  # type: ignore[arg-type]
@@ -62,7 +66,7 @@ async def test_match_returns_the_roots_email_not_the_new_one() -> None:
     repo = _StubUserRepo(match=match, roles={"seller"})
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="realtor"
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="realtor"
     )
 
     assert decision.is_link
@@ -74,7 +78,7 @@ async def test_match_returns_the_roots_email_not_the_new_one() -> None:
 async def test_the_nin_is_looked_up_by_peppered_hmac_never_in_the_clear() -> None:
     repo = _StubUserRepo(match=_match())
     await _service(repo).decide(
-        nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="realtor"
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="realtor"
     )
 
     assert repo.lookups == [lookup_nin(_NIN, pepper=_PEPPER)]
@@ -86,7 +90,7 @@ async def test_unknown_nin_is_no_match_not_an_error() -> None:
     """A miss must not fail the request — registration carries on as an
     ordinary signup, so a mistyped NIN cannot dead-end the funnel."""
     decision = await _service(_StubUserRepo(match=None)).decide(
-        nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="realtor"
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="realtor"
     )
 
     assert not decision.is_link
@@ -99,7 +103,7 @@ async def test_wrong_name_does_not_match_even_with_the_right_nin() -> None:
     repo = _StubUserRepo(match=_match(full_name="Adaeze Okonkwo"))
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="Someone Else", requested_role="realtor"
+        nin=_NIN, claimed_first_name="Someone", claimed_last_name="Else", requested_role="realtor"
     )
 
     assert not decision.is_link
@@ -110,7 +114,7 @@ async def test_name_match_ignores_case_and_middle_names() -> None:
     repo = _StubUserRepo(match=_match(full_name="Adaeze Ngozi Okonkwo"))
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="adaeze okonkwo", requested_role="realtor"
+        nin=_NIN, claimed_first_name="adaeze", claimed_last_name="okonkwo", requested_role="realtor"
     )
 
     assert decision.is_link
@@ -122,7 +126,7 @@ async def test_a_root_with_no_name_on_file_can_never_be_matched() -> None:
     repo = _StubUserRepo(match=_match(full_name=""))
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="realtor"
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="realtor"
     )
 
     assert not decision.is_link
@@ -133,7 +137,7 @@ async def test_a_blank_claimed_name_can_never_match() -> None:
     repo = _StubUserRepo(match=_match(full_name="Adaeze Okonkwo"))
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="   ", requested_role="realtor"
+        nin=_NIN, claimed_first_name="", claimed_last_name="", requested_role="realtor"
     )
 
     assert not decision.is_link
@@ -144,7 +148,10 @@ async def test_malformed_nin_is_no_match_and_never_reaches_the_database() -> Non
     repo = _StubUserRepo(match=_match())
 
     decision = await _service(repo).decide(
-        nin="not-a-nin", claimed_full_name="Adaeze Okonkwo", requested_role="realtor"
+        nin="not-a-nin",
+        claimed_first_name="Adaeze",
+        claimed_last_name="Okonkwo",
+        requested_role="realtor",
     )
 
     assert not decision.is_link
@@ -159,7 +166,10 @@ async def test_a_role_the_person_already_holds_is_refused() -> None:
 
     with pytest.raises(RoleAlreadyHeld):
         await _service(repo).decide(
-            nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="seller"
+            nin=_NIN,
+            claimed_first_name="Adaeze",
+            claimed_last_name="Okonkwo",
+            requested_role="seller",
         )
 
 
@@ -172,8 +182,39 @@ async def test_linking_to_a_sibling_resolves_to_the_shared_root() -> None:
     repo = _StubUserRepo(match=sibling, root_override=root_id)
 
     decision = await _service(repo).decide(
-        nin=_NIN, claimed_full_name="Adaeze Okonkwo", requested_role="buyer"
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="buyer"
     )
 
     assert decision.root_user_id == root_id
     assert decision.root_user_id != sibling.user_id
+
+
+@pytest.mark.asyncio
+async def test_stored_parts_are_matched_exactly_not_by_splitting() -> None:
+    """SCRUM-231. A compound surname the old token-splitter would have got
+    wrong matches when both sides carry the parts as typed."""
+    repo = _StubUserRepo(
+        match=_match(full_name="Ada Van der Berg", first_name="Ada", last_name="Van der Berg")
+    )
+
+    decision = await _service(repo).decide(
+        nin=_NIN,
+        claimed_first_name="Ada",
+        claimed_last_name="Van der Berg",
+        requested_role="realtor",
+    )
+
+    assert decision.is_link
+
+
+@pytest.mark.asyncio
+async def test_a_pre_0019_root_still_matches_by_splitting() -> None:
+    """A root that carries only full_name (no stored parts) falls back to the
+    token split, so existing accounts keep linking after the migration."""
+    repo = _StubUserRepo(match=_match(full_name="Adaeze Ngozi Okonkwo"))
+
+    decision = await _service(repo).decide(
+        nin=_NIN, claimed_first_name="Adaeze", claimed_last_name="Okonkwo", requested_role="realtor"
+    )
+
+    assert decision.is_link

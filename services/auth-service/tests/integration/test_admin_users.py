@@ -361,7 +361,13 @@ async def test_delete_soft_deletes_and_frees_the_email(
     # And the email is free again, so the person can sign up afresh.
     reused = await http_client.post(
         "/auth/register",
-        json={"phone": "08080000009", "role": "buyer", "email": "i1@example.com"},
+        json={
+            "first_name": "Ada",
+            "last_name": "Obi",
+            "phone": "08080000009",
+            "role": "buyer",
+            "email": "i1@example.com",
+        },
     )
     assert reused.status_code == 201, reused.text
 

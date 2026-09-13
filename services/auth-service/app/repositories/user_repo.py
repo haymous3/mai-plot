@@ -75,6 +75,8 @@ class IdentityMatch:
     email: str | None
     role: str
     full_name: str
+    first_name: str | None
+    last_name: str | None
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,10 @@ class UserAccount:
     email: str | None
     phone: str
     full_name: str
+    # The stored parts (SCRUM-231). None on an account from before migration
+    # 0019; matchers go through services/nin.py name_parts, which falls back.
+    first_name: str | None
+    last_name: str | None
     seller_authority_type: str | None
     poa_verified_status: str
     bvn_verified: bool
@@ -253,6 +259,8 @@ class UserRepository:
                 User.poa_verified_status,
                 UserPii.phone,
                 UserPii.full_name,
+                UserPii.first_name,
+                UserPii.last_name,
                 # Presence only. The hashes themselves never leave the service.
                 UserPii.bvn_hash.is_not(None).label("bvn_verified"),
                 # ⚠️ Read off the identity ROOT, not this row (SCRUM-225). A
@@ -289,6 +297,8 @@ class UserRepository:
             email=row.email,
             phone=row.phone,
             full_name=row.full_name,
+            first_name=row.first_name,
+            last_name=row.last_name,
             seller_authority_type=row.seller_authority_type,
             poa_verified_status=row.poa_verified_status,
             bvn_verified=row.bvn_verified,
@@ -407,6 +417,8 @@ class UserRepository:
         email: str | None,
         seller_authority_type: str | None,
         full_name: str = "",
+        first_name: str | None = None,
+        last_name: str | None = None,
         verification_channel: str = "email",
         linked_identity_user_id: UUID | None = None,
     ) -> UUID:
@@ -435,6 +447,8 @@ class UserRepository:
             user_id=user.id,
             phone=phone,
             full_name=full_name,
+            first_name=first_name,
+            last_name=last_name,
             verification_channel=verification_channel,
         )
         self._session.add(pii)
@@ -458,6 +472,8 @@ class UserRepository:
         *,
         full_name: str,
         email: str | None,
+        first_name: str | None = None,
+        last_name: str | None = None,
         location: str | None = None,
         set_location: bool = False,
         address: str | None = None,
@@ -475,6 +491,14 @@ class UserRepository:
         pii = await self._session.get(UserPii, user_id)
         if pii is not None:
             pii.full_name = full_name
+            # ⚠️ The parts are written on EVERY name update, even to None
+            # (SCRUM-231). The matcher prefers stored parts over splitting
+            # full_name, so a legacy client that updates full_name alone MUST
+            # clear them — otherwise the person renames themselves and the NIN
+            # match keeps scoring against the name they had before. The
+            # invariant is: parts, when present, agree with full_name.
+            pii.first_name = first_name
+            pii.last_name = last_name
             if set_location:
                 pii.location = location
             if set_address:
@@ -941,7 +965,14 @@ class UserRepository:
         Nothing here decrypts the NIN — the HMAC lookup column is the key.
         """
         stmt = (
-            select(User.id, User.email, User.role, UserPii.full_name)
+            select(
+                User.id,
+                User.email,
+                User.role,
+                UserPii.full_name,
+                UserPii.first_name,
+                UserPii.last_name,
+            )
             .join(UserPii, UserPii.user_id == User.id)
             .where(
                 UserPii.nin_lookup == nin_lookup,
@@ -958,6 +989,8 @@ class UserRepository:
             email=row.email,
             role=row.role,
             full_name=row.full_name or "",
+            first_name=row.first_name,
+            last_name=row.last_name,
         )
 
     async def roles_held_by_identity(self, root_user_id: UUID) -> set[str]:

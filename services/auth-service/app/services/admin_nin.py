@@ -48,7 +48,7 @@ from app.adapters.nin import NinVerificationError, NinVerifier
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.user_repo import NinRecord, UserRepository
 from app.security import CurrentUser
-from app.services.nin import hash_nin, lookup_nin, split_full_name, validate_nin_format
+from app.services.nin import hash_nin, lookup_nin, name_parts, validate_nin_format
 from app.services.nin_crypto import NinCipher, NinDecryptError
 
 logger = logging.getLogger(__name__)
@@ -235,8 +235,8 @@ class AdminNinService:
 
         account = await self._users.get_account(user_id)
         first, last = (
-            split_full_name(account.full_name)
-            if account is not None and account.full_name.strip()
+            name_parts(account.first_name, account.last_name, account.full_name)
+            if account is not None
             else (None, None)
         )
         try:

@@ -24,7 +24,7 @@ from tests.integration.conftest import (
 )
 
 _NIN = "12345678901"
-_NAME = "Adaeze Okonkwo"
+_FIRST, _LAST = "Adaeze", "Okonkwo"
 
 
 async def _seed_root(
@@ -36,6 +36,7 @@ async def _seed_root(
     phone: str = "08012345678",
 ) -> tuple[str, str]:
     """A verified account holding the NIN. Returns (user_id, access_token)."""
+    # Registered WITH the parts (SCRUM-231) — the shape every new account has.
     body = await register_and_verify(
         http_client,
         sms,
@@ -43,13 +44,10 @@ async def _seed_root(
         role=role,
         email=email,
         seller_authority_type="owner" if role == "seller" else None,
+        first_name=_FIRST,
+        last_name=_LAST,
     )
     token = body["access_token"]
-    await http_client.post(
-        "/auth/profile",
-        json={"full_name": _NAME, "address": "12 Marina, Lagos"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
     nin = await http_client.post(
         "/auth/verify/nin", json={"nin": _NIN}, headers={"Authorization": f"Bearer {token}"}
     )
@@ -62,7 +60,8 @@ def _second_account_payload(**overrides: Any) -> dict[str, Any]:
         "phone": "08087654321",
         "role": "realtor",
         "email": "new-address@example.com",
-        "full_name": _NAME,
+        "first_name": _FIRST,
+        "last_name": _LAST,
         "verification_channel": "email",
         "existing_account_nin": _NIN,
     }
@@ -178,7 +177,7 @@ async def test_a_wrong_name_falls_back_to_an_ordinary_signup(
     email_verification_fake.sent.clear()
 
     resp = await http_client.post(
-        "/auth/register", json=_second_account_payload(full_name="Somebody Else")
+        "/auth/register", json=_second_account_payload(first_name="Somebody", last_name="Else")
     )
 
     assert resp.status_code == 201, resp.text

@@ -42,6 +42,7 @@ from app.repositories.otp_repo import OtpRepository
 from app.repositories.user_repo import UserRepository
 from app.services.account_link import AccountLinkService, LinkDecision
 from app.services.email_token import build_verify_url, generate_token, hash_token
+from app.services.nin import join_name, split_full_name
 from app.services.otp import generate_code, hash_code
 from app.services.password import hash_password
 from app.services.rate_limit import OtpRateLimiter
@@ -129,6 +130,8 @@ class RegistrationService:
         password: str | None,
         seller_authority_type: str | None,
         full_name: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
         verification_channel: str = "email",
         existing_account_nin: str | None = None,
     ) -> RegistrationResult:
@@ -159,15 +162,24 @@ class RegistrationService:
         expire_minutes = self._email_expire_minutes if by_email else self._otp_expire_minutes
         expires_at = datetime.now(UTC) + timedelta(minutes=expire_minutes)
 
+        # SCRUM-231: the parts are the source of truth and full_name is derived
+        # from them. A legacy client sending only full_name gets it stored as-is
+        # with the parts left null (the pre-0019 shape).
+        first = (first_name or "").strip() or None
+        last = (last_name or "").strip() or None
+        display_name = join_name(first, last) if first and last else (full_name or "")
+
         # "I already have a Maihomme account" (SCRUM-225). A miss is NOT an
         # error: registration carries on as an ordinary new signup, so a
         # mistyped NIN cannot dead-end the funnel, and the API response is
         # identical either way so this cannot be used to enumerate NINs.
         link = _NO_LINK
         if existing_account_nin:
+            legacy_first, legacy_last = (None, None) if first else split_full_name(full_name or "")
             link = await self._account_link.decide(
                 nin=existing_account_nin,
-                claimed_full_name=full_name,
+                claimed_first_name=first or legacy_first,
+                claimed_last_name=last or legacy_last,
                 requested_role=role,
             )
 
@@ -176,7 +188,9 @@ class RegistrationService:
             role=role,
             email=email,
             seller_authority_type=seller_authority_type,
-            full_name=full_name or "",
+            full_name=display_name,
+            first_name=first,
+            last_name=last,
             verification_channel=verification_channel,
             linked_identity_user_id=link.root_user_id,
         )

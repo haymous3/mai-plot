@@ -43,6 +43,14 @@ class UserPii(Base):
     # collect a name. Default to empty string; the profile-update flow (M1+)
     # will populate it. Avoids a schema migration on this PII table.
     full_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The name as two parts (SCRUM-231, migration 0019). These — not a split of
+    # full_name — are what the NIN registry match is scored against, so the
+    # form can promise "exactly as on your NIN slip" and mean it. Nullable:
+    # accounts from before 0019 carry only full_name and readers fall back to
+    # splitting it (services/nin.py name_parts). full_name is DERIVED from
+    # these on every write and remains the display name everywhere.
+    first_name: Mapped[str | None] = mapped_column(Text, default=None)
+    last_name: Mapped[str | None] = mapped_column(Text, default=None)
     # Private-bucket key for the profile photo (SCRUM-188, migration 0011).
     # Only the KEY lives here — the bytes stay in S3 and are served solely via
     # a 15-minute pre-signed URL (§4). A photo of a person is personal data, so

@@ -46,10 +46,22 @@ def test_register_request_rejects_privileged_roles(role: str) -> None:
     # role is a str here on purpose — that is exactly the invalid input under
     # test, so the static Literal mismatch is expected.
     with pytest.raises(ValidationError):
-        RegisterRequest(phone="08012345678", role=role, email="x@example.com")  # type: ignore[arg-type]
+        RegisterRequest(
+            first_name="Ada",
+            last_name="Obi",
+            phone="08012345678",
+            role=role,  # type: ignore[arg-type]
+            email="x@example.com",
+        )
 
 
 @pytest.mark.parametrize("role", ("seller", "buyer", "realtor"))
 def test_register_request_accepts_public_roles(role: str) -> None:
-    req = RegisterRequest(phone="08012345678", role=role, email="x@example.com")  # type: ignore[arg-type]
+    req = RegisterRequest(
+        first_name="Ada",
+        last_name="Obi",
+        phone="08012345678",
+        role=role,  # type: ignore[arg-type]
+        email="x@example.com",
+    )
     assert req.role == role
