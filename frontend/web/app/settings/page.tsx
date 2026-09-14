@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { SettingsClient } from './settings-client';
-import { authServiceUrl, notificationServiceUrl, transactionServiceUrl } from '@/lib/api';
+import { authServiceUrl, notificationServiceUrl } from '@/lib/api';
 import { roleHome, SESSION_LOGIN } from '@/lib/session';
 import { sessionAccessToken, sessionRole } from '@/lib/session-server';
 import type { Account, NotificationPrefs, PayoutAccount } from '@/lib/settings';
@@ -51,12 +51,18 @@ export default async function SettingsPage() {
   // Sellers have no Financial tab, so their payout account is not fetched at
   // all — skipping the request rather than fetching and discarding keeps the
   // page off transaction-service for a panel it will never render.
-  const [payout, prefs] = await Promise.all([
-    role === 'seller'
-      ? Promise.resolve(null)
-      : get<PayoutAccount>(`${transactionServiceUrl()}/payout-account`, token),
-    get<NotificationPrefs>(`${notificationServiceUrl()}/notifications/preferences`, token),
-  ]);
+  //
+  // SCRUM-232: the Financial tab is hidden for EVERY role for now, so nobody's
+  // payout account is fetched. The seller-only skip is preserved in the
+  // commented line so it returns unchanged with the tab.
+  const payout: PayoutAccount | null = null;
+  // role === 'seller'
+  //   ? Promise.resolve(null)
+  //   : get<PayoutAccount>(`${transactionServiceUrl()}/payout-account`, token),
+  const prefs = await get<NotificationPrefs>(
+    `${notificationServiceUrl()}/notifications/preferences`,
+    token,
+  );
 
   return (
     <SettingsClient
