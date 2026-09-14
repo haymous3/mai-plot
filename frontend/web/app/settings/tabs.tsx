@@ -372,7 +372,7 @@ export function ProfileTab({ account }: { account: Account }) {
             autoComplete="given-name"
           />
         </Field>
-        <Field id="last-name" label="Last name" required>
+        <Field id="last-name" label="Last name (surname)" required>
           <TextInput
             id="last-name"
             value={lastName}
