@@ -4,7 +4,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-/** Header avatar menu (SCRUM-95): Settings / My Documents / Sign Out. */
+/**
+ * Header avatar menu (SCRUM-95): My Offers / My Wallet / Settings / Sign Out.
+ *
+ * SCRUM-232: opens on HOVER. The wrapper (button + dropdown) owns the
+ * mouseenter/mouseleave pair so the pointer can travel from the trigger down
+ * into the menu without a gap closing it. The click toggle is kept: touch
+ * screens have no hover, so without it the menu would be unreachable on a
+ * phone. Desktop users never notice the click path — hover has already opened
+ * it by the time they press.
+ */
 export function AvatarMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -32,7 +41,12 @@ export function AvatarMenu() {
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div
+      ref={ref}
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -70,6 +84,10 @@ export function AvatarMenu() {
           >
             Settings
           </Link>
+          {/*
+            SCRUM-232: "My Documents" is hidden for now (product decision). The
+            /documents route and its page are untouched — only the entry point
+            is removed — so restoring it is uncommenting this link.
           <Link
             href="/documents"
             className="block px-4 py-2.5 text-sm text-ink-700 transition hover:bg-bone"
@@ -77,6 +95,7 @@ export function AvatarMenu() {
           >
             My Documents
           </Link>
+          */}
           <button
             type="button"
             onClick={signOut}

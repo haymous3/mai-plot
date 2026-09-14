@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { FinancialTab, NotificationsTab, ProfileTab, SecurityTab } from './tabs';
+import { NotificationsTab, ProfileTab, SecurityTab } from './tabs';
 import type { SettingsTab } from './settings-ui';
 import { BrandLogo } from '@/app/_components/brand-logo';
 import type { Account, NotificationPrefs, PayoutAccount } from '@/lib/settings';
@@ -45,24 +45,32 @@ const NAV: {
       </svg>
     ),
   },
-  {
-    id: 'financial',
-    label: 'Financial',
-    icon: () => (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="h-[18px] w-[18px]"
-      >
-        <rect x="3" y="6" width="18" height="13" rx="2" />
-        <path d="M3 10h18M7 15h3" />
-      </svg>
-    ),
-  },
+  // SCRUM-232: the Financial tab is hidden for now (product decision). It was
+  // already withheld from sellers (SCRUM-222); this takes it from buyers and
+  // realtors too. ⚠️ Until it returns, NO role has a UI for entering a payout
+  // bank account — this panel was the only one — so the SCRUM-223 payout chain
+  // stays parked on `no_payout_account`. Restoring it: uncomment this entry,
+  // the `FinancialTab` import and panel branch below, and the `/payout-account`
+  // fetch in page.tsx. `SETTINGS_TABS` in settings-ui.tsx still lists it so
+  // the type needs no change.
+  // {
+  //   id: 'financial',
+  //   label: 'Financial',
+  //   icon: () => (
+  //     <svg
+  //       viewBox="0 0 24 24"
+  //       fill="none"
+  //       stroke="currentColor"
+  //       strokeWidth="1.8"
+  //       strokeLinecap="round"
+  //       strokeLinejoin="round"
+  //       className="h-[18px] w-[18px]"
+  //     >
+  //       <rect x="3" y="6" width="18" height="13" rx="2" />
+  //       <path d="M3 10h18M7 15h3" />
+  //     </svg>
+  //   ),
+  // },
   {
     id: 'notifications',
     label: 'Notifications',
@@ -120,6 +128,10 @@ export function SettingsClient({
   // the transaction, not from a payout account they maintain here. Hiding the
   // nav item is not enough on its own — the panel is guarded below too, so no
   // state a future caller sets can render it.
+  //
+  // SCRUM-232 hides the tab for every role (see the NAV comment above), so the
+  // seller filter is moot while the entry is commented out; it is kept so the
+  // role split comes back for free when the tab does.
   const showFinancial = role !== 'seller';
   const nav = showFinancial ? NAV : NAV.filter((item) => item.id !== 'financial');
 
@@ -192,9 +204,11 @@ export function SettingsClient({
 
           <div>
             {tab === 'profile' && <ProfileTab account={account} />}
+            {/* SCRUM-232: Financial panel hidden — see the NAV comment above.
             {tab === 'financial' && showFinancial && (
               <FinancialTab account={account} payout={payout} />
             )}
+            */}
             {tab === 'notifications' && <NotificationsTab initial={prefs} />}
             {tab === 'security' && <SecurityTab />}
           </div>

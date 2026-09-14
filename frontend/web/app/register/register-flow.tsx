@@ -367,7 +367,7 @@ function AccountStep({
         </div>
         <div>
           <label htmlFor="last-name" className="block text-sm font-medium text-ink-700">
-            Last name
+            Last name (surname)
           </label>
           <input
             id="last-name"
