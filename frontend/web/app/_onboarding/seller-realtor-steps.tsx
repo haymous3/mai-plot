@@ -64,14 +64,11 @@ const MAX_BYTES = MAX_MB * 1024 * 1024;
  */
 export function SellerVerificationStep({
   onDone,
-  fullName,
   ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
   /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
   ninVerified?: boolean;
-  /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
-  fullName?: string | null;
 }) {
   const [nin, setNin] = useState('');
   const [address, setAddress] = useState('');
@@ -130,7 +127,10 @@ export function SellerVerificationStep({
       const addrResp = await fetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+        // Address ONLY (SCRUM-231). The name was stored as two parts at
+        // registration and an omitted name leaves it alone — echoing a derived
+        // full_name here would have wiped the parts the NIN match relies on.
+        body: JSON.stringify({ address: address.trim() }),
       });
       if (!addrResp.ok) {
         setError('We could not save your address. Please retry.');
@@ -266,14 +266,11 @@ export function SellerVerificationStep({
  */
 export function RealtorProfileStep({
   onDone,
-  fullName,
   ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
   /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
   ninVerified?: boolean;
-  /** From the page's GET /auth/me — POST /auth/profile requires full_name. */
-  fullName?: string | null;
 }) {
   // ⚠️ NIN was collected nowhere in the realtor flow before SCRUM-201: this
   // step asked for an ESVARBON licence, coverage and credentials, and the
@@ -305,7 +302,10 @@ export function RealtorProfileStep({
       const addrResp = await fetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+        // Address ONLY (SCRUM-231). The name was stored as two parts at
+        // registration and an omitted name leaves it alone — echoing a derived
+        // full_name here would have wiped the parts the NIN match relies on.
+        body: JSON.stringify({ address: address.trim() }),
       });
       if (!addrResp.ok) {
         setError('We could not save your address. Please retry.');

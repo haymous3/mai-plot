@@ -470,7 +470,7 @@ class UserRepository:
         self,
         user_id: UUID,
         *,
-        full_name: str,
+        full_name: str | None,
         email: str | None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -490,15 +490,19 @@ class UserRepository:
         would have made a location impossible to remove once set."""
         pii = await self._session.get(UserPii, user_id)
         if pii is not None:
-            pii.full_name = full_name
-            # ⚠️ The parts are written on EVERY name update, even to None
-            # (SCRUM-231). The matcher prefers stored parts over splitting
-            # full_name, so a legacy client that updates full_name alone MUST
-            # clear them — otherwise the person renames themselves and the NIN
-            # match keeps scoring against the name they had before. The
-            # invariant is: parts, when present, agree with full_name.
-            pii.first_name = first_name
-            pii.last_name = last_name
+            # `full_name is None` means the caller sent no name at all — an
+            # address-only save from onboarding, say — and the name, parts
+            # included, is left exactly as it was.
+            if full_name is not None:
+                pii.full_name = full_name
+                # ⚠️ The parts are written on EVERY name update, even to None
+                # (SCRUM-231). The matcher prefers stored parts over splitting
+                # full_name, so a legacy client that updates full_name alone
+                # MUST clear them — otherwise the person renames themselves and
+                # the NIN match keeps scoring against the name they had before.
+                # The invariant is: parts, when present, agree with full_name.
+                pii.first_name = first_name
+                pii.last_name = last_name
             if set_location:
                 pii.location = location
             if set_address:
@@ -851,6 +855,12 @@ class UserRepository:
             return False
         if full_name is not None:
             pii.full_name = full_name
+            # Same invariant as update_profile (SCRUM-231): an admin editing
+            # the single display field clears the parts, so the NIN matcher
+            # falls back to splitting the NEW name rather than preferring the
+            # stale parts of the old one.
+            pii.first_name = None
+            pii.last_name = None
         if set_location:
             pii.location = location
         if set_address:

@@ -273,7 +273,12 @@ function storedLocation(account: Account): string {
 }
 
 export function ProfileTab({ account }: { account: Account }) {
-  const [fullName, setFullName] = useState(account.full_name ?? '');
+  // Two parts (SCRUM-231). An account from before migration 0019 has null
+  // parts and only a full_name — offer the fields EMPTY rather than splitting
+  // that string here: guessing the split is exactly what the backend stopped
+  // doing, and the person is the only one who knows which is which.
+  const [firstName, setFirstName] = useState(account.first_name ?? '');
+  const [lastName, setLastName] = useState(account.last_name ?? '');
   const [location, setLocation] = useState(storedLocation(account));
   const [address, setAddress] = useState(account.address ?? '');
   const [busy, setBusy] = useState(false);
@@ -283,7 +288,8 @@ export function ProfileTab({ account }: { account: Account }) {
   } | null>(null);
 
   const dirty =
-    fullName !== (account.full_name ?? '') ||
+    firstName !== (account.first_name ?? '') ||
+    lastName !== (account.last_name ?? '') ||
     location !== storedLocation(account) ||
     address !== (account.address ?? '');
 
@@ -299,7 +305,10 @@ export function ProfileTab({ account }: { account: Account }) {
         // Sending null rather than omitting it lets a location be CLEARED;
         // the endpoint distinguishes "sent null" from "not sent".
         body: JSON.stringify({
-          full_name: fullName.trim(),
+          // Sent as the two parts the NIN match uses; the backend derives the
+          // display name. Both must be present — the Save button enforces it.
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           // Address is on user_pii for every role (SCRUM-201), unlike the
           // location box above, which forks by role.
           address: address.trim() || null,
@@ -353,16 +362,31 @@ export function ProfileTab({ account }: { account: Account }) {
       <AvatarField initialUrl={account.avatar_url} name={account.full_name ?? ''} />
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <Field id="full-name" label="Full Name" required>
+        <Field id="first-name" label="First name" required>
           <TextInput
-            id="full-name"
-            value={fullName}
-            onChange={setFullName}
-            placeholder="Ada Obi"
+            id="first-name"
+            value={firstName}
+            onChange={setFirstName}
+            placeholder="Ada"
             icon={<UserIcon />}
-            autoComplete="name"
+            autoComplete="given-name"
           />
         </Field>
+        <Field id="last-name" label="Last name" required>
+          <TextInput
+            id="last-name"
+            value={lastName}
+            onChange={setLastName}
+            placeholder="Obi"
+            icon={<UserIcon />}
+            autoComplete="family-name"
+          />
+        </Field>
+        {/* Spans the row: this line is why the field is split at all. */}
+        <p className="-mt-3 text-xs leading-5 text-ink-500 sm:col-span-2">
+          Enter your names exactly as they appear on your NIN slip &mdash; they are used to verify
+          your identity.
+        </p>
 
         {/*
           Email and phone are READ-ONLY. Both are verified identifiers, not
@@ -413,7 +437,8 @@ export function ProfileTab({ account }: { account: Account }) {
       <div className="mt-8 flex items-center justify-end gap-3 border-t border-line pt-6">
         <GhostButton
           onClick={() => {
-            setFullName(account.full_name ?? '');
+            setFirstName(account.first_name ?? '');
+            setLastName(account.last_name ?? '');
             setLocation(storedLocation(account));
             setAddress(account.address ?? '');
             setNote(null);
@@ -421,7 +446,10 @@ export function ProfileTab({ account }: { account: Account }) {
         >
           Cancel
         </GhostButton>
-        <PrimaryButton disabled={!dirty || !fullName.trim() || busy} onClick={() => void save()}>
+        <PrimaryButton
+          disabled={!dirty || !firstName.trim() || !lastName.trim() || busy}
+          onClick={() => void save()}
+        >
           <SaveIcon />
           {busy ? 'Saving…' : 'Save Changes'}
         </PrimaryButton>

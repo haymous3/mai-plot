@@ -57,19 +57,11 @@ const EMPLOYMENT = [
 
 export function BuyerProfileStep({
   onDone,
-  fullName,
   ninVerified = false,
 }: {
   onDone: () => void | Promise<void>;
   /** Already verified on this account or its linked root — skip the field (SCRUM-228). */
   ninVerified?: boolean;
-  /**
-   * The name registration collected (SCRUM-197), passed down from the page's
-   * GET /auth/me. POST /auth/profile requires full_name, so saving an address
-   * means re-sending the name the account already has — sending nothing would
-   * be a 422 FULL_NAME_REQUIRED.
-   */
-  fullName?: string | null;
 }) {
   const [nin, setNin] = useState('');
   const [employment, setEmployment] = useState('');
@@ -111,7 +103,10 @@ export function BuyerProfileStep({
       const addr = await fetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName ?? '', address: address.trim() }),
+        // Address ONLY (SCRUM-231). The name was stored as two parts at
+        // registration and an omitted name leaves it alone — echoing a derived
+        // full_name here would have wiped the parts the NIN match relies on.
+        body: JSON.stringify({ address: address.trim() }),
       });
       if (!addr.ok) {
         setError('We could not save your address. Please retry.');

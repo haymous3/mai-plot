@@ -13,6 +13,9 @@ export type Account = {
   email: string | null;
   phone: string;
   full_name: string;
+  /** The stored parts (SCRUM-231); null on an account from before migration 0019. */
+  first_name: string | null;
+  last_name: string | null;
   seller_authority_type: string | null;
   poa_verified_status: string;
   bvn_verified: boolean;

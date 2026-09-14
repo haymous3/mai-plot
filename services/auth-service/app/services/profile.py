@@ -44,17 +44,28 @@ class ProfileService:
         # SCRUM-231: parts are the source of truth when given; full_name is
         # derived. A lone part is rejected — it is neither a usable match key
         # nor a usable greeting. Only when NEITHER part is present does the
-        # legacy single field stand in (stored as-is, parts left untouched).
+        # legacy single field stand in (stored as-is, parts cleared).
+        #
+        # A request that carries NO name at all leaves the name ALONE. Before
+        # this, onboarding had to echo the name back just to save an address —
+        # and once the parts became the matcher's source of truth, echoing a
+        # derived full_name would have wiped them. An address-only update must
+        # never touch identity.
         first = (first_name or "").strip() or None
         last = (last_name or "").strip() or None
         if bool(first) != bool(last):
             raise InvalidFullName
+        legacy = (full_name or "").strip()
+        name: str | None
         if first and last:
             name = join_name(first, last)
-        else:
-            name = (full_name or "").strip()
-        if not name:
+        elif legacy:
+            name = legacy
+        elif full_name is not None or first_name is not None or last_name is not None:
+            # A name WAS sent, and it is blank — that is an error, not "omitted".
             raise InvalidFullName
+        else:
+            name = None
         normalised_email = email.strip().lower() if email and email.strip() else None
         if normalised_email is not None and await self._users.email_taken_by_other(
             normalised_email, user_id=user_id
