@@ -103,10 +103,27 @@ export function Nav() {
           </ul>
         </nav>
 
-        {/* Log In was removed here (SCRUM-204): the hero now carries Sign In
-            and Sign Up as its two calls to action, so a third auth entry point
-            in the bar was competing with them. */}
-        <div className="flex items-center gap-7">
+        {/* A generic Log In was removed here (SCRUM-204): the hero carries
+            Sign In and Sign Up, and a third auth entry point in the bar was
+            competing with them.
+
+            "Sign in as a realtor" (SCRUM-233) is different, and the reason is
+            the query string. An approved realtor signs in with a Maihomme
+            registration number, not an email (SCRUM-207), and only
+            `/login?role=realtor` renders the form that accepts one — plain
+            `/login` defaults to buyer and asks for an email a realtor cannot
+            use. The hero's Sign In goes there, so without this link the
+            landing page had NO route to the realtor form. Secondary treatment
+            (hairline, no fill) so gold Get Started stays the primary action;
+            hidden below md with the link list, where a 72px bar has no room
+            for a second button. */}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login?role=realtor"
+            className="hidden h-10 items-center rounded-xl border border-white/20 px-5 text-[15px] font-semibold leading-5 text-white transition hover:bg-white/10 md:inline-flex"
+          >
+            Sign in as a realtor
+          </Link>
           <Link
             href="/register"
             className="inline-flex h-10 items-center rounded-xl bg-status-gold px-5 text-[15px] font-semibold leading-5 text-white transition hover:brightness-105"
