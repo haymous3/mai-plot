@@ -3,12 +3,24 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { LoginForm } from './login-form';
+import { RolePicker } from './role-picker';
 import { BrandLogo } from '@/app/_components/brand-logo';
 import { isNonAdminRole } from '@/lib/session';
 import { sessionAccessToken, sessionHome } from '@/lib/session-server';
 
 export const metadata: Metadata = {
   title: 'Sign in · Maihomme',
+};
+
+/**
+ * The brand panel and the sign-in column each read from this. `picker` is the
+ * no-role state (SCRUM-235): before this the page silently defaulted to buyer,
+ * which asks for an email a realtor cannot use.
+ */
+const PICKER_COPY = {
+  eyebrow: 'Sign in',
+  sub: 'Choose the account you are signing in to.',
+  panel: 'Buyers, sellers and realtors each have their own sign-in — pick yours to continue.',
 };
 
 const ROLE_COPY: Record<string, { eyebrow: string; sub: string; panel: string }> = {
@@ -38,8 +50,13 @@ export default function LoginPage({
   if (sessionAccessToken()) redirect(sessionHome() ?? '/dashboard');
 
   const roleParam = Array.isArray(searchParams.role) ? searchParams.role[0] : searchParams.role;
-  const role = isNonAdminRole(roleParam) ? roleParam : 'buyer';
-  const copy = ROLE_COPY[role];
+  // No usable role → the picker, not a silent buyer default (SCRUM-235). Every
+  // bare `/login` link on the site (hero, closing band, register's "already
+  // have an account", the sign-out redirects, middleware's ?expired=1) lands
+  // here; the links that already know the role (forgot-password, the two
+  // realtor CTAs) carry `?role=` and skip it.
+  const role = isNonAdminRole(roleParam) ? roleParam : null;
+  const copy = role ? ROLE_COPY[role] : PICKER_COPY;
   // Middleware sends ?expired=1 when the refresh token is beyond saving
   // (SCRUM-206). Saying so beats dropping the user on a bare sign-in form
   // wondering why they were thrown out.
@@ -70,7 +87,9 @@ export default function LoginPage({
           </div>
 
           <p className="text-xs uppercase tracking-[0.2em] text-ink-300">{copy.eyebrow}</p>
-          <h2 className="mt-2 font-display text-3xl text-ink-900">Sign in</h2>
+          <h2 className="mt-2 font-display text-3xl text-ink-900">
+            {role ? 'Sign in' : 'Which account is yours?'}
+          </h2>
           <p className="mt-2 text-sm text-ink-500">{copy.sub}</p>
 
           {expired && (
@@ -82,10 +101,17 @@ export default function LoginPage({
             </p>
           )}
 
+          {/* The expired-session notice above renders in BOTH states on
+              purpose: middleware sends `?expired=1` with no role, so that
+              message would otherwise be lost on the picker. */}
           <div className="mt-8">
-            <Suspense fallback={null}>
-              <LoginForm role={role} />
-            </Suspense>
+            {role ? (
+              <Suspense fallback={null}>
+                <LoginForm role={role} />
+              </Suspense>
+            ) : (
+              <RolePicker />
+            )}
           </div>
 
           <p className="mt-8 text-sm text-ink-500">
