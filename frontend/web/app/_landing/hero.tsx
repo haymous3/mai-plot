@@ -119,10 +119,14 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             className="animate-enter-up mt-14 flex flex-wrap gap-9"
             style={{ animationDelay: `${staggerDelayMs(4)}ms` }}
           >
+            {/* "14 / Partner Banks" was the third stat until SCRUM-234: the
+                trust bar now names the one real partner, so the number had to
+                go. Not swapped for "50% / Financing" here as the Stats band
+                did — the chip on the photo already says 50%, and the hero
+                would be saying it twice within 300px. */}
             {[
               { value: '12K+', label: 'Listings' },
               { value: '9.6K+', label: 'Homeowners' },
-              { value: '14', label: 'Partner Banks' },
             ].map((s) => (
               <div key={s.label}>
                 <dd className="text-2xl font-bold leading-8">{s.value}</dd>

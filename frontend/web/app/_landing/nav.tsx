@@ -53,9 +53,9 @@ const LINKS: { label: string; href?: string }[] = [
   { label: 'Properties', href: '/dashboard' },
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Financing', href: '#financing' },
-  // The realtor funnel is the closest real destination, and the footer already
-  // sends "Agent Registration" here.
-  { label: 'Agents', href: '/register' },
+  // Was `/register` (the closest real destination at the time). SCRUM-234
+  // added a realtor band to the page, which is what this link promises.
+  { label: 'Agents', href: '#realtors' },
   // No blog exists. Plain text beats a 404 — same rule the footer follows.
   { label: 'Blog' },
 ];
