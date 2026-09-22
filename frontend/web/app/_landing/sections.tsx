@@ -94,36 +94,33 @@ function SectionHead({
 /**
  * Trust bar — node 627:9, re-measured.
  *
- * Eight banks, not the four SCRUM-174 shipped, and each sits in a pill rather
- * than being bare text. Measured: pills 44px tall, 12px radius, `surface-paper`
- * fill, 48px column gap, 24px row gap, 15px semibold `ink-500` label.
+ * ⚠️ ONE BANK, AND IT IS THE REAL ONE (SCRUM-234). The design drew eight
+ * household names (Access, GTBank, Zenith, First Bank, UBA, Stanbic, FCMB,
+ * Fidelity) and SCRUM-178 shipped them verbatim. None of them is a partner.
+ * PremiumTrust Bank is, so the bar now shows PremiumTrust Bank — a marketing
+ * page naming banks that have no relationship with the platform is the kind
+ * of claim that gets a letter from one of them.
  *
- * Pill widths run 128-139px. That is NOT a 7-column grid — that would make them
- * all 133 — but content width against a 128px floor: every measured pill
- * matches `min-w-[128px] px-6` to within 3px.
+ * The heading moved to the singular for the same reason: "Trusted by leading
+ * Nigerian banks & institutions" over a single pill reads as a broken list,
+ * and was never true anyway. Add to the array as partners sign; the pill
+ * measurements below still hold and `flex-wrap justify-center` handles any
+ * count.
  *
- * Seven fit the 1216px container and the eighth wraps and centres, which
- * `flex-wrap justify-center` reproduces without hard-coding the break.
+ * Measured: pills 44px tall, 12px radius, `surface-paper` fill, 48px column
+ * gap, 24px row gap, 15px semibold `ink-500` label. Pill width is content
+ * against a 128px floor (`min-w-[128px] px-6`), every measured pill within 3px.
  *
  * White, with no top rule: the hero's curved edge is a white shape, so any
  * other fill here would show as a band under the curve.
  */
 export function TrustBar() {
-  const banks = [
-    'Access Bank',
-    'GTBank',
-    'Zenith Bank',
-    'First Bank',
-    'UBA',
-    'Stanbic IBTC',
-    'FCMB',
-    'Fidelity Bank',
-  ];
+  const banks = ['PremiumTrust Bank'];
   return (
     <section className="bg-surface-card pb-16 pt-[72px]">
       <Shell>
         <p className="text-center text-sm font-semibold uppercase tracking-[0.08em] text-ink-500">
-          Trusted by leading Nigerian banks &amp; institutions
+          Our financing partner
         </p>
         <Reveal
           as="ul"
@@ -423,20 +420,23 @@ export function Testimonials() {
  * four figures centred rather than left-aligned. Values measured at 48px
  * (digit height 35px / 0.727) in `emerald-deep`, labels 16px `ink-500`.
  *
- * The fourth figure is "14 / Partner Banks" in the export, not the
- * "₦48B+ / Transacted Value" previously shipped, and the third reads "Happy
- * Homeowners" rather than "Happy Nigerians".
+ * The fourth figure was "14 / Partner Banks" in the export. SCRUM-234 replaced
+ * it: the trust bar now names the ONE real partner, and a "14" three sections
+ * away contradicted it. "50% / Max Financing" is the swap-in because it is a
+ * business rule (CLAUDE.md §8.5), not a figure — the one number on this band
+ * that is true by construction. The third reads "Happy Homeowners" rather
+ * than "Happy Nigerians".
  *
- * These are marketing figures taken from the design. There is no metrics
- * endpoint to source them from — analytics-service exposes only the admin
- * audit log — so they are hardcoded until one exists.
+ * The other three are marketing figures taken from the design. There is no
+ * metrics endpoint to source them from — analytics-service exposes only the
+ * admin audit log — so they are hardcoded until one exists.
  */
 export function Stats() {
   const stats = [
     { value: '4,200+', label: 'Properties Sold' },
     { value: '12,800+', label: 'Verified Listings' },
     { value: '9,600+', label: 'Happy Homeowners' },
-    { value: '14', label: 'Partner Banks' },
+    { value: '50%', label: 'Max Financing' },
   ];
   return (
     <section className="bg-surface-card py-20">
@@ -521,7 +521,9 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
             <span className="block">Up to 50% Through Partner Banks.</span>
           </h2>
           <p className="mt-5 text-lg leading-7 text-ink-500">
-            Don&apos;t let capital stop your property dream. Maihomme partners with 14 CBN-licensed
+            {/* No bank count (SCRUM-234): the trust bar names one real partner,
+                and "14" here contradicted it. */}
+            Don&apos;t let capital stop your property dream. Maihomme partners with CBN-licensed
             banks to give you access to competitive mortgage financing — applied directly from your
             dashboard, with decisions in as little as 72 hours.
           </p>
@@ -540,6 +542,107 @@ export function Financing({ photo, alt }: { photo?: string | null; alt?: string 
             Check Financing Eligibility
             <ArrowRightIcon className="h-5 w-5" />
           </Link>
+        </Reveal>
+      </Shell>
+    </section>
+  );
+}
+
+/**
+ * For Realtors — SCRUM-234. NOT in the design export; the product owner asked
+ * for "a small write-up for signing in as a realtor which will now have a
+ * CTA", so this is built to the page's own rhythm (104px top / 96px bottom,
+ * the two-column grid the Financing panel uses, `surface-linen` so it is
+ * distinct from Financing's `paper` before it and the closing band's white
+ * after it) rather than to a drawing.
+ *
+ * EVERY CLAIM HERE IS SOURCED, none invented:
+ *   - inspection assignments + the report workflow: realtor-service, the
+ *     realtor portal (SCRUM-204)
+ *   - 2% commission, held in escrow, released within 3 business days of
+ *     closure: CLAUDE.md §8.7 — the DEFAULT, which is why the copy says "from"
+ *     and not a flat rate; admin can configure it per deal
+ *   - sign-in by Maihomme registration number: SCRUM-207
+ *
+ * The primary CTA carries `?role=realtor` for the same reason the nav link
+ * does (SCRUM-233): only that variant of /login renders the registration-
+ * number form. The secondary goes to plain /register, which has its own role
+ * picker and takes no role parameter.
+ */
+export function ForRealtors() {
+  const points = [
+    'Inspection assignments with the property and seller contact on one screen',
+    'A guided inspection report the buyer and admin both rely on',
+    'Commission tracked per deal and paid out of escrow, not chased',
+  ];
+  return (
+    <section id="realtors" className="bg-surface-linen pb-24 pt-[104px]">
+      <Shell className="grid items-center gap-y-16 lg:grid-cols-2 lg:gap-x-16">
+        <Reveal>
+          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
+            For Realtors
+          </p>
+          <h2 className="mt-4 font-display text-[32px] font-bold leading-[1.22] text-ink-buyer sm:text-[36px]">
+            Bring Your Clients.
+            <span className="block">We Handle the Rest.</span>
+          </h2>
+          <p className="mt-5 text-lg leading-7 text-ink-500">
+            Maihomme sends you inspection assignments, walks you through the report, and pays
+            your commission from escrow when the deal closes. Approved realtors sign in with their
+            Maihomme registration number.
+          </p>
+          <Reveal as="ul" stagger className="mt-8 flex flex-col gap-4">
+            {points.map((p) => (
+              <li key={p} className="flex items-center gap-3 text-[15px] leading-5 text-ink-700">
+                <CheckCircleIcon className="h-5 w-5 flex-none text-emerald-deep" />
+                {p}
+              </li>
+            ))}
+          </Reveal>
+          <div className="mt-10 flex flex-wrap gap-4">
+            <Link
+              href="/login?role=realtor"
+              className="inline-flex h-[52px] items-center gap-2.5 rounded-xl bg-emerald-deep px-7 text-base font-semibold text-white transition hover:brightness-110"
+            >
+              <LockIcon className="h-5 w-5" />
+              Sign in as a realtor
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex h-[52px] items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-7 text-base font-semibold text-ink-buyer transition hover:border-emerald-deep/40"
+            >
+              Register as a realtor
+              <ArrowRightIcon className="h-5 w-5" />
+            </Link>
+          </div>
+        </Reveal>
+
+        {/* Mirrors the Financing panel's photo card at the same 416px height,
+            but a photograph of "a realtor" would be stock in the worst way.
+            The commission rule is the thing a realtor actually wants to know,
+            so the card says that instead. */}
+        <Reveal className="relative">
+          <div className="flex h-[416px] flex-col justify-between rounded-2xl bg-emerald-deep p-10 text-white shadow-lg">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.08em] text-status-gold">
+                Your Commission
+              </p>
+              <p className="mt-6 font-display text-[64px] font-bold leading-none sm:text-[80px]">
+                <span className="text-[40px] align-top sm:text-[48px]">from </span>2%
+              </p>
+              <p className="mt-4 max-w-sm text-lg leading-7 text-white/75">
+                of every deal you close — held in escrow and released within three business days
+                of closure.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl bg-white/10 px-5 py-4">
+              <BuildingIcon className="h-6 w-6 flex-none text-status-gold" />
+              <p className="text-sm leading-5 text-white/90">
+                Sign in with your Maihomme registration number, e.g.{' '}
+                <span className="font-semibold text-white">MH-R-000123</span>
+              </p>
+            </div>
+          </div>
         </Reveal>
       </Shell>
     </section>

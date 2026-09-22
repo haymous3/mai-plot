@@ -11,6 +11,7 @@ import {
   Categories,
   Financing,
   FinalCta,
+  ForRealtors,
   Process,
   Shell,
   Stats,
@@ -129,6 +130,9 @@ export default async function HomePage() {
         photo={(featured[3] ?? featured[0])?.thumbnail_url}
         alt={(featured[3] ?? featured[0])?.title}
       />
+      {/* After the buyer-facing financing pitch and before the page's last
+          call to act, so the two audiences get their own band each (SCRUM-234). */}
+      <ForRealtors />
       <FinalCta />
       <Footer />
     </main>
