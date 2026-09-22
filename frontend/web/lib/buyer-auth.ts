@@ -16,4 +16,10 @@ export function isBuyerRole(role: string | null | undefined): boolean {
 
 /** Where a signed-in buyer lands after login. */
 export const BUYER_HOME = '/dashboard';
-export const BUYER_LOGIN = '/login';
+/**
+ * Carries the role since SCRUM-235: bare `/login` is now the role PICKER, and
+ * a buyer bounced off a protected page already told us who they are. Seller
+ * and realtor layouts have done this (`?role=seller` / `?role=realtor`) since
+ * they were built; buyer was the odd one out.
+ */
+export const BUYER_LOGIN = '/login?role=buyer';
