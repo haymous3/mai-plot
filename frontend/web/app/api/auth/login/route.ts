@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { backendLogin } from '@/lib/api';
-import {
-  SESSION_ACCESS_COOKIE,
-  SESSION_REFRESH_COOKIE,
-  isNonAdminRole,
-  roleHome,
-} from '@/lib/session';
+import { backendLogin, isSwitchableRole } from '@/lib/api';
+import { isNonAdminRole, roleHome } from '@/lib/session';
+import { applySessionCookies } from '@/lib/session-cookies';
 
 /**
  * Shared non-admin login proxy (SCRUM-98). One login for buyer/seller/realtor:
@@ -17,12 +13,14 @@ import {
  * The credential field is `identifier` (SCRUM-207): an email address, or an
  * approved realtor's Maihomme registration number. `email` is still accepted so
  * a client cached from before the change keeps working through a deploy.
+ *
+ * `role` (SCRUM-236) is the sign-in page's Buyer / Seller choice, forwarded as
+ * a PREFERENCE: a person whose sign-in opens both lands on the one they picked,
+ * and on the buyer one when they picked nothing. Anything else is dropped here
+ * rather than forwarded, so the backend never sees an unexpected value.
  */
-const FIFTEEN_MINUTES = 15 * 60;
-const SEVEN_DAYS = 7 * 24 * 60 * 60;
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  let payload: { identifier?: unknown; email?: unknown; password?: unknown };
+  let payload: { identifier?: unknown; email?: unknown; password?: unknown; role?: unknown };
   try {
     payload = await request.json();
   } catch {
@@ -38,8 +36,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!identifier || !password) {
     return NextResponse.json({ error: 'INVALID_REQUEST' }, { status: 400 });
   }
+  const preferredRole = isSwitchableRole(payload.role) ? payload.role : undefined;
 
-  const result = await backendLogin(identifier, password);
+  const result = await backendLogin(identifier, password, preferredRole);
   if (!result.ok) {
     return NextResponse.json({ error: result.code }, { status: result.status === 502 ? 502 : 401 });
   }
@@ -47,21 +46,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'NOT_ALLOWED' }, { status: 403 });
   }
 
-  const response = NextResponse.json({ ok: true, role: result.role, redirect: roleHome(result.role) });
-  const secure = process.env.NODE_ENV === 'production';
-  response.cookies.set(SESSION_ACCESS_COOKIE, result.accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: FIFTEEN_MINUTES,
-  });
-  response.cookies.set(SESSION_REFRESH_COOKIE, result.refreshToken, {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SEVEN_DAYS,
-  });
-  return response;
+  return applySessionCookies(
+    NextResponse.json({ ok: true, role: result.role, redirect: roleHome(result.role) }),
+    result.accessToken,
+    result.refreshToken,
+  );
 }

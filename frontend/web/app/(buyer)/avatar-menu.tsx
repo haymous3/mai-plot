@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
+import { AccountSwitch } from '@/app/_components/account-switch';
+
 /**
  * Header avatar menu (SCRUM-95): My Offers / My Wallet / Settings / Sign Out.
  *
@@ -62,7 +64,10 @@ export function AvatarMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl border border-ink-300/30 bg-white py-1 shadow-lg">
+        // w-64 rather than w-48 since SCRUM-236: the account switch row carries
+        // a one-line description under its label.
+        <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-xl border border-ink-300/30 bg-white py-1 shadow-lg">
+          <AccountSwitch current="buyer" variant="menu" onNavigate={() => setOpen(false)} />
           <Link
             href="/offers"
             className="block px-4 py-2.5 text-sm text-ink-700 transition hover:bg-bone"

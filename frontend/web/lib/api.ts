@@ -922,19 +922,58 @@ export interface LoginFailure {
 export async function backendLogin(
   identifier: string,
   password: string,
+  /** SCRUM-236: which account to open when the sign-in has a buyer AND a
+   * seller one. A preference only — the backend ignores a role it lacks. */
+  preferredRole?: SwitchableRole,
 ): Promise<LoginSuccess | LoginFailure> {
   let resp: Response;
   try {
     resp = await fetch(`${authServiceUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({ identifier, password, ...(preferredRole ? { role: preferredRole } : {}) }),
       cache: 'no-store',
     });
   } catch {
     return { ok: false, status: 502, code: 'AUTH_SERVICE_UNAVAILABLE' };
   }
 
+  return readSession(resp);
+}
+
+/** The buyer/seller roles that share one sign-in (SCRUM-236). */
+export type SwitchableRole = 'buyer' | 'seller';
+
+export function isSwitchableRole(role: unknown): role is SwitchableRole {
+  return role === 'buyer' || role === 'seller';
+}
+
+/**
+ * auth-service POST /auth/switch-role or /auth/add-role (SCRUM-236). Both
+ * answer with the same body as /auth/login — a fresh pair for the account now
+ * in use — and revoke `refreshToken`, the session being left.
+ */
+export async function backendRoleSession(
+  action: 'switch-role' | 'add-role',
+  accessToken: string,
+  role: SwitchableRole,
+  refreshToken: string | null,
+): Promise<LoginSuccess | LoginFailure> {
+  let resp: Response;
+  try {
+    resp = await fetch(`${authServiceUrl()}/auth/${action}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ role, ...(refreshToken ? { refresh_token: refreshToken } : {}) }),
+      cache: 'no-store',
+    });
+  } catch {
+    return { ok: false, status: 502, code: 'AUTH_SERVICE_UNAVAILABLE' };
+  }
+  return readSession(resp);
+}
+
+async function readSession(resp: Response): Promise<LoginSuccess | LoginFailure> {
   if (!resp.ok) {
     let code = 'INVALID_CREDENTIALS';
     try {

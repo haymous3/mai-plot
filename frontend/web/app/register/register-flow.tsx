@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { PasswordField } from '../_components/password-field';
-import { ExistingAccountStep } from '../_onboarding/existing-account-step';
-import type { ExistingAccountAnswer } from '../_onboarding/existing-account-step';
+import { ExistingAccountStep, canLinkBySignIn } from '../_onboarding/existing-account-step';
+import type { ExistingAccountAnswer, LinkBy } from '../_onboarding/existing-account-step';
 import { IntroCarousel } from '../_onboarding/intro-carousel';
 import { RolePicker } from '../_onboarding/role-picker';
 import { OnboardingShell } from '../_onboarding/ui';
@@ -46,6 +46,13 @@ const REGISTER_ERRORS: Record<string, string> = {
   ROLE_ALREADY_HELD: 'You already have an account in this role. Sign in to it instead.',
 };
 
+// Signing in to an existing account to add this one to it (SCRUM-236).
+const SIGN_IN_ERRORS: Record<string, string> = {
+  INVALID_CREDENTIALS: 'Those sign-in details are incorrect.',
+  INVALID_REQUEST: 'Enter your email address and password.',
+  AUTH_SERVICE_UNAVAILABLE: 'Sign-in is temporarily unavailable. Please retry.',
+};
+
 type Step = 'intro' | 'role' | 'existing' | 'account';
 type VerificationChannel = 'email' | 'phone';
 
@@ -67,6 +74,13 @@ export function RegisterFlow() {
   // the NIN is only sent when the answer is yes.
   const [existingAnswer, setExistingAnswer] = useState<ExistingAccountAnswer | null>(null);
   const [existingNin, setExistingNin] = useState('');
+  // SCRUM-236: a buyer/seller signup is ADDED to the existing sign-in rather
+  // than registered from scratch. NIN lookup stays for realtor pairs.
+  const [existingLinkBy, setExistingLinkBy] = useState<LinkBy>('signin');
+  const [existingIdentifier, setExistingIdentifier] = useState('');
+  const [existingPassword, setExistingPassword] = useState('');
+  const linkByNin =
+    existingAnswer === 'yes' && (existingLinkBy === 'nin' || !canLinkBySignIn(role));
   // Set once the verification email is away — this is a terminal state for the
   // funnel, since the user continues by clicking the link, not by typing here.
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
@@ -91,9 +105,7 @@ export function RegisterFlow() {
           verification_channel: channel,
           // Omitted entirely unless they said yes — an empty string would be a
           // claim of an existing account that cannot match anything.
-          ...(existingAnswer === 'yes' && existingNin.trim()
-            ? { existing_account_nin: existingNin.trim() }
-            : {}),
+          ...(linkByNin && existingNin.trim() ? { existing_account_nin: existingNin.trim() } : {}),
         }),
       });
       if (resp.ok) {
@@ -139,13 +151,78 @@ export function RegisterFlow() {
     }
   }
 
+  /**
+   * "Yes, I already have one" for a buyer or seller signup (SCRUM-236): sign in
+   * to the existing account, then add this role to it. No registration form,
+   * no verification email — signing in is the proof — straight to onboarding.
+   */
+  async function addToExistingAccount() {
+    setError(null);
+    setBusy(true);
+    try {
+      // `role` as the preference: someone who already HAS this account lands
+      // on it, which the add below then recognises.
+      const login = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ identifier: existingIdentifier.trim(), password: existingPassword, role }),
+      });
+      const signedIn = (await login.json().catch(() => ({}))) as {
+        role?: string;
+        redirect?: string;
+        error?: string;
+      };
+      if (!login.ok) {
+        setError(SIGN_IN_ERRORS[signedIn.error ?? ''] ?? SIGN_IN_ERRORS.INVALID_CREDENTIALS);
+        return;
+      }
+      if (signedIn.role === role && signedIn.redirect) {
+        // They already have this account; they are now signed in to it.
+        router.replace(signedIn.redirect);
+        router.refresh();
+        return;
+      }
+      if (!canLinkBySignIn(signedIn.role ?? '')) {
+        // A realtor sign-in. Realtors keep separate sign-ins, so undo it and
+        // point at the NIN route, which is how those pairs are linked.
+        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+        setExistingLinkBy('nin');
+        setError('That’s a realtor account. Link it with your NIN below instead.');
+        return;
+      }
+
+      const added = await fetch('/api/auth/add-role', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const result = (await added.json().catch(() => ({}))) as { redirect?: string; error?: string };
+      if (added.ok && result.redirect) {
+        router.replace(result.redirect);
+        router.refresh();
+        return;
+      }
+      if (result.error === 'NIN_VERIFICATION_REQUIRED') {
+        // They are signed in; that page verifies the NIN and then adds the account.
+        router.replace(`/add-account?role=${role}`);
+        router.refresh();
+        return;
+      }
+      setError('We signed you in but could not add the account. Please try again.');
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     // 768px column, measured on every screen in design/onboarding/ and the
     // three post-verification flows. Was max-w-md (448px).
     <OnboardingShell>
       {sentToEmail !== null ? (
         <FormColumn>
-          <CheckEmailStep email={sentToEmail} claimedExistingAccount={existingAnswer === 'yes'} />
+          <CheckEmailStep email={sentToEmail} claimedExistingAccount={linkByNin} />
         </FormColumn>
       ) : (
           <>
@@ -164,13 +241,24 @@ export function RegisterFlow() {
 
         {step === 'existing' && (
           <ExistingAccountStep
+            role={role}
             answer={existingAnswer}
             setAnswer={(a) => {
               setError(null);
               setExistingAnswer(a);
             }}
+            linkBy={existingLinkBy}
+            setLinkBy={(l) => {
+              setError(null);
+              setExistingLinkBy(l);
+            }}
+            identifier={existingIdentifier}
+            setIdentifier={setExistingIdentifier}
+            password={existingPassword}
+            setPassword={setExistingPassword}
             nin={existingNin}
             setNin={setExistingNin}
+            busy={busy}
             error={error}
             onBack={() => {
               setError(null);
@@ -178,6 +266,10 @@ export function RegisterFlow() {
             }}
             onContinue={() => {
               setError(null);
+              if (existingAnswer === 'yes' && !linkByNin) {
+                void addToExistingAccount();
+                return;
+              }
               setStep('account');
             }}
           />
