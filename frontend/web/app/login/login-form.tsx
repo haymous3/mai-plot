@@ -52,7 +52,10 @@ export function LoginForm({ role }: { role: string }) {
       const resp = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        // `role` (SCRUM-236): a person whose sign-in opens a buyer AND a seller
+        // account lands on the one whose card they picked. The proxy drops it
+        // for any role other than those two.
+        body: JSON.stringify({ identifier, password, role }),
       });
       const body = (await resp.json()) as { ok?: boolean; redirect?: string; error?: string };
       if (resp.ok && body.ok && body.redirect) {

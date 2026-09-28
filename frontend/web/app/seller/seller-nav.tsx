@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { SellerSignOut } from './seller-sign-out';
+import { AccountSwitch } from '@/app/_components/account-switch';
 import { BrandLogo } from '@/app/_components/brand-logo';
 
 const NAV = [
@@ -69,6 +70,8 @@ export function SellerNav() {
 
       {/* Settings + Logout pinned to the bottom behind a top rule — node 276:421. */}
       <div className="flex flex-none flex-col gap-2 border-t border-line px-4 py-4">
+        {/* SCRUM-236: the way back to buying, on the same sign-in. */}
+        <AccountSwitch current="seller" variant="rail" />
         {/*
           `/settings`, not `/seller/settings` — the latter never existed and
           this link 404'd from SCRUM-98 until SCRUM-193. Settings is one screen
