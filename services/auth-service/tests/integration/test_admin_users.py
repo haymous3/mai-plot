@@ -46,7 +46,7 @@ def _staff_token(db_engine: Engine, *, role: str = "admin") -> tuple[UUID, str]:
         access_expire_minutes=settings.jwt_access_expire_minutes,
         refresh_expire_days=settings.jwt_refresh_expire_days,
     )
-    return user_id, jwt.issue_pair(user_id=user_id, role=role).access_token
+    return user_id, jwt.issue_pair(user_id=user_id, role=role, linked_user_ids=[]).access_token
 
 
 async def _register(

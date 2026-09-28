@@ -48,7 +48,7 @@ def _token_for(role: str, db_engine: Engine, *, seed_user: bool = True) -> str:
         access_expire_minutes=settings.jwt_access_expire_minutes,
         refresh_expire_days=settings.jwt_refresh_expire_days,
     )
-    return jwt.issue_pair(user_id=user_id, role=role).access_token
+    return jwt.issue_pair(user_id=user_id, role=role, linked_user_ids=[]).access_token
 
 
 async def _register_realtor(http_client: AsyncClient, sms: InMemoryTwilioClient) -> str:

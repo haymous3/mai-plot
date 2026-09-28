@@ -229,6 +229,25 @@ async def test_cannot_offer_on_own_listing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cannot_offer_on_own_listing_from_a_linked_buyer_account() -> None:
+    """SCRUM-236: a person's buyer and seller accounts are different rows. The
+    token names the seller row as the same person, and that must be enough."""
+    seller_row = uuid4()
+    buyer = replace(_BUYER, linked_user_ids=frozenset({seller_row}))
+    svc, _, _, _ = _service(_active_listing(seller_id=seller_row))
+    with pytest.raises(CannotOfferOwnListing):
+        await svc.create_offer(buyer=buyer, listing_id=_LISTING, amount_kobo=1)
+
+
+@pytest.mark.asyncio
+async def test_linked_accounts_do_not_block_offers_on_other_peoples_listings() -> None:
+    buyer = replace(_BUYER, linked_user_ids=frozenset({uuid4()}))
+    svc, _, _, _ = _service(_active_listing())
+    offer = await svc.create_offer(buyer=buyer, listing_id=_LISTING, amount_kobo=4_000_000_000)
+    assert offer.status == "pending"
+
+
+@pytest.mark.asyncio
 async def test_offer_on_under_offer_listing_is_conflict() -> None:
     # No transaction lock on record → genuinely locked, refused.
     svc, _, _, _ = _service(_active_listing(status="under_offer"))

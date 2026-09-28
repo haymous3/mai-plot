@@ -25,8 +25,18 @@ class _StubCredentials:
         self.upserts.append((user_id, password_hash))
 
 
+class _StubUsers:
+    """One account, its own login owner (SCRUM-236)."""
+
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[object]:
+        return []
+
+
 def _service(creds: _StubCredentials) -> SetPasswordService:
-    return SetPasswordService(credentials=creds)  # type: ignore[arg-type]
+    return SetPasswordService(users=_StubUsers(), credentials=creds)  # type: ignore[arg-type]
 
 
 async def test_sets_bcrypt_hash_for_strong_password() -> None:

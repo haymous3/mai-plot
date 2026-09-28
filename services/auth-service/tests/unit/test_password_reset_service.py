@@ -40,6 +40,20 @@ class _StubUserRepo:
     async def get_active_by_id(self, user_id: UUID) -> UserCore | None:
         return self._user
 
+    # SCRUM-236 shared login: this stub models a person with ONE account, so
+    # the login is its own owner, nobody shares it, and there is no one else.
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return []
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return False
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return []
+
 
 class _StubTokenRepo:
     def __init__(self, active: ActiveEmailToken | None = None) -> None:

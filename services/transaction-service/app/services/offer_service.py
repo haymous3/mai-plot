@@ -100,7 +100,11 @@ class OfferService:
         listing = await self._listings.get_for_offer(listing_id)
         if listing is None:
             raise ListingNotFound()
-        if listing.seller_id == buyer.user_id:
+        # Same PERSON, not just same row (SCRUM-236): a buyer account and a
+        # seller account on one sign-in are different user_ids, so comparing
+        # ids alone let someone bid on their own listing and, through the deal,
+        # move escrow money between their own two accounts.
+        if listing.seller_id == buyer.user_id or listing.seller_id in buyer.linked_user_ids:
             raise CannotOfferOwnListing()
         now = datetime.now(UTC)
         # A listing under_offer may have a 72h lock that has already lapsed with

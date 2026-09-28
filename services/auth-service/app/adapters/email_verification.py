@@ -18,7 +18,8 @@ flip `email_provider` in settings, no call-site changes.
 
 Each email is a fixed template, so this adapter owns every subject/body —
 call sites pass only the recipient and the link. Two templates live here:
-account verification (SCRUM-152) and password reset (SCRUM-191). They are
+account verification (SCRUM-152), password reset (SCRUM-191) and the
+"a new account was added to your sign-in" notice (SCRUM-236). They are
 separate methods rather than one `send(subject, body)` so a call site cannot
 send the wrong copy, and so the in-memory fake can assert which KIND of mail
 a flow sent.
@@ -105,6 +106,42 @@ class PasswordResetEmail:
     reset_url: str
 
 
+_ROLE_LABELS = {"buyer": "buyer", "seller": "seller"}
+
+
+def _render_role_added_bodies(role: str) -> tuple[str, str]:
+    """Return (html_body, text_body) for the role-added notice (SCRUM-236).
+
+    Sent AFTER the fact, to the address on the login — the person was signed
+    in, so this is a receipt, not a confirmation. It has to read clearly to
+    someone who did NOT do it, because that is the one reader it protects.
+    No link: a notice that invites a click trains people to click notices.
+    """
+    label = _ROLE_LABELS.get(role, role)
+    text_body = (
+        f"Your Maihomme sign-in was just used to create a {label} account.\n\n"
+        f"You can now switch between your accounts from the account menu, using "
+        f"the same email and password.\n\n"
+        "If this wasn't you, change your password straight away and contact "
+        "Maihomme support."
+    )
+    html_body = (
+        f"<p>Your Maihomme sign-in was just used to create a <strong>{label}</strong> "
+        "account.</p>"
+        "<p>You can now switch between your accounts from the account menu, using "
+        "the same email and password.</p>"
+        "<p>If this wasn't you, change your password straight away and contact "
+        "Maihomme support.</p>"
+    )
+    return html_body, text_body
+
+
+@dataclass(frozen=True)
+class RoleAddedEmail:
+    to: str
+    role: str
+
+
 class EmailDeliveryError(RuntimeError):
     """Raised when the provider rejects or fails to accept the message."""
 
@@ -120,6 +157,9 @@ class EmailVerificationSender(Protocol):
     ) -> None:  # pragma: no cover - protocol
         ...
 
+    async def send_role_added(self, email: RoleAddedEmail) -> None:  # pragma: no cover - protocol
+        ...
+
 
 @dataclass
 class InMemoryEmailClient:
@@ -131,6 +171,7 @@ class InMemoryEmailClient:
 
     sent: list[VerificationEmail] = field(default_factory=list)
     sent_password_resets: list[PasswordResetEmail] = field(default_factory=list)
+    sent_role_added: list[RoleAddedEmail] = field(default_factory=list)
     fail_next: bool = False
 
     async def send_verification(self, email: VerificationEmail) -> None:
@@ -146,6 +187,12 @@ class InMemoryEmailClient:
             self.fail_next = False
             raise EmailDeliveryError("simulated email delivery failure")
         self.sent_password_resets.append(email)
+
+    async def send_role_added(self, email: RoleAddedEmail) -> None:
+        if self.fail_next:
+            self.fail_next = False
+            raise EmailDeliveryError("simulated email delivery failure")
+        self.sent_role_added.append(email)
 
 
 class ResendClient:
@@ -179,6 +226,17 @@ class ResendClient:
             html=html_body,
             text=text_body,
             kind="password_reset",
+        )
+
+    async def send_role_added(self, email: RoleAddedEmail) -> None:
+        html_body, text_body = _render_role_added_bodies(email.role)
+        label = _ROLE_LABELS.get(email.role, email.role)
+        await self._send(
+            to=email.to,
+            subject=f"A {label} account was added to your Maihomme sign-in",
+            html=html_body,
+            text=text_body,
+            kind="role_added",
         )
 
     async def _send(self, *, to: str, subject: str, html: str, text: str, kind: str) -> None:

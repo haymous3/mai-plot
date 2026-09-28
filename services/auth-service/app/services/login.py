@@ -36,6 +36,7 @@ from app.repositories.user_repo import UserCore, UserRepository
 from app.services.jwt_service import JwtService, TokenPair
 from app.services.password import verify_password
 from app.services.registration_number import looks_like_email, normalize_registration_number
+from app.services.shared_login import DEFAULT_LANDING_ROLE, SWITCHABLE_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,9 @@ class LoginService:
         self._registration_numbers = registration_numbers
         self._jwt = jwt
 
-    async def login(self, *, identifier: str, password: str) -> LoginResult:
+    async def login(
+        self, *, identifier: str, password: str, preferred_role: str | None = None
+    ) -> LoginResult:
         user = await self._resolve(identifier)
         if user is None:
             # Run a dummy verify to keep timing similar whether or not the
@@ -95,7 +98,17 @@ class LoginService:
         if not verify_password(password, stored_hash):
             raise InvalidCredentials()
 
-        tokens = self._jwt.issue_pair(user_id=user.id, role=user.role)
+        # The password proved the LOGIN; now pick which of the person's
+        # accounts it opens (SCRUM-236). Buyer unless the sign-in page asked for
+        # the seller account, by product decision: a person with both lands on
+        # buying and switches to selling in-app.
+        user = await self._landing_account(user, preferred_role)
+
+        tokens = self._jwt.issue_pair(
+            user_id=user.id,
+            role=user.role,
+            linked_user_ids=await self._users.same_person_user_ids(user.id),
+        )
         await self._refresh_tokens.create(
             user_id=user.id,
             token_hash=tokens.refresh_token_hash,
@@ -109,6 +122,23 @@ class LoginService:
             verified_status=user.verified_status,
             tokens=tokens,
         )
+
+    async def _landing_account(self, owner: UserCore, preferred_role: str | None) -> UserCore:
+        """The account a successful sign-in lands on: the one in
+        `preferred_role` when the login has it, else the buyer account when it
+        has one, else the owner itself.
+
+        Only buyer and seller logins are ever shared — SharedLoginService
+        refuses the rest — so a realtor or admin owner skips the lookup.
+        """
+        if owner.role not in SWITCHABLE_ROLES:
+            return owner
+        group = await self._users.login_group(owner.id)
+        for wanted in (preferred_role, DEFAULT_LANDING_ROLE):
+            for member in group:
+                if member.role == wanted:
+                    return member
+        return owner
 
     async def _resolve(self, identifier: str) -> UserCore | None:
         """The account this identifier signs in, or None if it signs in none.

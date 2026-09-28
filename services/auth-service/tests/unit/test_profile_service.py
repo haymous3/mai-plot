@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from app.repositories.user_repo import UserCore
 from app.services.profile import EmailAlreadyInUse, InvalidFullName, ProfileService
 
 pytestmark = pytest.mark.asyncio
@@ -45,6 +46,20 @@ class _StubUsers:
                 "set_address": set_address,
             }
         )
+
+    # SCRUM-236 shared login: this stub models a person with ONE account, so
+    # the login is its own owner, nobody shares it, and there is no one else.
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return []
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return False
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return []
 
 
 def _service(users: _StubUsers) -> ProfileService:
@@ -167,3 +182,32 @@ async def test_blank_address_becomes_none_so_it_clears() -> None:
 
     assert users.updates[0]["address"] is None
     assert users.updates[0]["set_address"] is True
+
+
+# --- SCRUM-236: one person, one profile --------------------------------------
+
+
+class _SharedLoginUsers(_StubUsers):
+    def __init__(self, owner: UUID, members: list[UUID]) -> None:
+        super().__init__()
+        self._owner = owner
+        self._members = members
+
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return self._owner
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return [UserCore(id=m, role="buyer", verified_status="id_verified") for m in self._members]
+
+
+async def test_an_update_from_either_account_is_written_to_both() -> None:
+    owner, seller = uuid4(), uuid4()
+    users = _SharedLoginUsers(owner, [owner, seller])
+
+    await _service(users).update(
+        user_id=seller, full_name=None, first_name="Ada", last_name="Obi", email="new@mai.ng"
+    )
+
+    assert sorted(u["user_id"] for u in users.updates) == sorted([owner, seller])  # type: ignore[type-var]
+    assert {u["email"] for u in users.updates} == {"new@mai.ng"}
+    assert {u["full_name"] for u in users.updates} == {"Ada Obi"}

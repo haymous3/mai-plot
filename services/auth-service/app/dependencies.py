@@ -70,6 +70,7 @@ from app.services.resend_verification import ResendVerificationService
 from app.services.seller_authority import SellerAuthorityService
 from app.services.seller_poa_status import SellerPoaStatusService
 from app.services.set_password import SetPasswordService
+from app.services.shared_login import SharedLoginService
 from app.services.token_refresh import TokenRefreshService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -378,10 +379,27 @@ def get_login_service(
     )
 
 
+def get_shared_login_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+    email_sender: EmailSenderDep,
+) -> SharedLoginService:
+    return SharedLoginService(
+        users=users,
+        refresh_tokens=refresh_tokens,
+        audit=audit,
+        jwt=jwt_service,
+        email_sender=email_sender,
+    )
+
+
 def get_set_password_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
 ) -> SetPasswordService:
-    return SetPasswordService(credentials=credentials)
+    return SetPasswordService(users=users, credentials=credentials)
 
 
 def get_account_service(
@@ -397,10 +415,13 @@ def get_account_service(
 
 
 def get_change_password_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
     credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
     refresh_tokens: Annotated[RefreshTokenRepository, Depends(_refresh_token_repo)],
 ) -> ChangePasswordService:
-    return ChangePasswordService(credentials=credentials, refresh_tokens=refresh_tokens)
+    return ChangePasswordService(
+        users=users, credentials=credentials, refresh_tokens=refresh_tokens
+    )
 
 
 def get_avatar_service(

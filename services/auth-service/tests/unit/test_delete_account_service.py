@@ -14,9 +14,11 @@ import pytest
 
 from app.adapters.deals import DealCheckUnavailable, InMemoryDealChecker
 from app.adapters.document_storage import DocumentStorageError, InMemoryDocumentStorage
+from app.repositories.user_repo import UserCore
 from app.services.delete_account import (
     AccountAlreadyGone,
     AccountHasActiveDeals,
+    AccountHoldsSharedLogin,
     DeleteAccountService,
     DeleteCheckUnavailable,
 )
@@ -44,6 +46,20 @@ class _StubUsers:
     async def soft_delete(self, user_id: UUID) -> tuple[bool, str | None]:
         self.calls.append(user_id)
         return self._result
+
+    # SCRUM-236 shared login: this stub models a person with ONE account, so
+    # the login is its own owner, nobody shares it, and there is no one else.
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return []
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return False
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return []
 
 
 class _StubRefreshTokens:
@@ -169,3 +185,19 @@ async def test_deal_check_unavailable_is_not_swallowed_as_a_generic_error() -> N
         await service.delete(user_id=uuid4(), bearer_token=_TOKEN)
 
     assert isinstance(exc.value.__cause__, DealCheckUnavailable)
+
+
+class _OwnerOfASharedLogin(_StubUsers):
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return True
+
+
+async def test_the_owner_of_a_shared_login_cannot_be_deleted_first() -> None:
+    """SCRUM-236: the other account signs in with this one's password."""
+    users = _OwnerOfASharedLogin(linked_children=True)
+    service, _, refresh, _ = _service(users=users)
+
+    with pytest.raises(AccountHoldsSharedLogin):
+        await service.delete(user_id=uuid4(), bearer_token="t")
+    assert users.calls == []
+    assert refresh.revoked == []

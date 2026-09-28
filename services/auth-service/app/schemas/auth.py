@@ -26,6 +26,8 @@ Role = Literal["seller", "buyer", "realtor"]
 # login response from 500-ing on an admin account (SCRUM-151).
 AccountRole = Literal["seller", "buyer", "realtor", "bank_partner", "admin", "legal_team"]
 SellerAuthorityType = Literal["owner", "power_of_attorney"]
+# The roles that share one sign-in and can be switched between (SCRUM-236).
+SwitchableRole = Literal["buyer", "seller"]
 OtpPurpose = Literal["registration", "login"]
 # How the account proves it owns an identifier at registration (SCRUM-180).
 # Both are implemented; the UI currently offers only email because phone OTP
@@ -276,6 +278,11 @@ class LoginRequest(BaseModel):
     identifier: str | None = Field(default=None, min_length=3, max_length=254)
     email: str | None = Field(default=None, min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=128)
+    # SCRUM-236: which of the person's accounts to open when their sign-in has
+    # both — the sign-in page's Buyer / Seller choice. A preference, not a
+    # claim: a role the login does not hold is ignored and the default (buyer)
+    # applies, so this can never open an account the password does not.
+    role: SwitchableRole | None = None
 
     @model_validator(mode="after")
     def _require_identifier(self) -> LoginRequest:
@@ -340,6 +347,11 @@ class AccountResponse(BaseModel):
     employment_status: str | None
     preferred_location: str | None
     budget_kobo: int | None
+    # SCRUM-236: the roles this login can switch between, the current one
+    # included — ["buyer"], ["buyer", "seller"], ... Empty for realtors and
+    # staff. The switcher offers "Create a seller account" when the other role
+    # is absent AND nin_verified is true.
+    available_roles: list[SwitchableRole] = []
 
 
 class AvatarResponse(BaseModel):
@@ -471,6 +483,20 @@ class TokenRefreshResponse(BaseModel):
     refresh_token: str
     token_type: Literal["Bearer"] = "Bearer"
     access_expires_in: int
+
+
+class RoleSessionRequest(BaseModel):
+    """POST /auth/switch-role and POST /auth/add-role (SCRUM-236).
+
+    `refresh_token` is the session being LEFT. Optional, but a client should
+    always send it: it is revoked so a switch does not leave one live refresh
+    token behind per account visited.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: SwitchableRole
+    refresh_token: str | None = Field(default=None, min_length=1)
 
 
 class LogoutRequest(BaseModel):

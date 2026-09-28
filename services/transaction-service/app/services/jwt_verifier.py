@@ -32,6 +32,10 @@ class TokenInvalid(JwtError):
 class TokenClaims:
     user_id: UUID
     role: str | None
+    # The caller's OTHER accounts — same person, different row (SCRUM-236):
+    # their buyer/seller account on the same sign-in and any account sharing
+    # their NIN. Empty for a token minted before the claim existed.
+    linked_user_ids: frozenset[UUID] = frozenset()
 
 
 class JwtVerifier:
@@ -61,4 +65,25 @@ class JwtVerifier:
         except (KeyError, ValueError) as exc:
             raise TokenInvalid() from exc
 
-        return TokenClaims(user_id=user_id, role=payload.get("role"))
+        return TokenClaims(
+            user_id=user_id,
+            role=payload.get("role"),
+            linked_user_ids=_parse_linked(payload.get("linked_user_ids")),
+        )
+
+
+def _parse_linked(raw: object) -> frozenset[UUID]:
+    """The linked-account claim, or TokenInvalid if it is present but garbled.
+
+    Rejecting rather than dropping a bad value matters: this claim feeds a
+    guard, and "unparseable, so treat as empty" would quietly switch it off.
+    Absence is fine — tokens from before SCRUM-236 do not carry it.
+    """
+    if raw is None:
+        return frozenset()
+    if not isinstance(raw, list):
+        raise TokenInvalid()
+    try:
+        return frozenset(UUID(str(item)) for item in raw)
+    except ValueError as exc:
+        raise TokenInvalid() from exc

@@ -28,8 +28,10 @@ from uuid import UUID
 
 from app.repositories.auth_credentials_repo import AuthCredentialsRepository
 from app.repositories.refresh_token_repo import RefreshTokenRepository
+from app.repositories.user_repo import UserRepository
 from app.services.password import hash_password, is_strong, verify_password
 from app.services.set_password import WeakPassword
+from app.services.shared_login import login_scope
 
 
 class NoPasswordSet(RuntimeError):
@@ -54,14 +56,19 @@ class ChangePasswordService:
     def __init__(
         self,
         *,
+        users: UserRepository,
         credentials: AuthCredentialsRepository,
         refresh_tokens: RefreshTokenRepository,
     ) -> None:
+        self._users = users
         self._credentials = credentials
         self._refresh_tokens = refresh_tokens
 
     async def change(self, *, user_id: UUID, current_password: str, new_password: str) -> None:
-        stored = await self._credentials.get_password_hash(user_id)
+        # The password is the LOGIN's (SCRUM-236): changing it from the seller
+        # account changes the one the buyer account signs in with too.
+        owner_id, member_ids = await login_scope(self._users, user_id)
+        stored = await self._credentials.get_password_hash(owner_id)
         if stored is None:
             raise NoPasswordSet
         if not verify_password(current_password, stored):
@@ -73,5 +80,6 @@ class ChangePasswordService:
         if not is_strong(new_password):
             raise WeakPassword
 
-        await self._credentials.upsert(user_id=user_id, password_hash=hash_password(new_password))
-        await self._refresh_tokens.revoke_all_for_user(user_id)
+        await self._credentials.upsert(user_id=owner_id, password_hash=hash_password(new_password))
+        for member_id in member_ids:
+            await self._refresh_tokens.revoke_all_for_user(member_id)

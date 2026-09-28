@@ -32,6 +32,20 @@ class _StubUserRepo:
             return self._user
         return None
 
+    # SCRUM-236 shared login: this stub models a person with ONE account, so
+    # the login is its own owner, nobody shares it, and there is no one else.
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return []
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return False
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return []
+
 
 class _StubCredsRepo:
     def __init__(self, password_hash: str | None) -> None:
@@ -215,3 +229,106 @@ async def test_malformed_identifier_is_invalid_not_an_error() -> None:
     service = _service(realtor, hash_password("SecurePass123!"), refresh_repo)
     with pytest.raises(InvalidCredentials):
         await service.login(identifier="not-a-number", password="SecurePass123!")
+
+
+# --- SCRUM-236: one sign-in, buyer first -------------------------------------
+
+
+class _SharedLoginUsers(_StubUserRepo):
+    """The email resolves to `owner`; `group` is everything its login opens."""
+
+    def __init__(self, owner: UserCore, group: list[UserCore]) -> None:
+        super().__init__(owner)
+        self._group = group
+        self.group_reads = 0
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        self.group_reads += 1
+        return self._group
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return [m.id for m in self._group if m.id != user_id]
+
+
+def _shared_service(users: _SharedLoginUsers, refresh_repo: _StubRefreshRepo) -> LoginService:
+    return LoginService(
+        users=users,  # type: ignore[arg-type]
+        credentials=_StubCredsRepo(hash_password("SecurePass123!")),  # type: ignore[arg-type]
+        refresh_tokens=refresh_repo,  # type: ignore[arg-type]
+        registration_numbers=_StubRegistrationRepo(),  # type: ignore[arg-type]
+        jwt=_jwt(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_seller_owned_login_with_a_buyer_account_lands_on_the_buyer() -> None:
+    seller = UserCore(id=uuid4(), role="seller", verified_status="id_verified")
+    buyer = UserCore(id=uuid4(), role="buyer", verified_status="id_verified")
+    refresh_repo = _StubRefreshRepo()
+    service = _shared_service(_SharedLoginUsers(seller, [seller, buyer]), refresh_repo)
+
+    result = await service.login(identifier="ada@example.com", password="SecurePass123!")
+
+    assert (result.user_id, result.role) == (buyer.id, "buyer")
+    # The session is the buyer account's, not the owner's that held the password.
+    assert refresh_repo.created[0]["user_id"] == buyer.id
+    claims = _jwt().decode(result.tokens.access_token, expected_type="access")
+    assert claims.user_id == buyer.id
+
+
+@pytest.mark.asyncio
+async def test_a_seller_only_login_lands_on_the_seller() -> None:
+    seller = UserCore(id=uuid4(), role="seller", verified_status="id_verified")
+    service = _shared_service(_SharedLoginUsers(seller, [seller]), _StubRefreshRepo())
+
+    result = await service.login(identifier="ada@example.com", password="SecurePass123!")
+
+    assert result.user_id == seller.id
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_password_never_reaches_the_landing_choice() -> None:
+    seller = UserCore(id=uuid4(), role="seller", verified_status="id_verified")
+    users = _SharedLoginUsers(seller, [seller])
+    service = _shared_service(users, _StubRefreshRepo())
+
+    with pytest.raises(InvalidCredentials):
+        await service.login(identifier="ada@example.com", password="WrongPass123!")
+    assert users.group_reads == 0
+
+
+@pytest.mark.asyncio
+async def test_a_realtor_login_does_not_look_for_other_roles() -> None:
+    realtor = UserCore(id=uuid4(), role="realtor", verified_status="id_verified")
+    users = _SharedLoginUsers(realtor, [realtor])
+    service = _shared_service(users, _StubRefreshRepo())
+
+    result = await service.login(identifier="agent@example.com", password="SecurePass123!")
+
+    assert result.role == "realtor"
+    assert users.group_reads == 0
+
+
+@pytest.mark.asyncio
+async def test_the_sign_in_page_can_ask_for_the_seller_account() -> None:
+    seller = UserCore(id=uuid4(), role="seller", verified_status="id_verified")
+    buyer = UserCore(id=uuid4(), role="buyer", verified_status="id_verified")
+    service = _shared_service(_SharedLoginUsers(buyer, [buyer, seller]), _StubRefreshRepo())
+
+    result = await service.login(
+        identifier="ada@example.com", password="SecurePass123!", preferred_role="seller"
+    )
+
+    assert result.user_id == seller.id
+
+
+@pytest.mark.asyncio
+async def test_asking_for_a_role_the_login_lacks_falls_back_to_the_buyer() -> None:
+    buyer = UserCore(id=uuid4(), role="buyer", verified_status="id_verified")
+    service = _shared_service(_SharedLoginUsers(buyer, [buyer]), _StubRefreshRepo())
+
+    result = await service.login(
+        identifier="ada@example.com", password="SecurePass123!", preferred_role="seller"
+    )
+
+    assert result.user_id == buyer.id
