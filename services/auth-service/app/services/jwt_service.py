@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -66,7 +67,15 @@ class JwtService:
         self._access_expire_minutes = access_expire_minutes
         self._refresh_expire_days = refresh_expire_days
 
-    def issue_pair(self, *, user_id: UUID, role: str) -> TokenPair:
+    def issue_pair(self, *, user_id: UUID, role: str, linked_user_ids: Sequence[UUID]) -> TokenPair:
+        """Mint an access + refresh pair.
+
+        `linked_user_ids` is every OTHER account of the same person — their
+        buyer/seller accounts on one login, and accounts sharing their NIN
+        (SCRUM-236). It is REQUIRED with no default on purpose: a caller that
+        forgot it would mint tokens that silently disable the own-listing
+        check in transaction-service. Pass an empty list for "none".
+        """
         now = datetime.now(UTC)
         access_exp = now + timedelta(minutes=self._access_expire_minutes)
         refresh_exp = now + timedelta(days=self._refresh_expire_days)
@@ -78,6 +87,10 @@ class JwtService:
             "iat": int(now.timestamp()),
             "exp": int(access_exp.timestamp()),
             "type": "access",
+            # Sorted so the same set always encodes the same way. Access token
+            # only — the refresh path re-reads the set from the DB on rotation,
+            # so it is never older than one access-token lifetime.
+            "linked_user_ids": sorted(str(i) for i in linked_user_ids),
         }
         access_token = jwt.encode(access_payload, self._secret, algorithm=ALGORITHM)
 

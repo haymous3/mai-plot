@@ -27,7 +27,7 @@ def service() -> JwtService:
 
 def test_access_token_payload_matches_kong_expectations(service: JwtService) -> None:
     user_id = uuid4()
-    tokens = service.issue_pair(user_id=user_id, role="buyer")
+    tokens = service.issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
 
     payload = jwt.decode(tokens.access_token, SECRET, algorithms=["HS256"])
     assert payload["iss"] == ISSUER
@@ -39,7 +39,7 @@ def test_access_token_payload_matches_kong_expectations(service: JwtService) -> 
 
 def test_refresh_token_payload_and_hash(service: JwtService) -> None:
     user_id = uuid4()
-    tokens = service.issue_pair(user_id=user_id, role="seller")
+    tokens = service.issue_pair(user_id=user_id, role="seller", linked_user_ids=[])
 
     payload = jwt.decode(tokens.refresh_token, SECRET, algorithms=["HS256"])
     assert payload["type"] == "refresh"
@@ -55,18 +55,18 @@ def test_refresh_token_payload_and_hash(service: JwtService) -> None:
 
 
 def test_access_expires_in_matches_setting(service: JwtService) -> None:
-    tokens = service.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     assert tokens.access_expires_in == 15 * 60
 
 
 def test_refresh_expires_at_in_future(service: JwtService) -> None:
-    tokens = service.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     assert tokens.refresh_expires_at > datetime.now(UTC)
 
 
 def test_decode_access_roundtrip(service: JwtService) -> None:
     user_id = uuid4()
-    tokens = service.issue_pair(user_id=user_id, role="realtor")
+    tokens = service.issue_pair(user_id=user_id, role="realtor", linked_user_ids=[])
     claims = service.decode(tokens.access_token, expected_type="access")
     assert claims.user_id == user_id
     assert claims.role == "realtor"
@@ -75,14 +75,14 @@ def test_decode_access_roundtrip(service: JwtService) -> None:
 
 def test_decode_refresh_roundtrip(service: JwtService) -> None:
     user_id = uuid4()
-    tokens = service.issue_pair(user_id=user_id, role="seller")
+    tokens = service.issue_pair(user_id=user_id, role="seller", linked_user_ids=[])
     claims = service.decode(tokens.refresh_token, expected_type="refresh")
     assert claims.user_id == user_id
     assert claims.jti  # refresh tokens carry a jti
 
 
 def test_decode_rejects_wrong_type(service: JwtService) -> None:
-    tokens = service.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     # An access token presented where a refresh token is expected.
     with pytest.raises(TokenInvalid):
         service.decode(tokens.access_token, expected_type="refresh")
@@ -95,7 +95,7 @@ def test_decode_rejects_bad_signature(service: JwtService) -> None:
         access_expire_minutes=15,
         refresh_expire_days=7,
     )
-    tokens = other.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = other.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     with pytest.raises(TokenInvalid):
         service.decode(tokens.access_token, expected_type="access")
 
@@ -107,7 +107,7 @@ def test_decode_rejects_wrong_issuer(service: JwtService) -> None:
         access_expire_minutes=15,
         refresh_expire_days=7,
     )
-    tokens = foreign.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = foreign.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     with pytest.raises(TokenInvalid):
         service.decode(tokens.access_token, expected_type="access")
 
@@ -128,5 +128,25 @@ def test_decode_raises_token_expired(service: JwtService) -> None:
 
 
 def test_hash_token_matches_issued_hash(service: JwtService) -> None:
-    tokens = service.issue_pair(user_id=uuid4(), role="buyer")
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
     assert service.hash_token(tokens.refresh_token) == tokens.refresh_token_hash
+
+
+def test_access_token_carries_the_same_persons_other_accounts_sorted(service: JwtService) -> None:
+    """SCRUM-236: transaction-service reads this to refuse an offer on your own
+    listing from your buyer account. Refresh tokens do not carry it."""
+    a, b = uuid4(), uuid4()
+
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[b, a])
+
+    access = jwt.decode(tokens.access_token, options={"verify_signature": False})
+    refresh = jwt.decode(tokens.refresh_token, options={"verify_signature": False})
+    assert access["linked_user_ids"] == sorted([str(a), str(b)])
+    assert "linked_user_ids" not in refresh
+
+
+def test_an_account_with_no_one_else_carries_an_empty_list(service: JwtService) -> None:
+    tokens = service.issue_pair(user_id=uuid4(), role="buyer", linked_user_ids=[])
+
+    access = jwt.decode(tokens.access_token, options={"verify_signature": False})
+    assert access["linked_user_ids"] == []

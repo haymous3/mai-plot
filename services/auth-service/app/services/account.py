@@ -24,6 +24,7 @@ from uuid import UUID
 from app.repositories.buyer_profile_repo import BuyerProfileRepository
 from app.repositories.realtor_registration_repo import RealtorRegistrationRepository
 from app.repositories.user_repo import UserRepository
+from app.services.shared_login import SWITCHABLE_ROLES
 
 
 class AccountNotFound(RuntimeError):
@@ -63,6 +64,10 @@ class Account:
     employment_status: str | None
     preferred_location: str | None
     budget_kobo: int | None
+    # The buyer/seller roles this person's login can switch between, this
+    # account's own role included (SCRUM-236). Empty for realtors and staff,
+    # who do not switch. Sorted, so the client need not.
+    available_roles: tuple[str, ...] = ()
 
 
 class AccountService:
@@ -99,6 +104,19 @@ class AccountService:
         if account.role == "realtor":
             registration_number = await self._registration_numbers.get_for_user(user_id)
 
+        available_roles: tuple[str, ...] = ()
+        if account.role in SWITCHABLE_ROLES:
+            owner_id = await self._users.login_owner_id(user_id) or user_id
+            available_roles = tuple(
+                sorted(
+                    {
+                        m.role
+                        for m in await self._users.login_group(owner_id)
+                        if m.role in SWITCHABLE_ROLES
+                    }
+                )
+            )
+
         return Account(
             id=account.id,
             role=account.role,
@@ -119,4 +137,5 @@ class AccountService:
             employment_status=employment_status,
             preferred_location=preferred_location,
             budget_kobo=budget_kobo,
+            available_roles=available_roles,
         )

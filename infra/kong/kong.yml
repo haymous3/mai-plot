@@ -167,6 +167,11 @@ services:
           - /auth/change-password
           - /auth/avatar
           - /auth/account
+          # SCRUM-236 — one sign-in for a person's buyer and seller accounts.
+          # Both are JWT-gated; listed here up front rather than after the
+          # 404, which is how every entry above it was found.
+          - /auth/switch-role
+          - /auth/add-role
         strip_path: false
         plugins:
           - name: rate-limiting

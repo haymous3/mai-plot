@@ -38,6 +38,7 @@ from app.services.email_token import build_verify_url, generate_token, hash_toke
 from app.services.password import hash_password, is_strong
 from app.services.rate_limit import OtpRateLimiter
 from app.services.set_password import WeakPassword
+from app.services.shared_login import login_scope
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,10 @@ class ResetPasswordService:
         await self._credentials.upsert(user_id=user.id, password_hash=hash_password(new_password))
         # Any session that predates the reset may belong to whoever the user is
         # locking out. Same policy as /auth/change-password.
-        await self._refresh_tokens.revoke_all_for_user(user.id)
+        # Every account the login opens (SCRUM-236), not just the owner: the
+        # seller session is as much the attacker's as the buyer one.
+        _, member_ids = await login_scope(self._users, user.id)
+        for member_id in member_ids:
+            await self._refresh_tokens.revoke_all_for_user(member_id)
 
         logger.info("password_reset.completed", extra={"user_id": str(user.id)})

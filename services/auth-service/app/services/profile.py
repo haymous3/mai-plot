@@ -14,6 +14,7 @@ from uuid import UUID
 
 from app.repositories.user_repo import UserRepository
 from app.services.nin import join_name
+from app.services.shared_login import login_scope
 
 
 class InvalidFullName(RuntimeError):
@@ -75,14 +76,45 @@ class ProfileService:
         # "not said" has to stay distinguishable from "said nothing".
         normalised_location = location.strip() if location and location.strip() else None
         normalised_address = address.strip() if address and address.strip() else None
+        # One person, one profile (SCRUM-236): the buyer and seller accounts
+        # on a login carry the same name, email, location and address. Written
+        # to all of them so neither can drift — the email above all, since a
+        # sharer's copy is where notifications for that account are sent.
+        _, member_ids = await login_scope(self._users, user_id)
+        for member_id in member_ids:
+            await self._update_one(
+                member_id,
+                name=name,
+                email=normalised_email,
+                first=first,
+                last=last,
+                location=normalised_location,
+                set_location=set_location,
+                address=normalised_address,
+                set_address=set_address,
+            )
+
+    async def _update_one(
+        self,
+        user_id: UUID,
+        *,
+        name: str | None,
+        email: str | None,
+        first: str | None,
+        last: str | None,
+        location: str | None,
+        set_location: bool,
+        address: str | None,
+        set_address: bool,
+    ) -> None:
         await self._users.update_profile(
             user_id,
             full_name=name,
-            email=normalised_email,
+            email=email,
             first_name=first,
             last_name=last,
-            location=normalised_location,
+            location=location,
             set_location=set_location,
-            address=normalised_address,
+            address=address,
             set_address=set_address,
         )

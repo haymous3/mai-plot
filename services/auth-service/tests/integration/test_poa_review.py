@@ -41,7 +41,7 @@ def _legal_team_token(db_engine: Engine) -> str:
         access_expire_minutes=settings.jwt_access_expire_minutes,
         refresh_expire_days=settings.jwt_refresh_expire_days,
     )
-    return jwt.issue_pair(user_id=user_id, role="legal_team").access_token
+    return jwt.issue_pair(user_id=user_id, role="legal_team", linked_user_ids=[]).access_token
 
 
 async def _seed_pending_poa_seller(

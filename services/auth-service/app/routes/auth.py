@@ -35,6 +35,7 @@ from app.dependencies import (
     get_seller_authority_service,
     get_seller_poa_status_service,
     get_set_password_service,
+    get_shared_login_service,
     get_token_refresh_service,
 )
 from app.schemas.auth import (
@@ -70,6 +71,7 @@ from app.schemas.auth import (
     RegisterResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    RoleSessionRequest,
     SellerAuthorityRequest,
     SellerAuthorityResponse,
     SellerPoaStatusResponse,
@@ -104,6 +106,7 @@ from app.services.change_password import (
 from app.services.delete_account import (
     AccountAlreadyGone,
     AccountHasActiveDeals,
+    AccountHoldsSharedLogin,
     AccountIsIdentityRoot,
     DeleteAccountService,
     DeleteCheckUnavailable,
@@ -157,6 +160,14 @@ from app.services.seller_authority import NotSeller, SellerAuthorityService
 from app.services.seller_poa_status import NotSeller as PoaNotSeller
 from app.services.seller_poa_status import SellerNotFound, SellerPoaStatusService
 from app.services.set_password import SetPasswordService, WeakPassword
+from app.services.shared_login import (
+    CallerAccountMissing,
+    NinVerificationRequired,
+    RoleNotHeld,
+    RoleNotSwitchable,
+    SessionResult,
+    SharedLoginService,
+)
 from app.services.token_refresh import (
     RefreshTokenExpired,
     RefreshTokenInvalid,
@@ -313,7 +324,9 @@ async def login(
     service: Annotated[LoginService, Depends(get_login_service)],
 ) -> LoginResponse | JSONResponse:
     try:
-        result = await service.login(identifier=body.login_identifier, password=body.password)
+        result = await service.login(
+            identifier=body.login_identifier, password=body.password, preferred_role=body.role
+        )
     except InvalidCredentials:
         # One generic message for every failure — unknown identifier, no
         # password, wrong password, and an approved realtor who used their email
@@ -541,6 +554,7 @@ async def get_me(
             "employment_status": account.employment_status,
             "preferred_location": account.preferred_location,
             "budget_kobo": account.budget_kobo,
+            "available_roles": list(account.available_roles),
         }
     )
 
@@ -730,6 +744,96 @@ async def token_refresh(
         refresh_token=result.tokens.refresh_token,
         access_expires_in=result.tokens.access_expires_in,
     )
+
+
+def _session_response(result: SessionResult) -> LoginResponse:
+    """Same body as /auth/login, so the client stores it the same way."""
+    return LoginResponse(
+        access_token=result.tokens.access_token,
+        refresh_token=result.tokens.refresh_token,
+        access_expires_in=result.tokens.access_expires_in,
+        user=UserPublic.model_validate(
+            {"id": result.user_id, "role": result.role, "verified_status": result.verified_status}
+        ),
+    )
+
+
+def _role_not_switchable() -> JSONResponse:
+    return _error(
+        status.HTTP_403_FORBIDDEN,
+        "ROLE_NOT_SWITCHABLE",
+        "Only buyer and seller accounts can switch between each other.",
+    )
+
+
+@router.post("/switch-role", response_model=LoginResponse)
+async def switch_role(
+    body: RoleSessionRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SharedLoginService, Depends(get_shared_login_service)],
+) -> LoginResponse | JSONResponse:
+    """Move the session to the caller's other account on the same sign-in —
+    buyer to seller or back (SCRUM-236). Answers with a fresh token pair for
+    that account; the refresh token in the body (the session being left) is
+    revoked."""
+    try:
+        result = await service.switch(
+            caller_id=current_user.user_id,
+            caller_role=current_user.role,
+            target_role=body.role,
+            refresh_token=body.refresh_token,
+        )
+    except RoleNotSwitchable:
+        return _role_not_switchable()
+    except RoleNotHeld:
+        return _error(
+            status.HTTP_404_NOT_FOUND,
+            "ROLE_NOT_HELD",
+            f"You don't have a {body.role} account yet.",
+        )
+    except CallerAccountMissing:
+        return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
+    return _session_response(result)
+
+
+@router.post("/add-role", status_code=status.HTTP_201_CREATED, response_model=LoginResponse)
+async def add_role(
+    body: RoleSessionRequest,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[SharedLoginService, Depends(get_shared_login_service)],
+) -> LoginResponse | JSONResponse:
+    """Create the caller's buyer or seller account on their existing sign-in
+    and move the session into it (SCRUM-236). No registration form: the
+    caller is signed in, which proves the account is theirs, and name, phone,
+    address and verified identity are copied from it. Requires a verified NIN.
+    An email receipt goes to the sign-in's address."""
+    try:
+        result = await service.add_role(
+            caller_id=current_user.user_id,
+            caller_role=current_user.role,
+            target_role=body.role,
+            refresh_token=body.refresh_token,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except RoleNotSwitchable:
+        return _role_not_switchable()
+    except RoleAlreadyHeld:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "ROLE_ALREADY_HELD",
+            f"You already have a {body.role} account. Switch to it instead.",
+        )
+    except NinVerificationRequired:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "NIN_VERIFICATION_REQUIRED",
+            "Verify your NIN before adding another account.",
+        )
+    except CallerAccountMissing:
+        return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
+    return _session_response(result)
 
 
 @router.post("/logout", response_model=LogoutResponse)
@@ -960,6 +1064,12 @@ async def delete_account(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "DELETE_UNAVAILABLE",
             "We could not confirm your account has no deals in progress. Please try again shortly.",
+        )
+    except AccountHoldsSharedLogin:
+        return _error(
+            status.HTTP_409_CONFLICT,
+            "ACCOUNT_HAS_OTHER_ROLES",
+            "Your other account signs in with this one. Switch to it and delete it first.",
         )
     except AccountIsIdentityRoot:
         return _error(

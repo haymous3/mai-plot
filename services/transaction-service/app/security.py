@@ -7,7 +7,7 @@ a 401 in the standard error envelope.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 
@@ -39,6 +39,9 @@ class AdminAccessError(RuntimeError):
 class CurrentUser:
     user_id: UUID
     role: str
+    # The same person's other accounts (SCRUM-236) — see TokenClaims. Used to
+    # stop a person offering on their own listing from their buyer account.
+    linked_user_ids: frozenset[UUID] = field(default_factory=frozenset)
 
 
 def parse_bearer(authorization: str | None) -> str:

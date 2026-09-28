@@ -32,6 +32,20 @@ class _StubUserRepo:
     async def get_active_by_id(self, user_id: UUID) -> UserCore | None:
         return self._user
 
+    # SCRUM-236 shared login: this stub models a person with ONE account, so
+    # the login is its own owner, nobody shares it, and there is no one else.
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        return []
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        return False
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        return []
+
 
 class _StubRefreshRepo:
     def __init__(self, stored: StoredRefreshToken | None) -> None:
@@ -72,7 +86,7 @@ def _stored(user_id: UUID, *, revoked: bool = False, expired: bool = False) -> S
 @pytest.mark.asyncio
 async def test_happy_rotation_revokes_old_and_creates_new() -> None:
     user_id = uuid4()
-    tokens = _jwt().issue_pair(user_id=user_id, role="buyer")
+    tokens = _jwt().issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
     stored = _stored(user_id)
     refresh_repo = _StubRefreshRepo(stored)
     user_repo = _StubUserRepo(UserCore(id=user_id, role="buyer", verified_status="phone_verified"))
@@ -100,7 +114,7 @@ async def test_garbage_token_is_invalid() -> None:
 @pytest.mark.asyncio
 async def test_unknown_hash_is_invalid() -> None:
     user_id = uuid4()
-    tokens = _jwt().issue_pair(user_id=user_id, role="buyer")
+    tokens = _jwt().issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
     # Valid signature, but the token isn't in the store.
     service = _service(_StubUserRepo(None), _StubRefreshRepo(None))
     with pytest.raises(RefreshTokenInvalid):
@@ -110,7 +124,7 @@ async def test_unknown_hash_is_invalid() -> None:
 @pytest.mark.asyncio
 async def test_revoked_token_raises_revoked() -> None:
     user_id = uuid4()
-    tokens = _jwt().issue_pair(user_id=user_id, role="buyer")
+    tokens = _jwt().issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
     refresh_repo = _StubRefreshRepo(_stored(user_id, revoked=True))
     service = _service(_StubUserRepo(None), refresh_repo)
     with pytest.raises(RefreshTokenRevoked):
@@ -121,7 +135,7 @@ async def test_revoked_token_raises_revoked() -> None:
 @pytest.mark.asyncio
 async def test_db_expired_token_raises_expired() -> None:
     user_id = uuid4()
-    tokens = _jwt().issue_pair(user_id=user_id, role="buyer")
+    tokens = _jwt().issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
     refresh_repo = _StubRefreshRepo(_stored(user_id, expired=True))
     service = _service(_StubUserRepo(None), refresh_repo)
     with pytest.raises(RefreshTokenExpired):
@@ -131,7 +145,7 @@ async def test_db_expired_token_raises_expired() -> None:
 @pytest.mark.asyncio
 async def test_inactive_user_is_invalid() -> None:
     user_id = uuid4()
-    tokens = _jwt().issue_pair(user_id=user_id, role="buyer")
+    tokens = _jwt().issue_pair(user_id=user_id, role="buyer", linked_user_ids=[])
     refresh_repo = _StubRefreshRepo(_stored(user_id))
     # User row gone / deactivated -> get_active_by_id returns None.
     service = _service(_StubUserRepo(None), refresh_repo)

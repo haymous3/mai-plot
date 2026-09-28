@@ -93,7 +93,11 @@ class TokenRefreshService:
 
         # 4. Rotate: burn the presented token, mint a fresh pair, persist it.
         await self._refresh_tokens.revoke(stored.id)
-        tokens = self._jwt.issue_pair(user_id=user.id, role=user.role)
+        tokens = self._jwt.issue_pair(
+            user_id=user.id,
+            role=user.role,
+            linked_user_ids=await self._users.same_person_user_ids(user.id),
+        )
         await self._refresh_tokens.create(
             user_id=user.id,
             token_hash=tokens.refresh_token_hash,

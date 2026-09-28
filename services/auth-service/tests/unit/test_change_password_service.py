@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from app.repositories.user_repo import UserCore
 from app.services.change_password import (
     ChangePasswordService,
     CurrentPasswordWrong,
@@ -50,12 +51,23 @@ class _StubRefreshTokens:
         self.revoked_for = user_id
 
 
+class _StubUsers:
+    """One account, its own login owner (SCRUM-236)."""
+
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return user_id
+
+    async def login_group(self, owner_id: UUID) -> list[object]:
+        return []
+
+
 def _service(
     stored: str | None,
 ) -> tuple[ChangePasswordService, _StubCredentials, _StubRefreshTokens]:
     creds = _StubCredentials(stored)
     tokens = _StubRefreshTokens()
     service = ChangePasswordService(
+        users=_StubUsers(),  # type: ignore[arg-type]
         credentials=creds,  # type: ignore[arg-type]
         refresh_tokens=tokens,  # type: ignore[arg-type]
     )
@@ -126,3 +138,57 @@ async def test_credential_check_runs_before_the_reuse_check() -> None:
     # credential failure, not leak that the guess matched.
     with pytest.raises(CurrentPasswordWrong):
         await service.change(user_id=uuid4(), current_password=_GUESS, new_password=_STRONG)
+
+
+# --- SCRUM-236: the password belongs to the login ----------------------------
+
+
+class _SharedUsers:
+    def __init__(self, owner: UUID, members: list[UUID]) -> None:
+        self._owner = owner
+        self._members = members
+
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        return self._owner
+
+    async def login_group(self, owner_id: UUID) -> list[object]:
+        return [UserCore(id=m, role="buyer", verified_status="id_verified") for m in self._members]
+
+
+class _KeyedCredentials:
+    """Credentials keyed by user id, so a write to the wrong row shows."""
+
+    def __init__(self, stored: dict[UUID, str]) -> None:
+        self.stored = dict(stored)
+
+    async def get_password_hash(self, user_id: UUID) -> str | None:
+        return self.stored.get(user_id)
+
+    async def upsert(self, *, user_id: UUID, password_hash: str) -> None:
+        self.stored[user_id] = password_hash
+
+
+class _RevokeLog:
+    def __init__(self) -> None:
+        self.revoked: list[UUID] = []
+
+    async def revoke_all_for_user(self, user_id: UUID) -> None:
+        self.revoked.append(user_id)
+
+
+async def test_changing_from_the_seller_account_changes_the_logins_password() -> None:
+    owner, seller = uuid4(), uuid4()
+    creds = _KeyedCredentials({owner: hash_password(_STRONG)})
+    revokes = _RevokeLog()
+    service = ChangePasswordService(
+        users=_SharedUsers(owner, [owner, seller]),  # type: ignore[arg-type]
+        credentials=creds,  # type: ignore[arg-type]
+        refresh_tokens=revokes,  # type: ignore[arg-type]
+    )
+
+    await service.change(user_id=seller, current_password=_STRONG, new_password=_ROTATED)
+
+    assert verify_password(_ROTATED, creds.stored[owner])
+    assert seller not in creds.stored
+    # Both accounts' sessions: the seller one is as stale as the buyer one.
+    assert sorted(revokes.revoked) == sorted([owner, seller])

@@ -268,7 +268,9 @@ async def get_current_user(
 
     if claims.role is None:
         raise AuthenticationError("TOKEN_INVALID", "Access token is missing a role.")
-    return CurrentUser(user_id=claims.user_id, role=claims.role)
+    return CurrentUser(
+        user_id=claims.user_id, role=claims.role, linked_user_ids=claims.linked_user_ids
+    )
 
 
 async def require_admin_service_call(

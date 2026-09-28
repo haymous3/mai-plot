@@ -365,9 +365,17 @@ class UserRepository:
 
     async def get_active_by_email(self, email: str) -> UserCore | None:
         """Fetch a live user by email for password login. Returns None for
-        unknown, soft-deleted, or deactivated accounts."""
+        unknown, soft-deleted, or deactivated accounts.
+
+        Only LOGIN OWNERS answer (SCRUM-236). A buyer or seller account that
+        shares another's login carries the same address, and the email unique
+        index (migration 0020) is scoped to owners by exactly this predicate —
+        so this still returns at most one row, and it is the one holding the
+        password. Which role the person then lands in is the login service's
+        decision, not this lookup's."""
         stmt = select(User.id, User.role, User.verified_status).where(
             User.email == email,
+            User.shares_login_with_user_id.is_(None),
             User.deleted_at.is_(None),
             User.is_active.is_(True),
         )
@@ -421,6 +429,10 @@ class UserRepository:
         last_name: str | None = None,
         verification_channel: str = "email",
         linked_identity_user_id: UUID | None = None,
+        shares_login_with_user_id: UUID | None = None,
+        verified_status: str = "unverified",
+        location: str | None = None,
+        address: str | None = None,
     ) -> UUID:
         """Insert a users row and its user_pii row in the same DB transaction.
 
@@ -432,6 +444,12 @@ class UserRepository:
         service layer resolves that before calling, so a chain cannot form. No
         NIN is written here: the NIN stays on the root, where the UNIQUE index
         keeps it.
+
+        `shares_login_with_user_id` (SCRUM-236) makes the row a sharer of that
+        owner's email + password; it must always be an OWNER's id, which the
+        add-role service resolves first. `verified_status`, `location` and
+        `address` exist for the same flow — the new role is the same, already
+        verified person, so it starts where their account already is.
         """
         poa_status = "pending" if seller_authority_type == "power_of_attorney" else "not_applicable"
         user = User(
@@ -440,6 +458,8 @@ class UserRepository:
             seller_authority_type=seller_authority_type,
             poa_verified_status=poa_status,
             linked_identity_user_id=linked_identity_user_id,
+            shares_login_with_user_id=shares_login_with_user_id,
+            verified_status=verified_status,
         )
         self._session.add(user)
         await self._session.flush()
@@ -450,6 +470,8 @@ class UserRepository:
             first_name=first_name,
             last_name=last_name,
             verification_channel=verification_channel,
+            location=location,
+            address=address,
         )
         self._session.add(pii)
         await self._session.flush()
@@ -458,10 +480,15 @@ class UserRepository:
     async def email_taken_by_other(self, email: str, *, user_id: UUID) -> bool:
         """True if a live user OTHER than user_id already owns this email.
         Pre-check for the profile update — mirrors the phone/BVN uniqueness
-        pre-checks; the unique constraint on users.email is the backstop."""
+        pre-checks; the unique constraint on users.email is the backstop.
+
+        "Other" means another PERSON's login (SCRUM-236): the caller's own
+        buyer/seller accounts carry the same address by design, so every row
+        sharing the caller's login owner is excluded."""
+        owner = await self.login_owner_id(user_id) or user_id
         stmt = select(User.id).where(
             User.email == email,
-            User.id != user_id,
+            func.coalesce(User.shares_login_with_user_id, User.id) != owner,
             User.deleted_at.is_(None),
         )
         return (await self._session.execute(stmt)).first() is not None
@@ -1189,3 +1216,68 @@ class UserRepository:
             )
             user.updated_at = datetime.now(UTC)
         return True
+
+    # --- Shared login (SCRUM-236) -------------------------------------------
+
+    async def login_owner_id(self, user_id: UUID) -> UUID | None:
+        """The account whose email + password sign this row in — itself when
+        the row is an owner. None for an unknown id. One hop: a sharer always
+        points at an owner, which AddRoleService enforces on write."""
+        stmt = select(User.shares_login_with_user_id).where(User.id == user_id)
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        return row.shares_login_with_user_id or user_id
+
+    async def login_group(self, owner_id: UUID) -> list[UserCore]:
+        """Every live, active account signed in by this owner's login — the
+        owner first, then its sharers. What the role switcher moves between."""
+        stmt = (
+            select(User.id, User.role, User.verified_status)
+            .where(
+                or_(User.id == owner_id, User.shares_login_with_user_id == owner_id),
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+            )
+            # Owner first (its sharer column is NULL, and False sorts first).
+            .order_by(User.shares_login_with_user_id.is_not(None), User.created_at)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [UserCore(id=r.id, role=r.role, verified_status=r.verified_status) for r in rows]
+
+    async def has_login_sharers(self, user_id: UUID) -> bool:
+        """True if any live account signs in with this one's credentials.
+        Deleting the owner would leave them with no way in."""
+        stmt = select(User.id).where(
+            User.shares_login_with_user_id == user_id,
+            User.deleted_at.is_(None),
+        )
+        return (await self._session.execute(stmt)).first() is not None
+
+    async def same_person_user_ids(self, user_id: UUID) -> list[UUID]:
+        """Every OTHER live account belonging to the same person: rows sharing
+        this one's login, and rows sharing its NIN identity (SCRUM-225).
+
+        Carried in the access token so a service can tell "same person" from
+        "same row" without calling back here — transaction-service uses it to
+        stop someone offering on their own listing from their buyer account.
+        """
+        me = (
+            await self._session.execute(
+                select(
+                    func.coalesce(User.linked_identity_user_id, User.id).label("root"),
+                    func.coalesce(User.shares_login_with_user_id, User.id).label("owner"),
+                ).where(User.id == user_id)
+            )
+        ).first()
+        if me is None:
+            return []
+        stmt = select(User.id).where(
+            or_(
+                func.coalesce(User.linked_identity_user_id, User.id) == me.root,
+                func.coalesce(User.shares_login_with_user_id, User.id) == me.owner,
+            ),
+            User.id != user_id,
+            User.deleted_at.is_(None),
+        )
+        return [row.id for row in (await self._session.execute(stmt)).all()]

@@ -45,6 +45,15 @@ class User(Base):
     linked_identity_user_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), default=None
     )
+    # The account whose email + password sign this row in, when this row is a
+    # buyer or seller account sharing another's login (SCRUM-236, migration
+    # 0020). NULL means this row is a login owner. One hop, like
+    # linked_identity_user_id: a sharer always points at an owner. A sharer's
+    # `email` is a copy of its owner's, kept in step by ProfileService, and is
+    # excluded from the email unique index so the two can coexist.
+    shares_login_with_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), default=None
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

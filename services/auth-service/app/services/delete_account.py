@@ -50,6 +50,13 @@ class AccountIsIdentityRoot(DeleteAccountError):
     """
 
 
+class AccountHoldsSharedLogin(DeleteAccountError):
+    """Another of the person's accounts signs in with this one's email and
+    password (SCRUM-236). Deleting it would leave that account with no way in,
+    so the other account is deleted first — from inside it, where its own
+    active-deal guard runs."""
+
+
 class AccountAlreadyGone(DeleteAccountError):
     """No live account for this id — already deleted, or never existed."""
 
@@ -86,6 +93,10 @@ class DeleteAccountService:
         # ON DELETE RESTRICT, but deletion here is SOFT, so the database would
         # never fire — this check is the only thing standing between a delete
         # and a set of siblings claiming a verified identity whose NIN has gone.
+        # Checked before the identity guard: a merged buyer/seller pair trips
+        # both, and "delete your seller account first" is the actionable one.
+        if await self._users.has_login_sharers(user_id):
+            raise AccountHoldsSharedLogin()
         if await self._users.has_linked_children(user_id):
             raise AccountIsIdentityRoot()
 
