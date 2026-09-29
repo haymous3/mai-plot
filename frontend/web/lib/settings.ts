@@ -51,12 +51,8 @@ export type Account = {
   budget_kobo: number | null;
 };
 
-export type PayoutAccount = {
-  account_number_masked: string;
-  bank_code: string;
-  account_name: string;
-  recipient_ready: boolean;
-};
+// One definition, owned by the payout module (SCRUM-223).
+export type { PayoutAccount } from '@/lib/payout-account';
 
 export type NotificationPrefs = {
   push_enabled: boolean;

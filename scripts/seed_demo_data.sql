@@ -65,6 +65,20 @@ DELETE FROM user_pii                  WHERE user_id IN (SELECT id FROM users WHE
 DELETE FROM refresh_tokens            WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 DELETE FROM push_subscriptions        WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
 DELETE FROM auth_credentials          WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
+-- Audit rows written by demo users at runtime (e.g. `payout_account.updated`,
+-- SCRUM-223; `user.role_added`, SCRUM-236) hold an actor_id FK to users, and
+-- audit_log is append-only by TRIGGER — so a plain DELETE is refused and, until
+-- this, one click on the demo payout form broke every later re-seed. Replica
+-- mode skips ordinary triggers for this one statement; it needs a superuser,
+-- which the local compose role is. LOCAL DEV ONLY — never run this against a
+-- real database: the trail it clears is the regulator's.
+SET LOCAL session_replication_role = replica;
+DELETE FROM audit_log                 WHERE actor_id IN (SELECT id FROM users WHERE email LIKE '%@demo.maiplot.ng');
+SET LOCAL session_replication_role = origin;
+-- Accounts sharing a demo login (SCRUM-236) point at their owner with
+-- ON DELETE RESTRICT, so they go first.
+DELETE FROM users                     WHERE email LIKE '%@demo.maiplot.ng' AND shares_login_with_user_id IS NOT NULL;
+DELETE FROM users                     WHERE email LIKE '%@demo.maiplot.ng' AND linked_identity_user_id IS NOT NULL;
 DELETE FROM users                     WHERE email LIKE '%@demo.maiplot.ng';
 
 -- ---------------------------------------------------------------------------

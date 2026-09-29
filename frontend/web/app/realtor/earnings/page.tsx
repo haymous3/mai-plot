@@ -15,8 +15,10 @@ import type {
   RealtorInspectionsResponse,
 } from '@/lib/api';
 import { realtorServiceUrl } from '@/lib/api';
+import { PayoutNudge } from '@/app/_components/payout-nudge';
 import { formatNaira } from '@/lib/format';
 import { commissionRateLabel, earningsBalances } from '@/lib/realtor-earnings';
+import { readPayoutAccount } from '@/lib/payout-account-server';
 import { countInspections } from '@/lib/realtor-inspection';
 import { sessionBackendGet } from '@/lib/session-api';
 
@@ -37,10 +39,11 @@ const PAYMENT_INFORMATION = [
  * design's visual treatment. The copy therefore describes what happens, not
  * what the artboard says. */
 export default async function RealtorEarningsPage() {
-  const [summaryRes, historyRes, inspRes] = await Promise.all([
+  const [summaryRes, historyRes, inspRes, payout] = await Promise.all([
     sessionBackendGet<CommissionSummary>(`${realtorServiceUrl()}/realtors/me/commission`),
     sessionBackendGet<CommissionHistoryResponse>(`${realtorServiceUrl()}/realtors/me/commissions`),
     sessionBackendGet<RealtorInspectionsResponse>(`${realtorServiceUrl()}/inspections/mine`),
+    readPayoutAccount(),
   ]);
 
   const summary = summaryRes.ok ? summaryRes.data : null;
@@ -61,6 +64,11 @@ export default async function RealtorEarningsPage() {
       <p className="mt-2 text-base leading-6 text-ink-600">
         Track your commission payments and transaction history
       </p>
+      <PayoutNudge
+        payout={payout}
+        href="/realtor/profile#payout"
+        consequence="We can’t pay your commission until you do."
+      />
 
       {!summaryRes.ok ? (
         <div className="mt-8 rounded-card-sm border border-status-danger/30 bg-distress-50 px-6 py-10 text-center text-sm text-distress-700">
@@ -132,6 +140,15 @@ export default async function RealtorEarningsPage() {
                 </li>
               ))}
             </ul>
+            {/* SCRUM-223: "your registered account" is now something a realtor
+                can actually register, so say where. */}
+            <Link
+              href="/realtor/profile#payout"
+              className="mt-4 inline-block text-sm font-semibold text-scheduled-900 underline-offset-4 hover:underline"
+            >
+              {payout.status === 'set' ? 'View or change your payout account' : 'Add your payout account'}{' '}
+              &rarr;
+            </Link>
           </section>
         </>
       )}
