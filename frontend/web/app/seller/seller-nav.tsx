@@ -12,6 +12,9 @@ const NAV = [
   { href: '/seller/listings', label: 'My Listings', icon: '📦' },
   { href: '/seller/offers', label: 'Offers', icon: '🤝' },
   { href: '/seller/transactions', label: 'Transactions', icon: '📈' },
+  // SCRUM-223 — where sale proceeds are paid. Beside Transactions because that
+  // is where a seller is when they wonder when, and where, the money arrives.
+  { href: '/seller/payouts', label: 'Payout Account', icon: '🏦' },
   { href: '/seller/documents', label: 'Documents', icon: '📄' },
   { href: '/seller/notifications', label: 'Notifications', icon: '🔔' },
   // `/settings`, not `/seller/profile` — that route never existed either, so

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { buildActivity, timeAgo } from './activity';
+import { PayoutNudge } from './payout-nudge';
 import { SellerHeader } from './seller-header';
 import type {
   SellerDealsResponse,
@@ -11,6 +12,7 @@ import type {
 } from '@/lib/api';
 import { documentServiceUrl, listingServiceUrl, transactionServiceUrl } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { readPayoutAccount } from '@/lib/payout-account-server';
 import { isSaleActive } from '@/lib/seller-deal-stage';
 import { sessionBackendGet } from '@/lib/session-api';
 
@@ -22,11 +24,12 @@ const ACTIVE_LISTING_STATUSES = new Set(['active', 'under_offer', 'paused', 'pen
  * the listings/offers/sales/documents endpoints — there is no dedicated stats or
  * activity source. */
 export default async function SellerOverviewPage() {
-  const [listingsR, offersR, salesR, docsR] = await Promise.all([
+  const [listingsR, offersR, salesR, docsR, payout] = await Promise.all([
     sessionBackendGet<SellerListingsResponse>(`${listingServiceUrl()}/listings/mine`),
     sessionBackendGet<SellerOffersResponse>(`${transactionServiceUrl()}/offers`),
     sessionBackendGet<SellerDealsResponse>(`${transactionServiceUrl()}/sales`),
     sessionBackendGet<SellerDocumentsResponse>(`${documentServiceUrl()}/documents/mine`),
+    readPayoutAccount(),
   ]);
 
   const listings = listingsR.ok ? listingsR.data.data : [];
@@ -48,6 +51,7 @@ export default async function SellerOverviewPage() {
   return (
     <main className="mx-auto max-w-6xl px-8 py-8">
       <SellerHeader title="Dashboard Overview" subtitle="Welcome back" />
+      <PayoutNudge payout={payout} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_300px]">
         <div>
