@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { PayoutNudge } from '../payout-nudge';
 import { SaleProgress } from './sale-progress';
 import type { SellerDeal, SellerDealsResponse } from '@/lib/api';
 import { transactionServiceUrl } from '@/lib/api';
 import { formatNaira } from '@/lib/format';
+import { readPayoutAccount } from '@/lib/payout-account-server';
 import { SESSION_LOGIN } from '@/lib/session';
 import { sessionBackendGet } from '@/lib/session-api';
 import { isSaleActive, sellerStageLabel } from '@/lib/seller-deal-stage';
@@ -61,7 +63,10 @@ function SaleCard({ deal }: { deal: SellerDeal }) {
 }
 
 export default async function SellerTransactionsPage() {
-  const result = await sessionBackendGet<SellerDealsResponse>(`${transactionServiceUrl()}/sales`);
+  const [result, payout] = await Promise.all([
+    sessionBackendGet<SellerDealsResponse>(`${transactionServiceUrl()}/sales`),
+    readPayoutAccount(),
+  ]);
   if (!result.ok && result.status === 401) redirect(`${SESSION_LOGIN}?role=seller`);
   const deals = result.ok ? result.data.data : [];
 
@@ -71,6 +76,7 @@ export default async function SellerTransactionsPage() {
         <h1 className="font-display text-3xl text-emerald-deep">Transactions</h1>
         <p className="mt-1 text-sm text-ink-500">Track your active deals and sales</p>
       </div>
+      <PayoutNudge payout={payout} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_300px]">
         <div className="space-y-4">
