@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from app.services.financing_summary import FinancingSummaryService
 from app.services.jwt_verifier import JwtVerifier, TokenExpired, TokenInvalid
 from app.services.offer_service import OfferService
 from app.services.payout_account import PayoutAccountService
+from app.services.payout_notifier import PayoutNotifier, build_payout_notifier
 from app.services.paystack_webhook import PaystackWebhookService
 from app.services.seller_deals import SellerDealsService
 from app.services.seller_notifier import SellerNotifier, build_seller_notifier
@@ -131,11 +133,48 @@ def get_recipient_client(settings: SettingsDep) -> PaystackRecipientClient:
     return _recipient_client
 
 
+# One payout notifier per process — like the seller notifier, its Celery
+# producer app owns a broker connection pool.
+_payout_notifier: PayoutNotifier | None = None
+
+
+def get_payout_notifier(settings: SettingsDep) -> PayoutNotifier:
+    global _payout_notifier
+    if _payout_notifier is None:
+        _payout_notifier = build_payout_notifier(
+            enabled=settings.notifications_enabled,
+            broker_url=settings.celery_broker_url,
+        )
+    return _payout_notifier
+
+
 def get_payout_account_service(
     accounts: Annotated[PayoutAccountRepository, Depends(_payout_account_repo)],
     recipient_client: Annotated[PaystackRecipientClient, Depends(get_recipient_client)],
+    audit: Annotated[AuditLogRepository, Depends(_audit_repo)],
+    notifier: Annotated[PayoutNotifier, Depends(get_payout_notifier)],
 ) -> PayoutAccountService:
-    return PayoutAccountService(accounts=accounts, recipient_client=recipient_client)
+    return PayoutAccountService(
+        accounts=accounts, recipient_client=recipient_client, audit=audit, notifier=notifier
+    )
+
+
+async def get_reauth_user_id(
+    verifier: Annotated[JwtVerifier, Depends(_jwt_verifier)],
+    x_reauth_token: Annotated[str | None, Header()] = None,
+) -> UUID | None:
+    """The account a valid `X-Reauth-Token` vouches for, or None (SCRUM-223).
+
+    None for missing, expired, malformed or wrong-type tokens alike: the route
+    answers every one of them with the same 403 REAUTH_REQUIRED, and the only
+    useful thing to tell the client is "confirm your password again".
+    """
+    if not x_reauth_token:
+        return None
+    try:
+        return verifier.decode_reauth(x_reauth_token)
+    except (TokenExpired, TokenInvalid):
+        return None
 
 
 # Process-singleton receipt storage (the real one holds a boto3 S3 client).

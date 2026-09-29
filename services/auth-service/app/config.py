@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # uncapped behaviour rather than locking users out during an outage.
     otp_max_attempts: int = 3
 
+    # Step-up re-authentication (SCRUM-223) — "confirm your password" before a
+    # sensitive change such as the payout bank account. The token is only good
+    # for one short burst of activity; attempts are capped because the endpoint
+    # is a password oracle for whoever holds a session.
+    reauth_token_minutes: int = 5
+    reauth_attempts_per_hour: int = 10
+
     # Twilio (SCRUM-175, replaced Termii) — the fake adapter is the default so
     # local + CI runs work without real credentials. Production sets
     # twilio_use_fake=false and provides the real Account SID + Auth Token.

@@ -172,6 +172,8 @@ services:
           # 404, which is how every entry above it was found.
           - /auth/switch-role
           - /auth/add-role
+          # SCRUM-223 — re-enter the password before changing the payout account.
+          - /auth/reauth
         strip_path: false
         plugins:
           - name: rate-limiting

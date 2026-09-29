@@ -74,6 +74,8 @@ _TYPE_TO_CATEGORY: Final[dict[str, str]] = {
     "realtor_approved": SYSTEM,
     "realtor_rejected": SYSTEM,
     "realtor_suspended": SYSTEM,
+    # SCRUM-223 — a security notice, not money movement: nothing moved.
+    "payout_account_changed": SYSTEM,
 }
 
 

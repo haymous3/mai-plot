@@ -10,6 +10,12 @@ transfer itself (adapters/paystack.py, SCRUM-145 PR2).
   * PaystackHttpRecipientClient — real transferrecipient call (behind
     paystack_enabled).
 
+SCRUM-223 adds `resolve_account` — Paystack's GET /bank/resolve — which returns
+the name the BANK holds for an account number. The payout form shows it for the
+payee to confirm, and PUT /payout-account stores it instead of anything typed,
+so a mistyped digit surfaces as "that's not me" rather than a transfer to a
+stranger.
+
 Secrets are never logged; the account number is not placed in error messages.
 """
 
@@ -26,8 +32,19 @@ class RecipientResult:
     recipient_code: str
 
 
+@dataclass(frozen=True)
+class ResolvedAccount:
+    account_name: str
+
+
 class PaystackRecipientError(RuntimeError):
     """The recipient rail itself failed (network / provider / logical error)."""
+
+
+class AccountNotResolved(RuntimeError):
+    """The bank does not recognise this account number for this bank code. A
+    user-fixable answer, unlike PaystackRecipientError — kept separate so the
+    route can say "check the number" rather than "try again later"."""
 
 
 class PaystackRecipientClient(Protocol):
@@ -35,6 +52,14 @@ class PaystackRecipientClient(Protocol):
         self, *, account_number: str, bank_code: str, account_name: str
     ) -> RecipientResult:  # pragma: no cover - protocol
         ...
+
+    async def resolve_account(
+        self, *, account_number: str, bank_code: str
+    ) -> ResolvedAccount:  # pragma: no cover - protocol
+        ...
+
+
+FAKE_ACCOUNT_NAME = "MAIHOMME TEST ACCOUNT"
 
 
 class FakePaystackRecipientClient:
@@ -45,6 +70,13 @@ class FakePaystackRecipientClient:
         self, *, account_number: str, bank_code: str, account_name: str
     ) -> RecipientResult:
         return RecipientResult(recipient_code=f"RCP_FAKE_{account_number[-4:]}")
+
+    async def resolve_account(self, *, account_number: str, bank_code: str) -> ResolvedAccount:
+        # An account number ending 0000 is "unknown to the bank", so the
+        # not-found path can be exercised locally and in tests.
+        if account_number.endswith("0000"):
+            raise AccountNotResolved()
+        return ResolvedAccount(account_name=FAKE_ACCOUNT_NAME)
 
 
 class PaystackHttpRecipientClient:
@@ -105,6 +137,36 @@ class PaystackHttpRecipientClient:
         if not recipient_code:
             raise PaystackRecipientError("paystack recipient response missing recipient_code")
         return RecipientResult(recipient_code=recipient_code)
+
+    async def resolve_account(self, *, account_number: str, bank_code: str) -> ResolvedAccount:
+        """GET {base}/bank/resolve. Paystack answers 422 (or 400) with
+        `status:false` when the number does not exist at that bank — that is
+        AccountNotResolved. Everything else that goes wrong is the rail's fault
+        and maps to PaystackRecipientError, as in create_recipient."""
+        try:
+            async with httpx.AsyncClient(timeout=15, transport=self._transport) as client:
+                resp = await client.get(
+                    f"{self._base_url}/bank/resolve",
+                    params={"account_number": account_number, "bank_code": bank_code},
+                    headers={"Authorization": f"Bearer {self._secret_key}"},
+                )
+        except httpx.HTTPError as exc:
+            raise PaystackRecipientError(f"paystack resolve request failed: {exc}") from exc
+        if resp.status_code in (400, 422):
+            raise AccountNotResolved()
+        try:
+            resp.raise_for_status()
+            body = resp.json()
+        except httpx.HTTPError as exc:
+            raise PaystackRecipientError(f"paystack resolve request failed: {exc}") from exc
+        except ValueError as exc:
+            raise PaystackRecipientError("paystack resolve returned a non-JSON body") from exc
+        if not body.get("status"):
+            raise AccountNotResolved()
+        name = ((body.get("data") or {}).get("account_name") or "").strip()
+        if not name:
+            raise PaystackRecipientError("paystack resolve response missing account_name")
+        return ResolvedAccount(account_name=name)
 
 
 def build_paystack_recipient_client(

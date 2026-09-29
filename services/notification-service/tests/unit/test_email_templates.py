@@ -56,3 +56,11 @@ def test_html_escapes_body() -> None:
     assert "&lt;script&gt;" in msg.html_body
     # The plain-text part keeps the raw body (no HTML context to escape).
     assert "<script>alert(1)</script>" in msg.text_body
+
+
+def test_payout_account_change_has_its_own_subject() -> None:
+    """SCRUM-223: the security notice must not arrive as a generic notification."""
+    email = render_email(
+        to="a@b.com", type="payout_account_changed", title=None, body="B", unsubscribe_url=_UNSUB
+    )
+    assert email.subject == "Your Maihomme payout account was changed"
