@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { RealtorHeader } from '../realtor-header';
+import { PayoutAccountForm } from '@/app/_components/payout-account-form';
 import type { RealtorProfile } from '@/lib/api';
 import { authServiceUrl, realtorServiceUrl } from '@/lib/api';
+import { readPayoutAccount } from '@/lib/payout-account-server';
 import { sessionBackendGet } from '@/lib/session-api';
 import type { Account } from '@/lib/settings';
 
@@ -20,9 +22,10 @@ export const metadata: Metadata = { title: 'Profile · Maihomme Realtor' };
  * still gets their profile, with the number shown as unavailable rather than
  * the whole page replaced by an error. */
 export default async function RealtorProfilePage() {
-  const [res, accountRes] = await Promise.all([
+  const [res, accountRes, payout] = await Promise.all([
     sessionBackendGet<RealtorProfile>(`${realtorServiceUrl()}/realtors/me`),
     sessionBackendGet<Account>(`${authServiceUrl()}/auth/me`),
+    readPayoutAccount(),
   ]);
 
   // 404 = not onboarded yet (SCRUM-156): point them at onboarding rather than
@@ -122,6 +125,27 @@ export default async function RealtorProfilePage() {
 
           <Chips label="States" values={profile.coverage_states} />
           <Chips label="LGAs" values={profile.coverage_lgas} />
+        </section>
+
+        {/* SCRUM-223 — where commission is paid. On Profile rather than a new
+            rail item: the realtor rail is drawn from Figma (287:*) and has no
+            slot for it, and a realtor sets this once. The Earnings page links
+            here, and nudges while it is missing. `id` is that link's anchor. */}
+        <section id="payout" className="scroll-mt-8">
+          <h2 className="font-display text-lg text-ink-900">Payout account</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            Where your commission is paid, once a deal you inspected completes and the 3-day hold
+            ends.
+          </p>
+          <div className="mt-4">
+            {payout.status === 'unknown' ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-700">
+                We couldn&rsquo;t load your payout account. Please refresh to try again.
+              </div>
+            ) : (
+              <PayoutAccountForm initial={payout.status === 'set' ? payout.account : null} />
+            )}
+          </div>
         </section>
       </div>
     </main>

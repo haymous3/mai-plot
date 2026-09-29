@@ -9,14 +9,13 @@ import {
   GhostButton,
   PrimaryButton,
   SecureNote,
-  SelectInput,
   StatusNote,
   TextInput,
   ToggleRow,
 } from './settings-ui';
 import { PasswordField } from '../_components/password-field';
-import type { Account, NotificationPrefs } from '@/lib/settings';
-import { NIGERIAN_BANKS } from '@/lib/nigerian-banks';
+import type { Account, NotificationPrefs, PayoutAccount } from '@/lib/settings';
+import { PayoutAccountForm } from '@/app/_components/payout-account-form';
 import { SESSION_LOGIN } from '@/lib/session';
 
 /**
@@ -465,64 +464,27 @@ export function FinancialTab({
   payout,
 }: {
   account: Account;
-  payout: {
-    account_number_masked: string;
-    bank_code: string;
-    account_name: string;
-  } | null;
+  payout: PayoutAccount | null;
 }) {
   const [nin, setNin] = useState('');
-  const [bankCode, setBankCode] = useState(payout?.bank_code ?? '');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [accountName, setAccountName] = useState(payout?.account_name ?? '');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{
     tone: 'ok' | 'error';
     text: string;
   } | null>(null);
 
-  const canSave = /^\d{10}$/.test(accountNumber) && bankCode !== '' && accountName.trim() !== '';
-
-  async function save() {
+  // SCRUM-223: the bank account is the shared PayoutAccountForm below (bank-
+  // resolved name, password to save, change email). This used to be a local
+  // form that sent a typed account name and no password — which the guarded
+  // PUT /payout-account now refuses. Only the NIN stays here, with its own save.
+  async function saveNin() {
     setBusy(true);
     setNote(null);
     try {
-      if (nin.trim() && !account.nin_verified) {
-        const resp = await fetch('/api/buyer/nin-verify', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ nin: nin.trim() }),
-        });
-        if (!resp.ok) {
-          const b = (await resp.json().catch(() => ({}))) as {
-            error_code?: string;
-          };
-          setNote({
-            tone: 'error',
-            text:
-              b.error_code === 'NIN_FORMAT_INVALID'
-                ? 'NIN must be exactly 11 digits.'
-                : // A duplicate used to render as "could not verify", which
-                  // reads as a registry failure for what is really "this NIN
-                  // is already on an account" (SCRUM-218).
-                  b.error_code === 'NIN_ALREADY_VERIFIED'
-                  ? 'This NIN has already been verified.'
-                  : b.error_code === 'NIN_NOT_VERIFIED'
-                    ? 'That NIN did not match your name. Check both and retry.'
-                    : 'We could not verify that NIN. Please retry.',
-          });
-          return;
-        }
-      }
-
-      const resp = await fetch('/api/settings/payout-account', {
-        method: 'PUT',
+      const resp = await fetch('/api/buyer/nin-verify', {
+        method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          account_number: accountNumber,
-          bank_code: bankCode,
-          account_name: accountName.trim(),
-        }),
+        body: JSON.stringify({ nin: nin.trim() }),
       });
       if (!resp.ok) {
         const b = (await resp.json().catch(() => ({}))) as {
@@ -531,13 +493,20 @@ export function FinancialTab({
         setNote({
           tone: 'error',
           text:
-            b.error_code === 'RECIPIENT_UNAVAILABLE'
-              ? 'We could not verify that bank account right now. Please retry.'
-              : 'We could not save your bank account. Please check the details.',
+            b.error_code === 'NIN_FORMAT_INVALID'
+              ? 'NIN must be exactly 11 digits.'
+              : // A duplicate used to render as "could not verify", which
+                // reads as a registry failure for what is really "this NIN
+                // is already on an account" (SCRUM-218).
+                b.error_code === 'NIN_ALREADY_VERIFIED'
+                ? 'This NIN has already been verified.'
+                : b.error_code === 'NIN_NOT_VERIFIED'
+                  ? 'That NIN did not match your name. Check both and retry.'
+                  : 'We could not verify that NIN. Please retry.',
         });
         return;
       }
-      setNote({ tone: 'ok', text: 'Financial details saved.' });
+      setNote({ tone: 'ok', text: 'NIN saved.' });
     } catch {
       setNote({
         tone: 'error',
@@ -580,64 +549,22 @@ export function FinancialTab({
         )}
       </Field>
 
+      {note && <StatusNote tone={note.tone}>{note.text}</StatusNote>}
+
+      {!account.nin_verified && (
+        <div className="mt-6 flex justify-end">
+          <PrimaryButton disabled={nin.trim().length !== 11 || busy} onClick={() => void saveNin()}>
+            <SaveIcon />
+            {busy ? 'Saving…' : 'Save NIN'}
+          </PrimaryButton>
+        </div>
+      )}
+
       <h3 className="mt-8 border-t border-line pt-8 text-lg font-bold leading-6 text-ink-buyer">
         Bank Account
       </h3>
-
       <div className="mt-5">
-        <Field id="bank" label="Bank Name">
-          <SelectInput
-            id="bank"
-            value={bankCode}
-            onChange={setBankCode}
-            options={NIGERIAN_BANKS.map((b) => ({
-              value: b.code,
-              label: b.name,
-            }))}
-            placeholder="Select your bank"
-          />
-        </Field>
-      </div>
-
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
-        <Field
-          id="account-number"
-          label="Account Number"
-          note={
-            payout ? (
-              <SecureNote>
-                Currently {payout.account_number_masked} — enter a number to replace it
-              </SecureNote>
-            ) : undefined
-          }
-        >
-          <TextInput
-            id="account-number"
-            value={accountNumber}
-            onChange={(v) => setAccountNumber(v.replace(/[^\d]/g, ''))}
-            placeholder={payout ? payout.account_number_masked : '0123456789'}
-            inputMode="numeric"
-            maxLength={10}
-          />
-        </Field>
-
-        <Field id="account-name" label="Account Name">
-          <TextInput
-            id="account-name"
-            value={accountName}
-            onChange={setAccountName}
-            placeholder="Ada Obi"
-          />
-        </Field>
-      </div>
-
-      {note && <StatusNote tone={note.tone}>{note.text}</StatusNote>}
-
-      <div className="mt-8 flex justify-end border-t border-line pt-6">
-        <PrimaryButton disabled={!canSave || busy} onClick={() => void save()}>
-          <SaveIcon />
-          {busy ? 'Saving…' : 'Save Financial Info'}
-        </PrimaryButton>
+        <PayoutAccountForm initial={payout} />
       </div>
     </Card>
   );
