@@ -16,6 +16,7 @@ from app.services.credentials import (
     InvalidCredential,
     detect_photo_type,
     detect_video_type,
+    validate_base_location,
     validate_coordinates,
     validate_photo_size,
     validate_video_size,
@@ -91,3 +92,32 @@ def test_validate_coordinates_rejects_out_of_range(lat: float, lng: float) -> No
     with pytest.raises(InvalidCredential) as exc:
         validate_coordinates(lat, lng)
     assert exc.value.code == "LOCATION_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("lat", "lng"),
+    [
+        (6.5244, 3.3792),  # Lagos
+        (9.0765, 7.3986),  # Abuja
+        (4.8156, 7.0498),  # Port Harcourt
+        (13.0059, 5.2476),  # Sokoto, far north-west
+        (12.3894, 13.5708),  # near Lake Chad, far north-east
+    ],
+)
+def test_base_location_accepts_nigerian_cities(lat: float, lng: float) -> None:
+    validate_base_location(lat, lng)
+
+
+@pytest.mark.parametrize(
+    ("lat", "lng"),
+    [
+        (51.5074, -0.1278),  # London — a VPN exit, say
+        (3.3792, 6.5244),  # Lagos with lat/lng swapped
+        (0.0, 0.0),  # the default a broken GPS reports
+    ],
+)
+def test_base_location_outside_nigeria_is_refused(lat: float, lng: float) -> None:
+    """SCRUM-214: such a base makes the realtor silently unreachable by a 50 km search."""
+    with pytest.raises(InvalidCredential) as exc:
+        validate_base_location(lat, lng)
+    assert exc.value.code == "LOCATION_OUTSIDE_NIGERIA"

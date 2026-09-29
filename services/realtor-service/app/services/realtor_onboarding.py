@@ -28,7 +28,7 @@ from uuid import UUID
 
 from app.repositories.audit_repo import AuditLogRepository
 from app.repositories.realtor_repo import RealtorRepository, RealtorRow
-from app.services.credentials import InvalidCredential, validate_coordinates
+from app.services.credentials import InvalidCredential, validate_base_location
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,10 @@ class NotRealtorRole(RealtorOnboardingError):
 
 class AlreadyRegistered(RealtorOnboardingError):
     """A non-rejected realtor profile already exists for this user."""
+
+
+class RealtorNotFound(RealtorOnboardingError):
+    """No realtor profile for this account yet — onboard first."""
 
 
 class RealtorOnboardingService:
@@ -83,7 +87,7 @@ class RealtorOnboardingService:
             raise InvalidCredential("COVERAGE_REQUIRED", "At least one coverage state is required.")
         has_location = base_lat is not None and base_lng is not None
         if has_location:
-            validate_coordinates(base_lat, base_lng)  # type: ignore[arg-type]
+            validate_base_location(base_lat, base_lng)  # type: ignore[arg-type]
 
         if existing is None:
             realtor = await self._realtors.create(
@@ -119,3 +123,53 @@ class RealtorOnboardingService:
         )
         logger.info("realtor.register.ok", extra={"user_id": str(user_id)})
         return realtor
+
+    async def set_base_location(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        lat: float,
+        lng: float,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> RealtorRow:
+        """Set or move the realtor's base (SCRUM-214) — what proximity assignment
+        and reassignment search from. Any approval status may set it: a pending
+        realtor who sets it now is assignable the moment they are approved.
+
+        Audited with coordinates rounded to ~1 km (3 dp): enough to explain a
+        change of assignments, without the trail pinpointing someone's home.
+        """
+        if role != "realtor":
+            raise NotRealtorRole()
+        existing = await self._realtors.get(user_id)
+        if existing is None:
+            raise RealtorNotFound()
+        validate_base_location(lat, lng)
+
+        await self._realtors.set_base_location(user_id, lat=lat, lng=lng)
+        await self._audit.record(
+            actor_id=user_id,
+            actor_role=role,
+            action="realtor.base_location_set",
+            entity_type="realtor",
+            entity_id=user_id,
+            old_value=_rounded(existing.base_lat, existing.base_lng),
+            new_value=_rounded(lat, lng),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        updated = await self._realtors.get(user_id)
+        assert updated is not None  # the row existed a moment ago, in this transaction
+        logger.info(
+            "realtor.base_location_set",
+            extra={"user_id": str(user_id), "first": existing.base_lat is None},
+        )
+        return updated
+
+
+def _rounded(lat: float | None, lng: float | None) -> dict[str, object] | None:
+    if lat is None or lng is None:
+        return None
+    return {"lat": round(lat, 3), "lng": round(lng, 3)}
