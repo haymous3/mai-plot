@@ -149,3 +149,77 @@ async def test_base_location_out_of_range_rejected() -> None:
     svc, _ = _service(_StubRealtorRepo())
     with pytest.raises(InvalidCredential):
         await _register(svc, base_lat=999.0, base_lng=3.4)
+
+
+async def test_onboarding_refuses_a_base_outside_nigeria() -> None:
+    svc, _ = _service(_StubRealtorRepo())
+    with pytest.raises(InvalidCredential) as exc:
+        await _register(svc, base_lat=51.5, base_lng=-0.12)
+    assert exc.value.code == "LOCATION_OUTSIDE_NIGERIA"
+
+
+# --- set_base_location (SCRUM-214) -------------------------------------------
+
+
+class _AuditKwargs(_StubAudit):
+    def __init__(self) -> None:
+        super().__init__()
+        self.kwargs: list[dict[str, object]] = []
+
+    async def record(self, **kwargs: object) -> None:
+        await super().record(**kwargs)
+        self.kwargs.append(kwargs)
+
+
+def _with_audit(repo: _StubRealtorRepo) -> tuple[RealtorOnboardingService, _AuditKwargs]:
+    audit = _AuditKwargs()
+    svc = RealtorOnboardingService(realtors=repo, audit=audit)  # type: ignore[arg-type]
+    return svc, audit
+
+
+async def test_an_onboarded_realtor_sets_a_base_and_it_is_audited_rounded() -> None:
+    repo = _StubRealtorRepo(existing=_row())
+    svc, audit = _with_audit(repo)
+
+    await svc.set_base_location(user_id=uuid4(), role="realtor", lat=6.431234, lng=3.421987)
+
+    assert repo.base_location == (6.431234, 3.421987)
+    [record] = audit.kwargs
+    assert record["action"] == "realtor.base_location_set"
+    assert record["old_value"] is None
+    # ~1 km, not the exact spot someone lives.
+    assert record["new_value"] == {"lat": 6.431, "lng": 3.422}
+
+
+async def test_moving_a_base_records_where_it_was() -> None:
+    from dataclasses import replace
+
+    repo = _StubRealtorRepo(existing=replace(_row(), base_lat=9.0768, base_lng=7.3986))
+    svc, audit = _with_audit(repo)
+
+    await svc.set_base_location(user_id=uuid4(), role="realtor", lat=6.5244, lng=3.3792)
+
+    assert audit.kwargs[0]["old_value"] == {"lat": 9.077, "lng": 7.399}
+
+
+async def test_setting_a_base_needs_a_profile_first() -> None:
+    from app.services.realtor_onboarding import RealtorNotFound
+
+    svc, _ = _with_audit(_StubRealtorRepo(existing=None))
+    with pytest.raises(RealtorNotFound):
+        await svc.set_base_location(user_id=uuid4(), role="realtor", lat=6.5, lng=3.4)
+
+
+async def test_only_realtors_set_a_base() -> None:
+    svc, _ = _with_audit(_StubRealtorRepo(existing=_row()))
+    with pytest.raises(NotRealtorRole):
+        await svc.set_base_location(user_id=uuid4(), role="buyer", lat=6.5, lng=3.4)
+
+
+async def test_a_base_outside_nigeria_writes_nothing() -> None:
+    repo = _StubRealtorRepo(existing=_row())
+    svc, audit = _with_audit(repo)
+    with pytest.raises(InvalidCredential):
+        await svc.set_base_location(user_id=uuid4(), role="realtor", lat=0.0, lng=0.0)
+    assert repo.base_location is None
+    assert audit.kwargs == []

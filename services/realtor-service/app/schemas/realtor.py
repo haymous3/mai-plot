@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.repositories.realtor_repo import PendingRealtorRow, RealtorRow
 
@@ -26,6 +26,10 @@ class RealtorProfile(BaseModel):
     coverage_lgas: list[str]
     completed_deals: int
     approval_status: str
+    # The base proximity assignment searches from (SCRUM-214); null until set.
+    # The realtor's OWN profile only — never surfaced to buyers or sellers.
+    base_lat: float | None = None
+    base_lng: float | None = None
 
     @classmethod
     def from_row(cls, row: RealtorRow) -> RealtorProfile:
@@ -37,7 +41,17 @@ class RealtorProfile(BaseModel):
             coverage_lgas=row.coverage_lgas,
             completed_deals=row.completed_deals,
             approval_status=row.approval_status,
+            base_lat=row.base_lat,
+            base_lng=row.base_lng,
         )
+
+
+class BaseLocationRequest(BaseModel):
+    """PUT /realtors/me/base-location (SCRUM-214). Range-checked here; the
+    Nigeria check is the service's, so the 422 names the real problem."""
+
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class RealtorReviewRequest(BaseModel):

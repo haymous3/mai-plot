@@ -31,13 +31,14 @@ from app.dependencies import (
 )
 from app.repositories.realtor_repo import RealtorRepository
 from app.schemas.commission import CommissionHistoryResponse, CommissionSummaryResponse
-from app.schemas.realtor import RealtorProfile
+from app.schemas.realtor import BaseLocationRequest, RealtorProfile
 from app.security import CurrentUser
 from app.services.commission_service import CommissionService
 from app.services.credentials import InvalidCredential
 from app.services.realtor_onboarding import (
     AlreadyRegistered,
     NotRealtorRole,
+    RealtorNotFound,
     RealtorOnboardingService,
 )
 
@@ -105,6 +106,37 @@ async def get_my_profile(
         return _error(
             status.HTTP_404_NOT_FOUND, "REALTOR_NOT_FOUND", "No realtor profile for this account."
         )
+    return RealtorProfile.from_row(realtor)
+
+
+@router.put("/me/base-location", response_model=None)
+async def set_my_base_location(
+    body: BaseLocationRequest,
+    request: Request,
+    caller: CurrentUserDep,
+    service: OnboardingDep,
+) -> RealtorProfile | JSONResponse:
+    """Set or move the caller's base location (SCRUM-214) — where proximity
+    assignment and reassignment search from, within 50 km. Must be in Nigeria."""
+    try:
+        realtor = await service.set_base_location(
+            user_id=caller.user_id,
+            role=caller.role,
+            lat=body.lat,
+            lng=body.lng,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except NotRealtorRole:
+        return _error(status.HTTP_403_FORBIDDEN, "REALTOR_ROLE_REQUIRED", "Realtor role required.")
+    except RealtorNotFound:
+        return _error(
+            status.HTTP_404_NOT_FOUND,
+            "REALTOR_NOT_FOUND",
+            "Complete your realtor profile before setting a base location.",
+        )
+    except InvalidCredential as exc:
+        return _error(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.code, str(exc))
     return RealtorProfile.from_row(realtor)
 
 

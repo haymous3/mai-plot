@@ -41,6 +41,25 @@ def validate_coordinates(lat: float, lng: float) -> None:
         raise InvalidCredential("LOCATION_INVALID", "Base location coordinates are out of range.")
 
 
+# Nigeria's extent, rounded OUT to whole-ish degrees so no border town is
+# refused: roughly 4.2°N-13.9°N, 2.7°E-14.7°E. A base outside it can only be a
+# mistake — a swapped lat/lng, a phone reporting a VPN exit, a slip on a map —
+# and it would make the realtor silently unreachable by every 50 km search.
+_NIGERIA_LAT = (4.0, 14.0)
+_NIGERIA_LNG = (2.5, 15.0)
+
+
+def validate_base_location(lat: float, lng: float) -> None:
+    """A realtor's base must be a real coordinate inside Nigeria (SCRUM-214)."""
+    validate_coordinates(lat, lng)
+    if not (_NIGERIA_LAT[0] <= lat <= _NIGERIA_LAT[1]) or not (
+        _NIGERIA_LNG[0] <= lng <= _NIGERIA_LNG[1]
+    ):
+        raise InvalidCredential(
+            "LOCATION_OUTSIDE_NIGERIA", "Your base location must be in Nigeria."
+        )
+
+
 def detect_photo_type(data: bytes) -> tuple[str, str]:
     """(content_type, extension) for an inspection photo — JPEG/PNG only (SCRUM-73).
     Raises InvalidCredential(PHOTO_INVALID) otherwise."""

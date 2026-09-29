@@ -72,12 +72,20 @@ class RealtorRow:
     approved_at: datetime | None
     suspension_reason: str | None
     created_at: datetime
+    # The realtor's base (SCRUM-214), read back out of the geography column so
+    # the portal can show "Near Lekki, Lagos" and know whether to nudge. None
+    # until one is set — which, before SCRUM-214, was every UI-onboarded realtor.
+    base_lat: float | None = None
+    base_lng: float | None = None
 
 
+# Expressions, not just columns: this list is also used in RETURNING clauses,
+# which accept expressions, so every read of a realtor carries its base.
 _COLUMNS = (
     "id, esvarbon_number, years_of_experience, coverage_states, coverage_lgas, "
     "completed_deals, approval_status, government_id_s3_key, approved_by, "
-    "approved_at, suspension_reason, created_at"
+    "approved_at, suspension_reason, created_at, "
+    "ST_Y(base_location::geometry) AS base_lat, ST_X(base_location::geometry) AS base_lng"
 )
 
 
@@ -343,4 +351,6 @@ class RealtorRepository:
             approved_at=r.approved_at,
             suspension_reason=r.suspension_reason,
             created_at=r.created_at,
+            base_lat=float(r.base_lat) if r.base_lat is not None else None,
+            base_lng=float(r.base_lng) if r.base_lng is not None else None,
         )
