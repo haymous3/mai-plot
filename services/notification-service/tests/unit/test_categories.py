@@ -25,6 +25,7 @@ from app.services import categories
         ("listing_approved", categories.SYSTEM),
         ("listing_expiry_warning", categories.SYSTEM),
         ("inspection_assigned", categories.SYSTEM),
+        ("payout_account_changed", categories.SYSTEM),
     ],
 )
 def test_known_types_land_in_the_expected_tab(notification_type: str, expected: str) -> None:

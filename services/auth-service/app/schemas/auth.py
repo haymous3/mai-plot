@@ -499,6 +499,20 @@ class RoleSessionRequest(BaseModel):
     refresh_token: str | None = Field(default=None, min_length=1)
 
 
+class ReauthRequest(BaseModel):
+    """POST /auth/reauth (SCRUM-223) — re-enter the password before a
+    sensitive change."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    password: str = Field(min_length=1, max_length=128)
+
+
+class ReauthResponse(BaseModel):
+    reauth_token: str
+    expires_in: int
+
+
 class LogoutRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

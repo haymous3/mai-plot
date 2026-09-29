@@ -48,3 +48,42 @@ def test_a_garbled_claim_is_rejected_not_treated_as_empty(bad: object) -> None:
     """Treating it as empty would silently switch off the own-listing guard."""
     with pytest.raises(TokenInvalid):
         _verifier().decode_access(_token(linked_user_ids=bad))
+
+
+# --- reauth tokens (SCRUM-223) -----------------------------------------------
+
+
+def _reauth(**overrides: Any) -> str:
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "iss": ISSUER,
+        "sub": str(uuid4()),
+        "type": "reauth",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=5)).timestamp()),
+        **overrides,
+    }
+    return jwt.encode(payload, SECRET, algorithm="HS256")
+
+
+def test_a_reauth_token_names_its_account() -> None:
+    user = uuid4()
+    assert _verifier().decode_reauth(_reauth(sub=str(user))) == user
+
+
+def test_an_access_token_cannot_stand_in_for_a_reauth_token() -> None:
+    with pytest.raises(TokenInvalid):
+        _verifier().decode_reauth(_token())
+
+
+def test_a_reauth_token_cannot_authenticate_a_request() -> None:
+    with pytest.raises(TokenInvalid):
+        _verifier().decode_access(_reauth())
+
+
+def test_an_expired_reauth_token_is_refused() -> None:
+    from app.services.jwt_verifier import TokenExpired
+
+    past = int((datetime.now(UTC) - timedelta(minutes=1)).timestamp())
+    with pytest.raises(TokenExpired):
+        _verifier().decode_reauth(_reauth(exp=past))

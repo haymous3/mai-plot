@@ -71,6 +71,33 @@ class JwtVerifier:
             linked_user_ids=_parse_linked(payload.get("linked_user_ids")),
         )
 
+    def decode_reauth(self, token: str) -> UUID:
+        """The account a step-up reauth token vouches for (SCRUM-223).
+
+        Minted by auth-service's POST /auth/reauth moments after the password
+        was re-entered. Same secret and issuer as access tokens, but `type`
+        must be "reauth" — so neither an access token nor a refresh token can
+        stand in for one, and one of these can never authenticate a request.
+        """
+        try:
+            payload = jwt.decode(
+                token,
+                self._secret,
+                algorithms=[ALGORITHM],
+                issuer=self._issuer,
+                options={"require": ["exp", "iss", "sub"]},
+            )
+        except jwt.ExpiredSignatureError as exc:
+            raise TokenExpired() from exc
+        except jwt.InvalidTokenError as exc:
+            raise TokenInvalid() from exc
+        if payload.get("type") != "reauth":
+            raise TokenInvalid()
+        try:
+            return UUID(str(payload["sub"]))
+        except (KeyError, ValueError) as exc:
+            raise TokenInvalid() from exc
+
 
 def _parse_linked(raw: object) -> frozenset[UUID]:
     """The linked-account claim, or TokenInvalid if it is present but garbled.

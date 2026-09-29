@@ -15,7 +15,16 @@ class PayoutAccountRequest(BaseModel):
     # NUBAN account numbers are 10 digits; bank codes are short numeric strings.
     account_number: str = Field(pattern=r"^\d{10}$")
     bank_code: str = Field(pattern=r"^\d{3,10}$")
-    account_name: str = Field(min_length=1, max_length=200)
+    # IGNORED since SCRUM-223 — the stored name is the one the BANK returns.
+    # Still accepted so a client from before the change does not 422 mid-deploy.
+    account_name: str | None = Field(default=None, max_length=200)
+
+
+class ResolvedAccountResponse(BaseModel):
+    """GET /payout-account/resolve — the name the bank holds for the account,
+    shown to the payee to confirm before they save."""
+
+    account_name: str
 
 
 class PayoutAccountResponse(BaseModel):

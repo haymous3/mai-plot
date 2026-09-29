@@ -29,6 +29,7 @@ from app.dependencies import (
     get_otp_verification_service,
     get_poa_upload_service,
     get_profile_service,
+    get_reauth_service,
     get_registration_service,
     get_resend_verification_service,
     get_reset_password_service,
@@ -67,6 +68,8 @@ from app.schemas.auth import (
     PoaUploadResponse,
     ProfileUpdateRequest,
     ProfileUpdateResponse,
+    ReauthRequest,
+    ReauthResponse,
     RegisterRequest,
     RegisterResponse,
     ResetPasswordRequest,
@@ -147,6 +150,7 @@ from app.services.poa_upload import (
     PoaUploadService,
 )
 from app.services.profile import EmailAlreadyInUse, InvalidFullName, ProfileService
+from app.services.reauth import ReauthFailed, ReauthRateLimited, ReauthService
 from app.services.registration import (
     EmailAlreadyRegistered,
     OtpDispatchFailed,
@@ -834,6 +838,32 @@ async def add_role(
     except CallerAccountMissing:
         return _error(status.HTTP_404_NOT_FOUND, "ACCOUNT_NOT_FOUND", "Account not found.")
     return _session_response(result)
+
+
+@router.post("/reauth", response_model=ReauthResponse)
+async def reauth(
+    body: ReauthRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    service: Annotated[ReauthService, Depends(get_reauth_service)],
+) -> ReauthResponse | JSONResponse:
+    """Re-enter the password before a sensitive change (SCRUM-223). Answers with
+    a short-lived reauth token for the service making the change — today,
+    transaction-service's PUT /payout-account, which refuses without one."""
+    try:
+        result = await service.confirm(user_id=current_user.user_id, password=body.password)
+    except ReauthRateLimited:
+        return _error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "REAUTH_RATE_LIMITED",
+            "Too many attempts. Please try again later.",
+        )
+    except ReauthFailed:
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "PASSWORD_INCORRECT",
+            "That password is incorrect.",
+        )
+    return ReauthResponse(reauth_token=result.token, expires_in=result.expires_in)
 
 
 @router.post("/logout", response_model=LogoutResponse)

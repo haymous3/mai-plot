@@ -65,6 +65,7 @@ from app.services.poa_upload import PoaUploadService
 from app.services.profile import ProfileService
 from app.services.rate_limit import OtpRateLimiter
 from app.services.realtor_registration import RealtorRegistrationService
+from app.services.reauth import REAUTH_RATE_LIMIT_PREFIX, ReauthService
 from app.services.registration import RegistrationService
 from app.services.resend_verification import ResendVerificationService
 from app.services.seller_authority import SellerAuthorityService
@@ -392,6 +393,34 @@ def get_shared_login_service(
         audit=audit,
         jwt=jwt_service,
         email_sender=email_sender,
+    )
+
+
+def _reauth_rate_limiter(redis: RedisDep, settings: SettingsDep) -> OtpRateLimiter:
+    """Password re-entry budget (SCRUM-223). Its own namespace, keyed on the
+    account id: a guess here must not spend anyone's OTP or reset allowance,
+    nor they its. A separate dependency so integration tests can swap it — see
+    tests/integration/conftest.py on why nothing there may resolve RedisDep."""
+    return OtpRateLimiter(
+        redis,
+        max_per_hour=settings.reauth_attempts_per_hour,
+        key_prefix=REAUTH_RATE_LIMIT_PREFIX,
+    )
+
+
+def get_reauth_service(
+    users: Annotated[UserRepository, Depends(_user_repo)],
+    credentials: Annotated[AuthCredentialsRepository, Depends(_auth_credentials_repo)],
+    rate_limiter: Annotated[OtpRateLimiter, Depends(_reauth_rate_limiter)],
+    settings: SettingsDep,
+    jwt_service: Annotated[JwtService, Depends(_jwt_service)],
+) -> ReauthService:
+    return ReauthService(
+        users=users,
+        credentials=credentials,
+        rate_limiter=rate_limiter,
+        jwt=jwt_service,
+        token_minutes=settings.reauth_token_minutes,
     )
 
 

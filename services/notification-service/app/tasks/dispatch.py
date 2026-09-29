@@ -41,6 +41,7 @@ async def _run(
     channels: list[str] | None,
     reference_type: str | None,
     reference_id: str | None,
+    force: bool = False,
 ) -> None:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
@@ -86,6 +87,7 @@ async def _run(
                 channels=set(channels) if channels else CRITICAL_CHANNELS,
                 reference_type=reference_type,
                 reference_id=UUID(reference_id) if reference_id else None,
+                force=force,
             )
             await session.commit()
     finally:
@@ -102,9 +104,15 @@ def dispatch_notification(
     channels: list[str] | None = None,
     reference_type: str | None = None,
     reference_id: str | None = None,
+    force: bool = False,
 ) -> None:
     """Create + fan out one notification. Channels default to the critical set
-    (in-app + SMS + Web Push)."""
+    (in-app + SMS + Web Push).
+
+    `force` (SCRUM-223) delivers on every requested channel past the
+    recipient's opt-outs — for security notices such as a changed payout
+    account, which must reach the owner even if they turned emails off.
+    Defaults to False, so every existing producer is unchanged."""
     asyncio.run(
         _run(
             user_id=user_id,
@@ -114,5 +122,6 @@ def dispatch_notification(
             channels=channels,
             reference_type=reference_type,
             reference_id=reference_id,
+            force=force,
         )
     )

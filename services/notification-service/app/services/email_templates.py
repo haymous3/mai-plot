@@ -24,6 +24,8 @@ _DEFAULT_SUBJECTS: dict[str, str] = {
     "document_rejected": "Action needed on your Maihomme document",
     "offer_accepted": "Your Maihomme offer was accepted",
     "transaction_completed": "Your Maihomme transaction is complete",
+    # SCRUM-223 — security notice, sent past opt-outs.
+    "payout_account_changed": "Your Maihomme payout account was changed",
 }
 _GENERIC_SUBJECT = "Maihomme notification"
 

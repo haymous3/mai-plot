@@ -36,6 +36,7 @@ from app.adapters.twilio import InMemoryTwilioClient
 from app.config import get_settings
 from app.db import dispose_engine
 from app.services.otp_attempts import AttemptResult
+from app.services.rate_limit import RateLimitResult
 
 # Match the auth tables the migrations create, in FK-safe order.
 _TABLES = (
@@ -179,6 +180,32 @@ async def deterministic_otp_attempts() -> AsyncIterator[None]:
     app.dependency_overrides[_otp_attempts] = lambda: limiter
     yield
     app.dependency_overrides.pop(_otp_attempts, None)
+
+
+class InMemoryReauthLimiter:
+    """Stand-in for the reauth OtpRateLimiter (SCRUM-223): same reason as the
+    attempt limiter above — keep RedisDep out of the graph — and a real cap so
+    the 429 path is testable. Sliding-window semantics are unit-tested."""
+
+    def __init__(self, max_per_hour: int = 10) -> None:
+        self._max = max_per_hour
+        self._counts: dict[str, int] = {}
+
+    async def check_and_record(self, identifier: str) -> RateLimitResult:
+        used = self._counts.get(identifier, 0) + 1
+        self._counts[identifier] = used
+        return RateLimitResult(allowed=used <= self._max, remaining=max(self._max - used, 0))
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def deterministic_reauth_limiter() -> AsyncIterator[None]:
+    from app.dependencies import _reauth_rate_limiter
+    from app.main import app
+
+    limiter = InMemoryReauthLimiter()
+    app.dependency_overrides[_reauth_rate_limiter] = lambda: limiter
+    yield
+    app.dependency_overrides.pop(_reauth_rate_limiter, None)
 
 
 @pytest_asyncio.fixture

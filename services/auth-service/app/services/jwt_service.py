@@ -118,6 +118,25 @@ class JwtService:
             refresh_expires_at=refresh_exp,
         )
 
+    def issue_reauth(self, *, user_id: UUID, minutes: int) -> str:
+        """A short-lived step-up token (SCRUM-223): proof that `user_id`'s
+        session re-entered the password moments ago.
+
+        Its own `type` ("reauth") so it can never be replayed as an access or
+        refresh token — `decode` checks `type` on every read — and no `role`, so
+        nothing that authorises by role can accept it.
+        """
+        now = datetime.now(UTC)
+        payload: dict[str, Any] = {
+            "iss": self._issuer,
+            "sub": str(user_id),
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=minutes)).timestamp()),
+            "jti": secrets.token_urlsafe(12),
+            "type": "reauth",
+        }
+        return jwt.encode(payload, self._secret, algorithm=ALGORITHM)
+
     def decode(self, token: str, *, expected_type: str) -> TokenClaims:
         """Verify signature + expiry + issuer and return the claims.
 
