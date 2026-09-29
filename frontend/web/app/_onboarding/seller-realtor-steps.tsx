@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { HouseIcon, UserCircleIcon } from './icons';
-import { FieldError, FieldLabel, TextField, UploadDropzone } from './fields';
+import { CONTROL, FieldError, FieldLabel, TextField, UploadDropzone } from './fields';
 import {
   NinAlreadyVerified,
   NinVerifyField,
@@ -11,6 +11,8 @@ import {
   useNinVerification,
 } from './nin-verify-field';
 import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
+import { BaseLocationPicker } from '@/app/_components/base-location-picker';
+import type { BaseLocation } from '@/app/_components/base-location-picker';
 
 /**
  * Seller and realtor onboarding steps — the `sellers-flow-*` and
@@ -263,6 +265,11 @@ export function SellerVerificationStep({
  * Coverage is a comma-separated free-text field, matching the export's
  * "e.g., Lagos, Lekki, Victoria Island", and is split into the repeated
  * `coverage_states` parts the service expects.
+ *
+ * BASE LOCATION (SCRUM-214) — required. Proximity assignment searches from it
+ * within 50 km, and before this step asked for it no realtor who signed up
+ * through the product had one, so none could ever be auto-assigned. Coverage
+ * stays free text; the base is what the matching actually uses.
  */
 export function RealtorProfileStep({
   onDone,
@@ -280,12 +287,14 @@ export function RealtorProfileStep({
   const [nin, setNin] = useState('');
   const [address, setAddress] = useState('');
   const [coverage, setCoverage] = useState('');
+  const [base, setBase] = useState<BaseLocation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ninCheck = useNinVerification('/api/auth/nin');
   const ninSettled = ninVerified || ninIsSettled(ninCheck.status);
-  const canSubmit = ninSettled && address.trim().length > 0 && coverage.trim() !== '';
+  const canSubmit =
+    ninSettled && address.trim().length > 0 && coverage.trim() !== '' && base !== null;
 
   async function submit() {
     setBusy(true);
@@ -321,6 +330,10 @@ export function RealtorProfileStep({
         .map((s) => s.trim())
         .filter(Boolean)
         .forEach((state) => form.append('coverage_states', state));
+      if (base) {
+        form.append('base_lat', String(base.lat));
+        form.append('base_lng', String(base.lng));
+      }
 
       const resp = await fetch('/api/realtor/onboarding', { method: 'POST', body: form });
       if (!resp.ok) {
@@ -328,7 +341,9 @@ export function RealtorProfileStep({
         setError(
           b.error_code === 'COVERAGE_REQUIRED'
             ? 'Name at least one area you cover.'
-            : 'Could not submit your profile. Please retry.',
+            : b.error_code === 'LOCATION_OUTSIDE_NIGERIA'
+              ? 'Your base location must be in Nigeria. Pick your area instead.'
+              : 'Could not submit your profile. Please retry.',
         );
         return;
       }
@@ -392,6 +407,22 @@ export function RealtorProfileStep({
           />
           <p className="mt-3 text-[15px] leading-5 text-ink-500">
             Areas where you provide services
+          </p>
+        </div>
+
+        <div className="mt-9">
+          <FieldLabel htmlFor="realtor-base-state" required>
+            Base Location
+          </FieldLabel>
+          <BaseLocationPicker
+            idPrefix="realtor-base"
+            value={base}
+            onChange={setBase}
+            controlClassName={CONTROL}
+            disabled={busy}
+          />
+          <p className="mt-3 text-[15px] leading-5 text-ink-500">
+            Where you usually work from. We offer you inspections within 50 km of it.
           </p>
         </div>
 

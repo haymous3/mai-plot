@@ -94,6 +94,27 @@ export default async function RealtorOverviewPage() {
             </div>
           )}
 
+          {/* SCRUM-214 — without a base, proximity assignment and automatic
+              reassignment never pick this realtor. Only on a profile we could
+              read AND that has no base: a failed read shows nothing. */}
+          {profile && profile.base_lat === null && (
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-card-sm border border-pending-200 bg-pending-50 px-5 py-4">
+              <div className="text-sm text-pending-700">
+                <p className="font-semibold">Set your base location</p>
+                <p className="mt-1">
+                  We offer inspections to realtors within 50 km of the property. Without a base
+                  location, you won&apos;t be matched automatically.
+                </p>
+              </div>
+              <Link
+                href="/realtor/profile#base-location"
+                className="rounded-lg bg-emerald-deep px-4 py-2 text-sm font-semibold text-bone transition hover:bg-emerald-accent"
+              >
+                Set base location
+              </Link>
+            </div>
+          )}
+
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard tone="pending" value={String(counts.awaiting)} label="Pending Inspections" />
             <StatCard tone="done" value={String(counts.completed)} label="Completed Inspections" />

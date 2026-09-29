@@ -725,6 +725,9 @@ export interface RealtorProfile {
   coverage_lgas: string[];
   completed_deals: number;
   approval_status: string;
+  /** Where proximity assignment searches from (SCRUM-214); null until set. */
+  base_lat: number | null;
+  base_lng: number | null;
 }
 
 /** A row in the in-app notification centre (GET /notifications, SCRUM-82). */

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { RealtorHeader } from '../realtor-header';
+import { BaseLocationEditor } from './base-location-editor';
 import { PayoutAccountForm } from '@/app/_components/payout-account-form';
 import type { RealtorProfile } from '@/lib/api';
 import { authServiceUrl, realtorServiceUrl } from '@/lib/api';
@@ -125,6 +126,27 @@ export default async function RealtorProfilePage() {
 
           <Chips label="States" values={profile.coverage_states} />
           <Chips label="LGAs" values={profile.coverage_lgas} />
+        </section>
+
+        {/* SCRUM-214 — where proximity assignment searches from. Anchored
+            #base-location: the dashboard nudge links here. */}
+        <section
+          id="base-location"
+          className="scroll-mt-8 rounded-card-sm border border-line bg-surface-card p-6"
+        >
+          <h2 className="font-display text-lg text-ink-900">Base location</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            Where you usually work from. We offer you inspections within 50 km of it.
+          </p>
+          <div className="mt-4">
+            <BaseLocationEditor
+              initial={
+                profile.base_lat !== null && profile.base_lng !== null
+                  ? { lat: profile.base_lat, lng: profile.base_lng }
+                  : null
+              }
+            />
+          </div>
         </section>
 
         {/* SCRUM-223 — where commission is paid. On Profile rather than a new
