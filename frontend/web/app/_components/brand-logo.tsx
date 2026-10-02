@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 
 import logo from '@/public/brand/logo.png';
 import logoOnDark from '@/public/brand/logo-on-dark.png';
@@ -35,6 +36,12 @@ import markOnDark from '@/public/brand/mark-on-dark.png';
  * ⚠️ PALETTE. The logo is navy + gold; the app is emerald green, measured off
  * the Figma exports. This component only places the mark — reconciling the two
  * is a design decision, not something to bury in a branding sweep.
+ *
+ * LINK — SCRUM-238. Every logo links to the landing page (`/`) by default, so
+ * a new placement cannot forget to. `/` renders the landing page for every
+ * visitor, signed in or not, so the click never bounces. Pass `href={null}`
+ * only where the logo already sits inside another link or button — nested
+ * interactive elements are invalid HTML.
  */
 export function BrandLogo({
   tone = 'light',
@@ -42,6 +49,7 @@ export function BrandLogo({
   height = 28,
   priority = false,
   className,
+  href = '/',
 }: {
   /** The surface the logo sits on — `dark` swaps the navy for bone. */
   tone?: 'light' | 'dark';
@@ -52,6 +60,8 @@ export function BrandLogo({
   /** Above-the-fold placements (navs, auth panels) should not lazy-load. */
   priority?: boolean;
   className?: string;
+  /** Where a click goes; `null` renders the bare image. */
+  href?: string | null;
 }) {
   const src =
     variant === 'mark'
@@ -62,7 +72,7 @@ export function BrandLogo({
         ? logoOnDark
         : logo;
   const width = Math.round((height * src.width) / src.height);
-  return (
+  const image = (
     <Image
       src={src}
       alt="Maihomme"
@@ -70,7 +80,15 @@ export function BrandLogo({
       width={width}
       priority={priority}
       unoptimized
-      className={className}
+      className={href === null ? className : undefined}
     />
+  );
+  if (href === null) return image;
+  // The image keeps alt="Maihomme" so the link's accessible name is the brand;
+  // `title` tells mouse users where the click goes.
+  return (
+    <Link href={href} title="Maihomme home" className={`inline-flex flex-none items-center ${className ?? ''}`}>
+      {image}
+    </Link>
   );
 }

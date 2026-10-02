@@ -80,9 +80,7 @@ export function Nav() {
       }`}
     >
       <div className="mx-auto flex h-18 w-full max-w-[1280px] items-center justify-between px-8">
-        <Link href="/" className="flex items-center text-white" aria-label="Maihomme home">
-          <BrandLogo variant="mark" tone="dark" height={30} priority />
-        </Link>
+        <BrandLogo variant="mark" tone="dark" height={30} priority />
 
         <nav aria-label="Primary" className="hidden lg:block">
           <ul className="flex items-center gap-8">
