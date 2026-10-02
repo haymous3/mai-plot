@@ -1,8 +1,5 @@
-import Link from 'next/link';
-
 import { AvatarMenu } from './avatar-menu';
 import { NotificationBell } from './notification-bell';
-import { BUYER_HOME } from '@/lib/buyer-auth';
 import { BrandLogo } from '@/app/_components/brand-logo';
 
 function greeting(): string {
@@ -36,9 +33,9 @@ export function BuyerNav() {
           Postgres user/database, container and package names, the `mai-plot`
           repo — deliberately keep the old name. SCRUM-230 replaced the typed
           wordmark with the designer's logo; the name it spells is the same. */}
-      <Link href={BUYER_HOME} className="flex items-center" aria-label="Maihomme home">
-        <BrandLogo tone="dark" height={28} priority />
-      </Link>
+      {/* SCRUM-238: the logo goes to the landing page, not the dashboard —
+          the Account menu is the way back to the dashboard. */}
+      <BrandLogo tone="dark" height={28} priority />
       <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">
         {greeting()}
       </p>
