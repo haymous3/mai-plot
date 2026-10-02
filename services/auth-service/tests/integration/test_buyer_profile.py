@@ -119,6 +119,45 @@ async def test_non_buyer_forbidden(
     assert_error_envelope(resp.json(), "BUYER_ROLE_REQUIRED")
 
 
+# The exact values the onboarding + Settings dropdowns send (SCRUM-240).
+FRONTEND_EMPLOYMENT_OPTIONS = [
+    "employed",
+    "self_employed",
+    "business_owner",
+    "retired",
+    "student",
+    "other",
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("employment_status", FRONTEND_EMPLOYMENT_OPTIONS)
+async def test_every_frontend_employment_option_is_accepted(
+    employment_status: str,
+    clean_auth_tables: None,
+    disable_rate_limit: None,
+    sms_fake: InMemoryTwilioClient,
+    http_client: AsyncClient,
+    db_engine: Engine,
+) -> None:
+    token, user_id = await _register_verify_token(
+        http_client, sms_fake, phone="08012345678", role="buyer"
+    )
+    resp = await http_client.post(
+        "/auth/buyer/profile",
+        json={"employment_status": employment_status},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT employment_status FROM buyer_profiles WHERE user_id = :u"),
+            {"u": user_id},
+        ).one()
+    assert row.employment_status == employment_status
+
+
 @pytest.mark.asyncio
 async def test_invalid_employment_status_is_422(
     clean_auth_tables: None,
