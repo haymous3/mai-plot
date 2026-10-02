@@ -452,8 +452,20 @@ class SellerPoaStatusResponse(BaseModel):
     can_publish: bool
 
 
-# Mirrors the loan-service employment values so the two stay consistent.
-EmploymentStatus = Literal["employed", "self_employed", "business_owner", "unemployed"]
+# Every option the buyer onboarding + Settings dropdowns offer (EMPLOYMENT in
+# buyer-steps.tsx / settings/tabs.tsx) MUST be listed here, or picking it 422s
+# and the buyer cannot finish registering (SCRUM-240: retired/student/other
+# did). Deliberately a superset of loan-service's list — the loan wizard asks
+# its own question; "unemployed" stays so previously-saved rows remain valid.
+EmploymentStatus = Literal[
+    "employed",
+    "self_employed",
+    "business_owner",
+    "unemployed",
+    "retired",
+    "student",
+    "other",
+]
 
 
 class BuyerProfileRequest(BaseModel):
