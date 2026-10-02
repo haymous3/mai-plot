@@ -1,6 +1,9 @@
 import { AvatarMenu } from './avatar-menu';
 import { NotificationBell } from './notification-bell';
 import { BrandLogo } from '@/app/_components/brand-logo';
+import { authServiceUrl } from '@/lib/api';
+import { buyerBackendGet } from '@/lib/buyer-server-api';
+import type { Account } from '@/lib/settings';
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -22,7 +25,14 @@ function greeting(): string {
  * The greeting is centred absolutely rather than by `justify-between`, which
  * only centres it when both flanking groups happen to be the same width.
  */
-export function BuyerNav() {
+export async function BuyerNav() {
+  // SCRUM-240: the account photo in the header. Read per render because
+  // `avatar_url` is a 15-minute pre-signed URL, never a durable link. A failed
+  // read is not worth breaking the header over — the menu falls back to the
+  // generic glyph.
+  const me = await buyerBackendGet<Account>(`${authServiceUrl()}/auth/me`);
+  const account = me.ok ? me.data : null;
+
   return (
     <header className="relative flex h-18 items-center justify-between border-b border-line bg-brand-header px-11">
       {/* The design was inconsistent here — "MaiHome" in 5 buyer export
@@ -41,7 +51,7 @@ export function BuyerNav() {
       </p>
       <div className="flex items-center gap-1.5">
         <NotificationBell />
-        <AvatarMenu />
+        <AvatarMenu avatarUrl={account?.avatar_url ?? null} name={account?.full_name ?? ''} />
       </div>
     </header>
   );
