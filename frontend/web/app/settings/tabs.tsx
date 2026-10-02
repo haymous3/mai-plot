@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import {
@@ -135,12 +136,21 @@ const PinIcon = () => (
  * object URL first: the server is the only thing that decides whether the file
  * is acceptable (it sniffs magic bytes), so showing an optimistic preview would
  * mean rendering an image that may be rejected a moment later.
+ *
+ * SCRUM-240: there is no Save button — the photo is saved the moment it is
+ * picked — so a "Photo saved" note says so. And after every change the
+ * router cache is dropped (`router.refresh()`): Next 14 reuses a visited
+ * page's server render for 30s, and always on Back, so returning to Settings
+ * (or the header) showed the copy rendered BEFORE the upload — the photo
+ * looked unsaved even though the server had it.
  */
 function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: string }) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState(initialUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
 
   const initials =
     name
@@ -153,6 +163,7 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
   async function upload(file: File) {
     setBusy(true);
     setError(null);
+    setSaved(null);
     try {
       const form = new FormData();
       form.append('file', file);
@@ -172,6 +183,8 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
         return;
       }
       setUrl(body.avatar_url ?? null);
+      setSaved('Photo saved.');
+      router.refresh();
     } catch {
       setError('Could not reach the server. Please try again.');
     } finally {
@@ -184,6 +197,7 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
   async function remove() {
     setBusy(true);
     setError(null);
+    setSaved(null);
     try {
       const resp = await fetch('/api/auth/avatar', { method: 'DELETE' });
       if (!resp.ok) {
@@ -191,6 +205,8 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
         return;
       }
       setUrl(null);
+      setSaved('Photo removed.');
+      router.refresh();
     } catch {
       setError('Could not reach the server. Please try again.');
     } finally {
@@ -249,6 +265,7 @@ function AvatarField({ initialUrl, name }: { initialUrl: string | null; name: st
           </button>
         )}
         {error && <StatusNote tone="error">{error}</StatusNote>}
+        {saved && !busy && <StatusNote tone="ok">{saved}</StatusNote>}
       </div>
     </div>
   );

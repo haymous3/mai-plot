@@ -6,6 +6,15 @@ import { useEffect, useRef, useState } from 'react';
 
 import { AccountSwitch } from '@/app/_components/account-switch';
 
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 /**
  * Header avatar menu (SCRUM-95): My Offers / My Wallet / Settings / Sign Out.
  *
@@ -14,8 +23,11 @@ import { AccountSwitch } from '@/app/_components/account-switch';
  * hover opened it and the click that followed CLOSED it again. Hover is gone;
  * one click (anywhere on the trigger) opens, a second click, a click outside
  * or Escape closes.
+ *
+ * SCRUM-240: shows the account's profile photo when one is set (initials when
+ * not). The URL is a short-lived pre-signed link minted by the server render.
  */
-export function AvatarMenu() {
+export function AvatarMenu({ avatarUrl, name }: { avatarUrl: string | null; name: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,8 +72,14 @@ export function AvatarMenu() {
           open ? 'bg-white/10' : ''
         }`}
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-deep text-sm font-semibold text-white">
-          👤
+        <span className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-emerald-deep text-xs font-semibold text-white">
+          {avatarUrl ? (
+            // Pre-signed S3 URL — not next/image (see AvatarField in settings).
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initialsOf(name) || '👤'
+          )}
         </span>
         <span className="text-left text-xs leading-tight">
           <span className="block font-medium">Account</span>
