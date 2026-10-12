@@ -690,21 +690,23 @@ export function FinalCta() {
             {/* Matches the hero pair (SCRUM-204). Both bands are the page's
                 call to act, so offering different actions in each was asking
                 the same visitor two different questions. Hrefs and icons moved
-                with the labels, same as the hero. */}
+                with the labels, same as the hero.
+                SCRUM-243: follows the hero's SCRUM-241 swap — Register leads in
+                gold, Log in follows in outline — so the pair still matches. */}
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
               <Link
-                href="/login"
+                href="/register"
                 className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
               >
-                <LockIcon className="h-5 w-5" />
-                Sign In
+                <ArrowRightIcon className="h-5 w-5" />
+                Register
               </Link>
               <Link
-                href="/register"
+                href="/login"
                 className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
               >
-                <ArrowRightIcon className="h-5 w-5" />
-                Sign Up
+                <LockIcon className="h-5 w-5" />
+                Log in
               </Link>
             </div>
           </Reveal>
