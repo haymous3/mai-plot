@@ -58,6 +58,14 @@ export function SellerNav() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-4 pt-4">
+        {/* SCRUM-236: the way back to buying, on the same sign-in. SCRUM-242
+            moved it here from the bottom group so it is the first thing in the
+            rail. The row is reserved (min-h-11 = one button) because the
+            switch renders nothing until /auth/me answers — without it every
+            nav item would jump down 44px a moment after load. */}
+        <div className="mb-3 min-h-11">
+          <AccountSwitch current="seller" variant="rail" />
+        </div>
         {NAV.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (
@@ -73,8 +81,6 @@ export function SellerNav() {
 
       {/* Settings + Logout pinned to the bottom behind a top rule — node 276:421. */}
       <div className="flex flex-none flex-col gap-2 border-t border-line px-4 py-4">
-        {/* SCRUM-236: the way back to buying, on the same sign-in. */}
-        <AccountSwitch current="seller" variant="rail" />
         {/*
           `/settings`, not `/seller/settings` — the latter never existed and
           this link 404'd from SCRUM-98 until SCRUM-193. Settings is one screen
