@@ -59,6 +59,16 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             Nigeria&apos;s Most Trusted Property Platform
           </p>
 
+          {/* SCRUM-241: the product promise, set as an eyebrow above the H1
+              rather than in it — the headline and its measured pitch stay
+              as drawn. Shares the H1's stagger slot so the two arrive as one. */}
+          <p
+            className="animate-enter-up mt-8 text-sm font-semibold uppercase leading-5 tracking-[0.18em] text-status-gold"
+            style={{ animationDelay: `${staggerDelayMs(1)}ms` }}
+          >
+            Zero Contact Property Purchase
+          </p>
+
           {/*
             Arbitrary font sizes, not `text-5xl`/`text-6xl`. Tailwind's named
             scale steps set font-size AND line-height, and the `sm:` variant is
@@ -67,7 +77,7 @@ export function Hero({ featured }: { featured?: FeedItem }) {
             line-height, so the measured 70px pitch survives.
           */}
           <h1
-            className="animate-enter-up mt-8 max-w-[520px] font-display text-[40px] font-bold leading-[1.16] sm:text-[52px] lg:text-[60px]"
+            className="animate-enter-up mt-3 max-w-[520px] font-display text-[40px] font-bold leading-[1.16] sm:text-[52px] lg:text-[60px]"
             style={{ animationDelay: `${staggerDelayMs(1)}ms` }}
           >
             Own Your Dream Property,{' '}
@@ -87,6 +97,9 @@ export function Hero({ featured }: { featured?: FeedItem }) {
           >
             Maihomme connects buyers, sellers, and agents on a verified, escrow-secured platform —
             with financing up to 50% through partner banks.
+            <span className="mt-3 block font-semibold text-white">
+              Maihomme helps you buy and sell without moving an inch.
+            </span>
           </p>
 
           <div
@@ -98,20 +111,23 @@ export function Hero({ featured }: { featured?: FeedItem }) {
                 labels — a button reading "Sign In" that opened a property feed
                 would be the worse half of the change. The icons moved too: a
                 magnifying glass beside "Sign In" was left over from the search
-                CTA it replaced. */}
-            <Link
-              href="/login"
-              className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
-            >
-              <LockIcon className="h-5 w-5" />
-              Sign In
-            </Link>
+                CTA it replaced.
+                SCRUM-241: Register now leads as the gold primary — the landing
+                page exists to win new users — and Log in follows in outline.
+                Same rule as above: href and icon travel with the label. */}
             <Link
               href="/register"
-              className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
+              className="inline-flex h-14 items-center gap-2.5 rounded-xl bg-status-gold px-7 text-base font-semibold text-white transition hover:brightness-105"
             >
               <ArrowRightIcon className="h-5 w-5" />
-              Sign Up
+              Register
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 px-7 text-base font-semibold text-white transition hover:bg-white/15"
+            >
+              <LockIcon className="h-5 w-5" />
+              Log in
             </Link>
           </div>
 
