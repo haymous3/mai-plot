@@ -68,8 +68,8 @@ export function PoaTable({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               <th className="px-5 py-3 font-medium">Document owner</th>
@@ -85,8 +85,8 @@ export function PoaTable({
               return (
                 <tr key={item.user_id} className="border-b border-ink-300/20 last:border-0">
                   <td className="px-5 py-4 font-medium text-ink-900">{item.owner_name ?? '—'}</td>
-                  <td className="px-5 py-4 text-ink-500">{formatDate(item.submitted_at)}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="Submitted" className="px-5 py-4 text-ink-500">{formatDate(item.submitted_at)}</td>
+                  <td data-label="SLA" className="px-5 py-4">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         sla.overdue
@@ -99,7 +99,7 @@ export function PoaTable({
                       {sla.label}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td data-cell="actions" className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => setViewing(item)}

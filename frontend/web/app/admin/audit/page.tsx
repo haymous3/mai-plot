@@ -98,8 +98,8 @@ function short(id: string | null): string {
 
 function AuditTable({ items }: { items: AuditLogEntry[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+      <table className="stack-table w-full text-sm">
         <thead>
           <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
             <th className="px-5 py-3 font-medium">Time (UTC)</th>
@@ -116,23 +116,23 @@ function AuditTable({ items }: { items: AuditLogEntry[] }) {
               <td className="whitespace-nowrap px-5 py-4 text-ink-500">
                 {formatDateTime(item.created_at)}
               </td>
-              <td className="px-5 py-4">
+              <td data-label="Actor" className="px-5 py-4">
                 <span className="text-ink-900">{item.actor_role ?? '—'}</span>
                 {item.actor_id && (
                   <span className="ml-1 font-mono text-xs text-ink-300">{short(item.actor_id)}</span>
                 )}
               </td>
-              <td className="px-5 py-4">
+              <td data-label="Action" className="px-5 py-4">
                 <span className="rounded bg-ink-900/5 px-1.5 py-0.5 font-mono text-xs text-ink-900">
                   {item.action}
                 </span>
               </td>
-              <td className="px-5 py-4 text-ink-500">
+              <td data-label="Entity" className="px-5 py-4 text-ink-500">
                 {item.entity_type}
                 <span className="ml-1 font-mono text-xs text-ink-300">{short(item.entity_id)}</span>
               </td>
-              <td className="px-5 py-4 font-mono text-xs text-ink-500">{item.ip_address ?? '—'}</td>
-              <td className="px-5 py-4">
+              <td data-label="IP" className="px-5 py-4 font-mono text-xs text-ink-500">{item.ip_address ?? '—'}</td>
+              <td data-label="Changes" data-stack className="px-5 py-4">
                 {item.old_value || item.new_value ? (
                   <details className="text-xs">
                     <summary className="cursor-pointer text-emerald-deep">view</summary>

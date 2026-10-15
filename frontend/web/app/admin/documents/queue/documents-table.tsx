@@ -80,8 +80,8 @@ export function DocumentsTable({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               <th className="px-5 py-3 font-medium">Document</th>
@@ -107,11 +107,11 @@ export function DocumentsTable({
                     )}
                     {size && <span className="ml-2 text-xs text-ink-300">{size}</span>}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">
+                  <td data-label={source === 'personal' ? 'Owner' : 'Listing'} className="px-5 py-4 text-ink-500">
                     {describeOwner(item)}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="Uploaded" className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
+                  <td data-cell="actions" className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => setViewing(item)}

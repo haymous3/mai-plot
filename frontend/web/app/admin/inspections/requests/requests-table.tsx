@@ -95,8 +95,8 @@ export function RequestsTable({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               <th className="px-5 py-3 font-medium">Property</th>
@@ -123,15 +123,15 @@ export function RequestsTable({
                       </p>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">{formatDateTime(item.proposed_date)}</td>
-                  <td className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
-                  <td className="px-5 py-4 text-xs text-ink-500">
+                  <td data-label="Requested for" className="px-5 py-4 text-ink-500">{formatDateTime(item.proposed_date)}</td>
+                  <td data-label="Waiting since" className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
+                  <td data-label="Parties" className="px-5 py-4 text-xs text-ink-500">
                     {/* Identity is masked until a deal is accepted (§10), so the
                         queue shows references rather than names. */}
                     <span className="font-mono">{item.buyer_ref}</span> ·{' '}
                     <span className="font-mono">{item.seller_ref}</span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td data-label="Assign to" data-stack className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <label className="sr-only" htmlFor={`realtor-${item.id}`}>
                         Realtor for {item.property_title ?? 'this request'}

@@ -126,3 +126,87 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Stacked tables — SCRUM-244
+ *
+ * Below md, a `<table class="stack-table">` renders each row as a card and
+ * each cell as a "LABEL  value" line, the label coming from the cell's
+ * `data-label`. One markup for both layouts — no second card component to
+ * drift out of sync with the table.
+ *
+ *   <td>                      no data-label: the card's heading line (title)
+ *   <td data-label="Price">   label left, value right
+ *   <td data-label=… data-stack>  label ABOVE the value (long or interactive
+ *                             content: audit diffs, the assign-realtor form)
+ *   <td data-cell="actions">  full-width button row at the foot of the card
+ *
+ * Outside every @layer for the same reason as the motion rules above: these
+ * selectors are attributes, which Tailwind cannot match and would purge.
+ * Child combinators throughout, so a table nested in a cell (the loan
+ * repayment schedule) keeps its own table layout.
+ *
+ * ⚠️ Screen readers: below md the header row is visually hidden rather than
+ * removed, and the ::before labels are announced by current NVDA/VoiceOver,
+ * but `display:block` drops table semantics in some engines. Acceptable for
+ * an admin console; revisit if this lands on a buyer-facing table.
+ * ------------------------------------------------------------------ */
+@media (max-width: 767.98px) {
+  table.stack-table {
+    min-width: 0; /* the realtor tables carry min-w-[900px] for the scroll layout */
+  }
+  .stack-table > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .stack-table,
+  .stack-table > tbody,
+  .stack-table > tbody > tr,
+  .stack-table > tbody > tr > td {
+    display: block;
+    width: 100%;
+  }
+  .stack-table > tbody > tr {
+    padding: 1rem 1.25rem;
+  }
+  .stack-table > tbody > tr > td {
+    padding: 0.25rem 0;
+    text-align: left;
+    white-space: normal;
+  }
+  .stack-table > tbody > tr > td:not([data-label]):first-child {
+    padding-bottom: 0.5rem;
+  }
+  .stack-table > tbody > tr > td[data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    text-align: right;
+  }
+  .stack-table > tbody > tr > td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: theme('colors.ink.500');
+  }
+  .stack-table > tbody > tr > td[data-stack] {
+    display: block;
+    text-align: left;
+  }
+  .stack-table > tbody > tr > td[data-stack]::before {
+    display: block;
+    margin-bottom: 0.375rem;
+  }
+  .stack-table > tbody > tr > td[data-cell='actions'] {
+    padding-top: 0.75rem;
+  }
+}
