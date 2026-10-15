@@ -216,7 +216,7 @@ export function BuyerProfileStep({
           offering something the submit path no longer honours.
         */}
         <div className="mt-12 flex items-center justify-end gap-6">
-          <div className="w-[320px]">
+          <div className="w-full sm:w-[320px]">
             <PrimaryButton disabled={busy || !canSubmit} onClick={() => void submit()}>
               {busy ? 'Saving…' : 'Complete Profile'}
             </PrimaryButton>

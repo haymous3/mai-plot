@@ -36,7 +36,7 @@ export default async function PoaQueuePage({
     <div className="flex min-h-screen bg-bone">
       <AdminNav active="poa" count={result.ok ? result.data.pagination.total : null} />
 
-      <main className="mx-auto min-w-0 flex-1 max-w-6xl px-6 py-12">
+      <main className="mx-auto min-w-0 flex-1 max-w-6xl px-4 sm:px-6 py-12">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-300">Legal team</p>
         <h1 className="mt-2 font-display text-3xl text-ink-900">
           Power-of-Attorney review

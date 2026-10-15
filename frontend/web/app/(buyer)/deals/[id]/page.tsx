@@ -39,7 +39,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
   const escrowSecured = ['payment_held', 'title_held', 'completed'].includes(s.stage);
 
   return (
-    <main className="mx-auto max-w-5xl px-11 py-6">
+    <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-11 py-6">
       <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-buyer">
         ← Back
       </Link>

@@ -33,7 +33,7 @@ export default async function RealtorProfilePage() {
   // showing an empty profile.
   if (!res.ok && res.status === 404) {
     return (
-      <main className="mx-auto max-w-3xl px-8 py-8">
+      <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
         <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
         <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-10 text-center text-sm text-amber-800">
           <p className="font-medium">You haven&rsquo;t completed your realtor profile yet.</p>
@@ -50,7 +50,7 @@ export default async function RealtorProfilePage() {
 
   if (!res.ok) {
     return (
-      <main className="mx-auto max-w-3xl px-8 py-8">
+      <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
         <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
         <div className="mt-8 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
           Could not load your profile. Please retry.
@@ -67,7 +67,7 @@ export default async function RealtorProfilePage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-8 py-8">
+    <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
       <RealtorHeader title="Profile" subtitle="Your realtor profile and coverage" />
 
       <div className="mt-6 space-y-6">

@@ -75,7 +75,7 @@ export default async function RealtorOverviewPage() {
   return (
     <div className="flex items-start">
       <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-[896px] px-8 py-8">
+        <div className="mx-auto max-w-[896px] px-4 sm:px-6 lg:px-8 py-8">
           <h1 className="text-3xl font-bold leading-9 text-ink-900">Dashboard Overview</h1>
           <p className="mt-2 text-base leading-6 text-ink-600">
             Manage inspections, verify properties, and track your earnings

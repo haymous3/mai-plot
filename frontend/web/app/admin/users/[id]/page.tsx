@@ -44,7 +44,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
     return (
       <div className="flex min-h-screen bg-bone">
         <AdminNav active="users" count={null} />
-        <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">
+        <main className="mx-auto min-w-0 flex-1 max-w-3xl px-4 sm:px-6 py-12">
           <BackLink />
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-6 py-10 text-center text-sm text-amber-800">
             {message}
@@ -61,7 +61,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
     <div className="flex min-h-screen bg-bone">
       <AdminNav active="users" count={null} />
 
-      <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">
+      <main className="mx-auto min-w-0 flex-1 max-w-3xl px-4 sm:px-6 py-12">
         <BackLink />
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-3">

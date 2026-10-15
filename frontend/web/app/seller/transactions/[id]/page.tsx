@@ -36,7 +36,7 @@ export default async function SellerTransactionDetailPage({ params }: { params: 
   const realtor = realtorRes.ok && realtorRes.data.assigned ? realtorRes.data : null;
 
   return (
-    <main className="mx-auto max-w-3xl px-8 py-8">
+    <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
       <Link href="/seller/transactions" className="text-sm text-ink-500 hover:text-ink-800">
         ← Back to Transactions
       </Link>

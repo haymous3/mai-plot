@@ -27,7 +27,7 @@ export default async function SellerPayoutsPage() {
   const payout = await readPayoutAccount();
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
       <div>
         <h1 className="font-display text-3xl text-emerald-deep">Payout Account</h1>
         <p className="mt-1 text-sm text-ink-500">Where your sale proceeds are paid</p>

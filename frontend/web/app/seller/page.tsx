@@ -49,7 +49,7 @@ export default async function SellerOverviewPage() {
   const activity = buildActivity(offers, sales, docs);
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
       <SellerHeader title="Dashboard Overview" subtitle="Welcome back" />
       <PayoutNudge
         payout={payout}

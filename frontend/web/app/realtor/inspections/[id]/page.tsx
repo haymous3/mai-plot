@@ -29,7 +29,7 @@ export default async function InspectionDetailPage({ params }: { params: { id: s
 
   if (!res.ok) {
     return (
-      <main className="mx-auto max-w-[1088px] px-8 py-8">
+      <main className="mx-auto max-w-[1088px] px-4 sm:px-6 lg:px-8 py-8">
         <BackLink />
         <div className="mt-8 rounded-card-sm border border-status-danger/30 bg-distress-100 px-6 py-10 text-center text-sm text-distress-700">
           Could not load this inspection. Please retry.
@@ -45,7 +45,7 @@ export default async function InspectionDetailPage({ params }: { params: { id: s
   const scheduledAt = insp.confirmed_date ?? insp.proposed_date;
 
   return (
-    <main className="mx-auto max-w-[1088px] px-8 py-8">
+    <main className="mx-auto max-w-[1088px] px-4 sm:px-6 lg:px-8 py-8">
       <BackLink />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">

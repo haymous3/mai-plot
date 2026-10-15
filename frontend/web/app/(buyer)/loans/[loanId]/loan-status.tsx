@@ -39,7 +39,7 @@ export function LoanStatus({ initial }: { initial: LoanDetail }) {
 
   return (
     <div>
-      <header className="flex items-center justify-between border-b border-line bg-surface-card px-11 py-4">
+      <header className="flex items-center justify-between border-b border-line bg-surface-card px-4 sm:px-6 lg:px-11 py-4">
         <Link href="/dashboard" className="text-sm text-ink-500 transition hover:text-ink-buyer">
           ⌂ Dashboard
         </Link>
@@ -47,7 +47,7 @@ export function LoanStatus({ initial }: { initial: LoanDetail }) {
         <span className="w-16" />
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-5 px-11 py-8">
+      <main className="mx-auto max-w-3xl space-y-5 px-4 sm:px-6 lg:px-11 py-8">
         {isPending(loan.status) ? (
           <PendingView loan={loan} />
         ) : loan.status === 'rejected' ? (

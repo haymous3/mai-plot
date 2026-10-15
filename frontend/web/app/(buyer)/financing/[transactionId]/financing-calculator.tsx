@@ -67,7 +67,7 @@ export function FinancingCalculator({
 
   return (
     <div>
-      <header className="border-b border-line bg-surface-card px-11 py-4">
+      <header className="border-b border-line bg-surface-card px-4 sm:px-6 lg:px-11 py-4">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-deep text-bone">
             <WalletIcon />
@@ -79,10 +79,10 @@ export function FinancingCalculator({
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           {/* Property summary */}
-          <section className="rounded-card border border-line/50 bg-surface-card p-8">
+          <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
             <h2 className="font-display text-lg text-ink-buyer">Property Summary</h2>
             <div className="mt-4 flex gap-4">
               {summary.property.primary_image_url ? (
@@ -111,7 +111,7 @@ export function FinancingCalculator({
           </section>
 
           {/* Calculator */}
-          <section className="rounded-card border border-line/50 bg-surface-card p-8">
+          <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="font-display text-lg text-ink-buyer">Calculate Your Loan</h2>
@@ -154,7 +154,7 @@ export function FinancingCalculator({
 
             <div className="mt-6">
               <p className="text-sm font-medium text-ink-700">Repayment Period</p>
-              <div className="mt-3 grid grid-cols-4 gap-3">
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {TENURE_OPTIONS.map((t) => {
                   const allowed = allowedTenures.includes(t);
                   const active = t === effectiveTenure;
@@ -180,7 +180,7 @@ export function FinancingCalculator({
               </div>
             </div>
 
-            <dl className="mt-6 grid grid-cols-3 gap-4 rounded-lg bg-bone px-5 py-4">
+            <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 rounded-lg bg-bone px-5 py-4">
               <Stat label="Monthly Payment" value={compactNaira(monthly)} />
               <Stat label="Interest Rate" value={`${bpsToPercent(rateBps)} p.a.`} />
               <Stat label="Total Repayment" value={compactNaira(total)} />
@@ -189,7 +189,7 @@ export function FinancingCalculator({
           </section>
 
           {/* Bank selection */}
-          <section className="rounded-card border border-line/50 bg-surface-card p-8">
+          <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
             <h2 className="font-display text-lg text-ink-buyer">Select Your Bank</h2>
             {partners.length === 0 ? (
               <p className="mt-4 text-sm text-ink-500">No bank partners are available right now.</p>
@@ -264,7 +264,7 @@ export function FinancingCalculator({
             ]}
           />
 
-          <section className="rounded-card border border-line/50 bg-surface-card p-8">
+          <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
             <h3 className="font-medium text-ink-buyer">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
@@ -311,7 +311,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function InfoPanel({ title, items }: { title: string; items: string[] }) {
   return (
-    <section className="rounded-card border border-line/50 bg-surface-card p-8">
+    <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
       <h3 className="flex items-center gap-2 font-medium text-ink-buyer">
         <ShieldIcon /> {title}
       </h3>

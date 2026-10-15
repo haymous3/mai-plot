@@ -27,7 +27,7 @@ export default async function RealtorReportsPage() {
     : [];
 
   return (
-    <main className="mx-auto max-w-[1088px] px-8 py-8">
+    <main className="mx-auto max-w-[1088px] px-4 sm:px-6 lg:px-8 py-8">
       <Link
         href="/realtor"
         className="inline-flex items-center gap-2 text-sm font-medium text-ink-600 transition hover:text-ink-900"
