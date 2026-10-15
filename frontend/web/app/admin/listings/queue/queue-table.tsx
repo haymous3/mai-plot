@@ -75,8 +75,8 @@ export function QueueTable({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               <th className="px-5 py-3 font-medium">Listing</th>
@@ -115,14 +115,14 @@ export function QueueTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-ink-500">
+                  <td data-label="Location" className="px-5 py-4 text-ink-500">
                     {item.lga}, {item.state}
                   </td>
-                  <td className="px-5 py-4 tabular-nums text-ink-900">
+                  <td data-label="Price" className="px-5 py-4 tabular-nums text-ink-900">
                     {formatNaira(item.asking_price_kobo)}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="Submitted" className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
+                  <td data-cell="actions" className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => review(item.id, 'approve')}

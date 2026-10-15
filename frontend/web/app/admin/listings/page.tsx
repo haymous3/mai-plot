@@ -186,7 +186,7 @@ export default async function AdminListingsPage({
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
-              <table className="w-full text-sm">
+              <table className="stack-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
                     <th className="px-5 py-3 font-medium">Property</th>
@@ -233,7 +233,7 @@ export default async function AdminListingsPage({
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Status" className="px-5 py-4">
                         <StatusPill status={item.status} />
                         {item.sale_type === 'distress' && (
                           <p className="mt-1 text-xs text-ink-500">
@@ -241,13 +241,13 @@ export default async function AdminListingsPage({
                           </p>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-ink-500">
+                      <td data-label="Price" className="px-5 py-4 text-ink-500">
                         {formatNaira(item.asking_price_kobo)}
                       </td>
-                      <td className="px-5 py-4 text-xs text-ink-500">
+                      <td data-label="Documents" className="px-5 py-4 text-xs text-ink-500">
                         {item.doc_verification_status.replace(/_/g, ' ')}
                       </td>
-                      <td className="px-5 py-4 text-xs text-ink-500">
+                      <td data-label="Listed" className="px-5 py-4 text-xs text-ink-500">
                         {formatDate(item.created_at)}
                         <p className="mt-0.5 text-ink-300">
                           {item.view_count} views · {item.interest_count} interested

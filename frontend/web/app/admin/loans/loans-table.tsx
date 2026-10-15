@@ -11,8 +11,8 @@ import { formatDate, formatNaira } from '@/lib/format';
  * without expanding. */
 export function LoansTable({ items }: { items: ActiveLoan[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+      <table className="stack-table w-full text-sm">
         <thead>
           <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
             <th className="px-5 py-3 font-medium">Loan</th>
@@ -48,17 +48,17 @@ function LoanRow({ loan }: { loan: ActiveLoan }) {
           <span className="font-mono text-xs text-ink-900">{loan.loan_id.slice(0, 8)}</span>
           <span className="ml-1 text-ink-300">{open ? '▾' : '▸'}</span>
         </td>
-        <td className="px-5 py-4">
+        <td data-label="Status" className="px-5 py-4">
           <StatusBadge status={loan.status} />
         </td>
-        <td className="whitespace-nowrap px-5 py-4 text-ink-900">
+        <td data-label="Amount" className="whitespace-nowrap px-5 py-4 text-ink-900">
           {formatNaira(loan.requested_amount_kobo)}
         </td>
-        <td className="px-5 py-4 text-ink-500">
+        <td data-label="Repaid" className="px-5 py-4 text-ink-500">
           {p.paid_count}/{p.milestone_count}
           <span className="ml-1 text-xs text-ink-300">({formatNaira(p.total_paid_kobo)})</span>
         </td>
-        <td className="px-5 py-4">
+        <td data-label="Overdue" className="px-5 py-4">
           {p.overdue_count > 0 ? (
             <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
               {p.overdue_count}
@@ -67,10 +67,10 @@ function LoanRow({ loan }: { loan: ActiveLoan }) {
             <span className="text-ink-300">—</span>
           )}
         </td>
-        <td className="whitespace-nowrap px-5 py-4 text-ink-500">
+        <td data-label="Next due" className="whitespace-nowrap px-5 py-4 text-ink-500">
           {p.next_due_date ? formatDate(p.next_due_date) : '—'}
         </td>
-        <td className="px-5 py-4">
+        <td data-label="Title" className="px-5 py-4">
           {loan.title_released ? (
             <span className="rounded-full bg-emerald-deep/10 px-2 py-0.5 text-xs font-semibold text-emerald-deep">
               Released

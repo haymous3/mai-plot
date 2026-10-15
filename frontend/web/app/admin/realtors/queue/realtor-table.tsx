@@ -103,8 +103,8 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               {/* Was "ESVARBON licence" — the only identifying column, until
@@ -125,16 +125,16 @@ export function RealtorTable({ items }: { items: RealtorQueueItem[] }) {
                   <td className="px-5 py-4 font-medium text-ink-900">
                     {applicantName(item) ?? 'Name not provided'}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">
+                  <td data-label="Experience" className="px-5 py-4 text-ink-500">
                     {item.years_of_experience === null
                       ? '—'
                       : `${item.years_of_experience} yr${item.years_of_experience === 1 ? '' : 's'}`}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">
+                  <td data-label="Coverage" className="px-5 py-4 text-ink-500">
                     {item.coverage_states.length > 0 ? item.coverage_states.join(', ') : '—'}
                   </td>
-                  <td className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="Applied" className="px-5 py-4 text-ink-500">{formatDate(item.created_at)}</td>
+                  <td data-cell="actions" className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => review(item.id, 'approve')}

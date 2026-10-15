@@ -80,7 +80,7 @@ export function TransactionHistory({ items }: { items: CommissionHistoryItem[] }
 
       <div className="mt-6 overflow-hidden rounded-card-sm border border-line bg-surface-card">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left">
+          <table className="stack-table w-full min-w-[900px] text-left">
             <thead>
               <tr className="border-b border-line bg-surface-page text-sm font-semibold text-ink-900">
                 <th scope="col" className="px-6 py-4">
@@ -133,26 +133,26 @@ function Row({ c }: { c: CommissionHistoryItem }) {
           Commission: <span className="font-mono">{c.commission_id.slice(0, 8).toUpperCase()}</span>
         </p>
       </td>
-      <td className="py-4 pr-6 align-middle text-sm font-medium text-ink-900">
+      <td data-label="Property" className="py-4 pr-6 align-middle text-sm font-medium text-ink-900">
         {c.property_title ?? 'Property deal'}
       </td>
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Date" className="py-4 pr-6 align-middle">
         <p className="flex items-center gap-2 text-sm text-ink-900">
           <CalendarIcon className="h-4 w-4 flex-none text-ink-500" />
           {formatDate(c.created_at)}
         </p>
       </td>
-      <td className="py-4 pr-6 align-middle text-sm font-bold text-ink-900">
+      <td data-label="Amount" className="py-4 pr-6 align-middle text-sm font-bold text-ink-900">
         {formatNaira(c.amount_kobo)}
       </td>
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Status" className="py-4 pr-6 align-middle">
         <span
           className={`inline-flex h-[26px] items-center rounded-full border px-3 text-xs font-medium ${meta.pill}`}
         >
           {meta.label}
         </span>
       </td>
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Payment" className="py-4 pr-6 align-middle">
         {meta.paid && c.disbursed_at ? (
           <>
             <p className="text-sm text-ink-900">Bank Transfer</p>

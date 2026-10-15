@@ -181,8 +181,8 @@ export default async function AdminUsersPage({
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-lg border border-ink-300/30 bg-white">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
+                <table className="stack-table w-full text-sm">
                   <thead>
                     <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
                       <th className="px-5 py-3 font-medium">Name</th>
@@ -211,13 +211,13 @@ export default async function AdminUsersPage({
                             </p>
                           )}
                         </td>
-                        <td className="px-5 py-4 text-ink-500">{user.role}</td>
-                        <td className="px-5 py-4 text-ink-500">
+                        <td data-label="Role" className="px-5 py-4 text-ink-500">{user.role}</td>
+                        <td data-label="Contact" className="px-5 py-4 text-ink-500">
                           <p>{user.email ?? '—'}</p>
                           <p className="text-xs">{user.phone ?? '—'}</p>
                         </td>
-                        <td className="px-5 py-4 text-ink-500">{formatDate(user.created_at)}</td>
-                        <td className="px-5 py-4">
+                        <td data-label="Joined" className="px-5 py-4 text-ink-500">{formatDate(user.created_at)}</td>
+                        <td data-label="Status" className="px-5 py-4">
                           <StatusPill user={user} />
                         </td>
                       </tr>

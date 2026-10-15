@@ -130,7 +130,7 @@ export function ScheduleTable({
       )}
 
       <div className="overflow-x-auto rounded-lg border border-ink-300/30 bg-white">
-        <table className="w-full text-sm">
+        <table className="stack-table w-full text-sm">
           <thead>
             <tr className="border-b border-ink-300/30 text-left text-xs uppercase tracking-wider text-ink-300">
               <th className="px-5 py-3 font-medium">Property</th>
@@ -154,15 +154,15 @@ export function ScheduleTable({
                       Deal opened {formatDate(deal.created_at)}
                     </p>
                   </td>
-                  <td className="px-5 py-4 text-ink-500">{deal.stage.replace(/_/g, ' ')}</td>
-                  <td className="px-5 py-4 text-ink-500">{formatNaira(deal.agreed_price_kobo)}</td>
-                  <td className="px-5 py-4 text-xs text-ink-500">
+                  <td data-label="Stage" className="px-5 py-4 text-ink-500">{deal.stage.replace(/_/g, ' ')}</td>
+                  <td data-label="Price" className="px-5 py-4 text-ink-500">{formatNaira(deal.agreed_price_kobo)}</td>
+                  <td data-label="Parties" className="px-5 py-4 text-xs text-ink-500">
                     {/* Identity is masked from everyone but the counterparties
                         (§10), so the list shows references rather than names. */}
                     <span className="font-mono">{deal.buyer_ref}</span> ·{' '}
                     <span className="font-mono">{deal.seller_ref}</span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td data-label="Send a realtor" data-stack className="px-5 py-4">
                     <div className="flex flex-col items-end gap-2">
                       <label className="sr-only" htmlFor={`date-${deal.id}`}>
                         Inspection date and time for {deal.property_title ?? 'this deal'}

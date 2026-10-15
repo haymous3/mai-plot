@@ -73,7 +73,7 @@ export function InspectionsTable({ items }: { items: RealtorInspection[] }) {
 
       <div className="mt-6 overflow-hidden rounded-card-sm border border-line bg-surface-card">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left">
+          <table className="stack-table w-full min-w-[900px] text-left">
             <thead>
               <tr className="border-b border-line bg-surface-page text-sm font-semibold text-ink-900">
                 <th scope="col" className="px-6 py-4">
@@ -149,7 +149,7 @@ function Row({ insp }: { insp: RealtorInspection }) {
         </div>
       </td>
 
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Location" className="py-4 pr-6 align-middle">
         <div className="flex items-start gap-2">
           <MapPinIcon className="mt-0.5 h-4 w-4 flex-none text-ink-500" />
           <div className="min-w-0">
@@ -159,7 +159,7 @@ function Row({ insp }: { insp: RealtorInspection }) {
         </div>
       </td>
 
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Schedule" className="py-4 pr-6 align-middle">
         <div className="space-y-1">
           <p className="flex items-center gap-2 text-sm text-ink-900">
             <CalendarIcon className="h-4 w-4 flex-none text-ink-500" />
@@ -172,7 +172,7 @@ function Row({ insp }: { insp: RealtorInspection }) {
         </div>
       </td>
 
-      <td className="py-4 pr-6 align-middle text-xs text-ink-600">
+      <td data-label="Reference" className="py-4 pr-6 align-middle text-xs text-ink-600">
         <p>
           ID: <span className="font-mono text-ink-900">{insp.inspection_ref.toUpperCase()}</span>
         </p>
@@ -181,11 +181,11 @@ function Row({ insp }: { insp: RealtorInspection }) {
         </p>
       </td>
 
-      <td className="py-4 pr-6 align-middle">
+      <td data-label="Status" className="py-4 pr-6 align-middle">
         <StatusPill status={insp.status} />
       </td>
 
-      <td className="py-4 pr-6 text-right align-middle">
+      <td data-cell="actions" className="py-4 pr-6 text-right align-middle">
         <Link
           href={`/realtor/inspections/${insp.inspection_id}`}
           className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-emerald-deep px-4 text-sm font-medium text-white transition hover:bg-emerald-accent"
