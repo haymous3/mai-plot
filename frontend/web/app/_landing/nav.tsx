@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 import { BrandLogo } from '@/app/_components/brand-logo';
 
@@ -62,6 +62,10 @@ const LINKS: { label: string; href?: string }[] = [
 
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
+  // SCRUM-244: below `lg` the link list is hidden, and below `md` so is the
+  // realtor sign-in — on a phone the bar offered nothing but Get Started.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
 
   useEffect(() => {
     // Read once on mount as well as on scroll: a reload partway down the page,
@@ -73,13 +77,32 @@ export function Nav() {
     return () => window.removeEventListener('scroll', sync);
   }, []);
 
+  // Esc closes; widening past `lg` (tablet rotation) closes too, because the
+  // inline links take over and an open panel would otherwise linger under them.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const onWide = () => desktop.matches && setMenuOpen(false);
+    document.addEventListener('keydown', onKey);
+    desktop.addEventListener('change', onWide);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      desktop.removeEventListener('change', onWide);
+    };
+  }, [menuOpen]);
+
+  // Every item closes the panel on tap. Route changes alone would not: four of
+  // the five links are same-page `#anchors`, which never change the pathname.
+  const closeMenu = () => setMenuOpen(false);
+
   return (
     <header
       className={`sticky top-0 z-50 bg-emerald-deep transition-shadow duration-300 ${
         scrolled ? 'shadow-lg shadow-black/10 ring-1 ring-white/10' : ''
       }`}
     >
-      <div className="mx-auto flex h-18 w-full max-w-[1280px] items-center justify-between px-8">
+      <div className="mx-auto flex h-18 w-full max-w-[1280px] items-center justify-between px-4 sm:px-8">
         <BrandLogo variant="mark" tone="dark" height={30} priority />
 
         <nav aria-label="Primary" className="hidden lg:block">
@@ -128,8 +151,65 @@ export function Nav() {
           >
             Get Started
           </Link>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-expanded={menuOpen}
+            aria-controls={menuId}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            className="-mr-2 flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:hidden"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-6 w-6" aria-hidden>
+              <path d={menuOpen ? 'M6 6l12 12M18 6L6 18' : 'M4 6h16M4 12h16M4 18h16'} />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Mobile/tablet panel (SCRUM-244). A disclosure under the sticky bar,
+          not a modal: the page stays scrollable and nothing is trapped. Holds
+          everything the bar hides at this width, plus a plain Log in — the
+          hero's Log in has scrolled away by the time someone opens a menu. */}
+      <nav
+        id={menuId}
+        aria-label="Primary"
+        className={`border-t border-white/10 bg-emerald-deep lg:hidden ${menuOpen ? 'block' : 'hidden'}`}
+      >
+        <ul className="mx-auto flex w-full max-w-[1280px] flex-col px-4 py-3 sm:px-8">
+          {LINKS.map(({ label, href }) => (
+            <li key={label}>
+              {href ? (
+                <Link
+                  href={href}
+                  onClick={closeMenu}
+                  className="flex min-h-12 items-center rounded-xl px-3 text-base text-white/90 transition hover:bg-white/10 hover:text-white"
+                >
+                  {label}
+                </Link>
+              ) : (
+                <span className="flex min-h-12 items-center px-3 text-base text-white/50">{label}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-3 border-t border-white/10 px-4 py-4 sm:flex-row sm:px-8">
+          <Link
+            href="/login"
+            onClick={closeMenu}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 sm:flex-1 px-5 text-[15px] font-semibold text-white transition hover:bg-white/10"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/login?role=realtor"
+            onClick={closeMenu}
+            // md:hidden — from md up the bar itself carries this button.
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 sm:flex-1 px-5 text-[15px] font-semibold text-white transition hover:bg-white/10 md:hidden"
+          >
+            Sign in as a realtor
+          </Link>
+        </div>
+      </nav>
     </header>
   );
 }
