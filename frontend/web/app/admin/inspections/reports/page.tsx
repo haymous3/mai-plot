@@ -43,7 +43,7 @@ export default async function ReportQueuePage({
   const forbidden = !result.ok && result.status === 403;
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav
         active="reports"
         count={result.ok && status === 'pending' ? result.data.data.length : null}

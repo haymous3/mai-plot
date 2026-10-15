@@ -55,7 +55,7 @@ export default async function ScheduleInspectionPage({
   const assignable = realtors.ok ? realtors.data.items : [];
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="schedule" count={null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-6xl px-6 py-12">

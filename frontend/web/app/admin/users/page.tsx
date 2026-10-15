@@ -95,7 +95,7 @@ export default async function AdminUsersPage({
   }
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="users" count={result.ok ? total : null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-6xl px-6 py-12">

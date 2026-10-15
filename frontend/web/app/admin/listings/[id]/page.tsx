@@ -43,7 +43,7 @@ export default async function AdminListingDetailPage({ params }: { params: { id:
 
   if (!result.ok) {
     return (
-      <div className="flex min-h-screen bg-bone">
+      <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
         <AdminNav active="listings" count={null} />
         <main className="mx-auto min-w-0 flex-1 max-w-4xl px-6 py-12">
           <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
@@ -60,7 +60,7 @@ export default async function AdminListingDetailPage({ params }: { params: { id:
   const photos = listing.media.filter((m) => m.type === 'photo');
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="listings" count={null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-4xl px-6 py-12">

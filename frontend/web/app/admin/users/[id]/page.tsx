@@ -42,7 +42,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
           ? 'This console is restricted to admin accounts.'
           : `Could not load this account (${result.code}).`;
     return (
-      <div className="flex min-h-screen bg-bone">
+      <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
         <AdminNav active="users" count={null} />
         <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">
           <BackLink />
@@ -58,7 +58,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
   const name = user.full_name?.trim() || 'Name not provided';
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="users" count={null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-3xl px-6 py-12">

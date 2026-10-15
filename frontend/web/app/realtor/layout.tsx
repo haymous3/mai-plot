@@ -30,9 +30,9 @@ export default async function RealtorLayout({ children }: { children: React.Reac
   const pendingCount = res.ok ? countInspections(res.data.data).awaiting : 0;
 
   return (
-    <div className="flex min-h-screen bg-surface-page">
+    <div className="flex min-h-screen flex-col bg-surface-page lg:flex-row">
       <RealtorNav pendingCount={pendingCount} />
-      <div className="flex-1 overflow-x-hidden">{children}</div>
+      <div className="min-w-0 flex-1 overflow-x-hidden">{children}</div>
     </div>
   );
 }
