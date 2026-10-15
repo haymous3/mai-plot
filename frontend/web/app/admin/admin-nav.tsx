@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BrandLogo } from '@/app/_components/brand-logo';
+import { RailShell } from '@/app/_components/rail-shell';
 
 import {
   BanknoteIcon,
@@ -147,10 +148,11 @@ function rowClass(active: boolean): string {
  */
 export function AdminNav({ active, count }: { active: AdminNavKey; count: number | null }) {
   return (
-    // `sticky` + `self-start` + `h-screen`, unlike the seller and realtor rails:
-    // the admin pages are long paginated tables, and a rail that stretched to the
-    // content height would scroll off the top after the first screenful.
-    <aside className="sticky top-0 flex h-screen w-64 flex-none flex-col self-start border-r border-line bg-surface-card">
+    // `sticky` (pinned to the viewport at ≥lg), unlike the seller and realtor
+    // rails: the admin pages are long paginated tables, and a rail that stretched
+    // to the content height would scroll off the top after the first screenful.
+    // Below lg the whole rail — bell included — lives in the drawer (SCRUM-244).
+    <RailShell subtitle="Admin Console" sticky>
       {/* 101px brand block with its own bottom rule, matching the seller and
           realtor rails. The bell lives here because the rail replaced the top
           bar it used to sit in. */}
@@ -215,6 +217,6 @@ export function AdminNav({ active, count }: { active: AdminNavKey; count: number
         <PushToggle />
         <SignOutButton />
       </div>
-    </aside>
+    </RailShell>
   );
 }

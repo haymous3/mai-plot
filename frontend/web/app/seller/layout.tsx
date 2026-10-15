@@ -13,9 +13,9 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
   if (role !== 'seller') redirect(role === 'buyer' ? '/dashboard' : SESSION_LOGIN);
 
   return (
-    <div className="flex min-h-screen bg-[#f7f9f8]">
+    <div className="flex min-h-screen flex-col bg-[#f7f9f8] lg:flex-row">
       <SellerNav />
-      <div className="flex-1 overflow-x-hidden">{children}</div>
+      <div className="min-w-0 flex-1 overflow-x-hidden">{children}</div>
     </div>
   );
 }

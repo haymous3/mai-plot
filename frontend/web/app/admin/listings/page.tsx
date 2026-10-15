@@ -91,7 +91,7 @@ export default async function AdminListingsPage({
   const pagination = result.ok ? result.data.pagination : null;
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="listings" count={pagination ? pagination.total : null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-6xl px-4 sm:px-6 py-12">

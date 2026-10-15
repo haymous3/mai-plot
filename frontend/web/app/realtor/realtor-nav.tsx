@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import { RealtorSignOut } from './realtor-sign-out';
 import { BrandLogo } from '@/app/_components/brand-logo';
+import { RailShell } from '@/app/_components/rail-shell';
 import { ClipboardIcon, FileTextIcon, HouseIcon, UserIcon, WalletIcon } from './_icons';
 
 const NAV = [
@@ -23,7 +24,7 @@ export function RealtorNav({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-64 flex-none flex-col border-r border-line bg-surface-card">
+    <RailShell subtitle="Realtor Portal">
       <div className="flex h-[101px] flex-none flex-col gap-1 border-b border-line px-6 pt-6">
         <div className="flex h-8 items-center gap-2">
           <BrandLogo height={28} priority />
@@ -63,6 +64,6 @@ export function RealtorNav({ pendingCount = 0 }: { pendingCount?: number }) {
       <div className="flex flex-none flex-col gap-2 border-t border-line px-4 py-4">
         <RealtorSignOut />
       </div>
-    </aside>
+    </RailShell>
   );
 }

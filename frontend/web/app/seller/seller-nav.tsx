@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { SellerSignOut } from './seller-sign-out';
 import { AccountSwitch } from '@/app/_components/account-switch';
 import { BrandLogo } from '@/app/_components/brand-logo';
+import { RailShell } from '@/app/_components/rail-shell';
 
 const NAV = [
   { href: '/seller', label: 'Dashboard Overview', icon: '🏠', exact: true },
@@ -48,7 +49,7 @@ export function SellerNav() {
     }`;
 
   return (
-    <aside className="flex w-64 flex-none flex-col border-r border-line bg-surface-card">
+    <RailShell subtitle="Seller Dashboard">
       {/* 101px brand block with its own bottom rule — node 276:365. */}
       <div className="flex h-[101px] flex-none flex-col gap-1 border-b border-line px-6 pt-6">
         <div className="flex h-8 items-center gap-2">
@@ -96,6 +97,6 @@ export function SellerNav() {
         </Link>
         <SellerSignOut />
       </div>
-    </aside>
+    </RailShell>
   );
 }

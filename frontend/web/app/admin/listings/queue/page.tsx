@@ -46,7 +46,7 @@ export default async function ListingQueuePage({
   }
 
   return (
-    <div className="flex min-h-screen bg-bone">
+    <div className="flex min-h-screen flex-col bg-bone lg:flex-row">
       <AdminNav active="listing-review" count={result.ok ? result.data.pagination.total : null} />
 
       <main className="mx-auto min-w-0 flex-1 max-w-6xl px-4 sm:px-6 py-12">
