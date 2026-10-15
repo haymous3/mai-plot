@@ -5,7 +5,7 @@ import { RealtorHeader } from './realtor-header';
  * earnings → PR5). */
 export function ComingSoon({ title, subtitle, note }: { title: string; subtitle: string; note: string }) {
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
       <RealtorHeader title={title} subtitle={subtitle} />
       <div className="mt-8 rounded-2xl border border-dashed border-ink-300/50 bg-white/60 px-6 py-16 text-center">
         <p className="text-sm text-ink-500">{note}</p>

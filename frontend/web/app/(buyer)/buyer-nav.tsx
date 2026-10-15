@@ -34,7 +34,7 @@ export async function BuyerNav() {
   const account = me.ok ? me.data : null;
 
   return (
-    <header className="relative flex h-18 items-center justify-between border-b border-line bg-brand-header px-11">
+    <header className="relative flex h-18 items-center justify-between border-b border-line bg-brand-header px-4 sm:px-6 lg:px-11">
       {/* The design was inconsistent here — "MaiHome" in 5 buyer export
           frames, "Maiplot" in 2. Product owner chose "Maihomme" (SCRUM-173),
           confirmed verbatim, and SCRUM-186 swept that name across every

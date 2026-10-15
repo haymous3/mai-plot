@@ -180,7 +180,7 @@ export function ReportWizard({ insp }: { insp: RealtorInspection }) {
   return (
     <div className="flex items-start">
       <div className="min-w-0 flex-1">
-        <div className="mx-auto max-w-[896px] px-8 py-8">
+        <div className="mx-auto max-w-[896px] px-4 sm:px-6 lg:px-8 py-8">
           <Link
             href={`/realtor/inspections/${insp.inspection_id}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-ink-600 transition hover:text-ink-900"
@@ -792,7 +792,7 @@ function ContextRail({
 /** Post-submission confirmation (Figma export 9.png). */
 function SuccessScreen({ insp }: { insp: RealtorInspection }) {
   return (
-    <div className="mx-auto max-w-[672px] px-8 py-16">
+    <div className="mx-auto max-w-[672px] px-4 sm:px-6 lg:px-8 py-16">
       <div className="rounded-card-sm border border-line bg-surface-card p-10 text-center">
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-done-100">
           <CheckCircleIcon className="h-8 w-8 text-done-700" strokeWidth={2} />

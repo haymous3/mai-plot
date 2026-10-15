@@ -118,7 +118,7 @@ export function Welcome({ role, fullName }: { role: string; fullName?: string | 
         </svg>
       </Link>
 
-      <dl className="mt-6 grid grid-cols-3 gap-6">
+      <dl className="mt-6 grid grid-cols-3 gap-3 sm:gap-6">
         {STATS.map((s) => (
           <div key={s.label} className="flex h-28 flex-col items-center justify-center rounded-2xl bg-surface-warm">
             <dd className="text-xl font-bold leading-7 text-emerald-deep">{s.value}</dd>

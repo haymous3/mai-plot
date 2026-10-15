@@ -174,7 +174,7 @@ export function ApplicationWizard({
 
   return (
     <div>
-      <header className="flex items-center justify-between border-b border-line bg-surface-card px-11 py-4">
+      <header className="flex items-center justify-between border-b border-line bg-surface-card px-4 sm:px-6 lg:px-11 py-4">
         <button
           type="button"
           onClick={() => (step > 1 ? setStep(step - 1) : router.push(`/financing/${transactionId}`))}
@@ -186,7 +186,7 @@ export function ApplicationWizard({
         <span className="w-12" />
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           <StepIndicator step={step} />
 
@@ -342,7 +342,7 @@ export function ApplicationWizard({
             </ul>
           </section>
 
-          <section className="rounded-card border border-line/50 bg-surface-card p-8">
+          <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
             <h3 className="font-medium text-ink-buyer">What Happens Next?</h3>
             <ol className="mt-4 space-y-4">
               {[
@@ -378,7 +378,7 @@ function inputClass(hasError: boolean): string {
 function StepIndicator({ step }: { step: number }) {
   const steps = ['Personal Info', 'Documents', 'Review'];
   return (
-    <div className="rounded-card border border-line/50 bg-surface-card p-8">
+    <div className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
       <ol className="flex items-center">
         {steps.map((label, i) => {
           const n = i + 1;
@@ -420,7 +420,7 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-card border border-line/50 bg-surface-card p-8">
+    <section className="rounded-card border border-line/50 bg-surface-card p-5 sm:p-8">
       <h2 className="font-display text-lg text-ink-buyer">{title}</h2>
       {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       <div className="mt-5 space-y-5">{children}</div>

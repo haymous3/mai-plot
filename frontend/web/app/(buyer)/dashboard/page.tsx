@@ -133,7 +133,7 @@ export default async function BuyerDashboardPage({
      * is removed, so `gap-8` (32px) on the 4px grid. Hardcoding 471 would not
      * hold at any other viewport.
      */
-    <main className="mx-auto max-w-[1562px] px-11 py-8">
+    <main className="mx-auto max-w-[1562px] px-4 sm:px-6 lg:px-11 py-8">
       <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
         <StatCard label="Active Listings" value={String(activeListings)} icon="📈" />
         <StatCard label="Verified This Week" value={PLACEHOLDER_STATS.verifiedPct} icon="🛡" />

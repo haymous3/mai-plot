@@ -23,7 +23,7 @@ export default async function SellerOffersPage() {
   const count = (s: string) => offers.filter((o) => o.status === s).length;
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
       <div>
         <h1 className="font-display text-3xl text-emerald-deep">Offers</h1>
         <p className="mt-1 text-sm text-ink-500">Review and respond to buyer offers</p>

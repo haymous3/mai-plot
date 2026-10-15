@@ -80,7 +80,7 @@ export default async function SellerListingsPage() {
   const listings = result.ok ? result.data.data : [];
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
       <SellerHeader title="My Listings" subtitle="Manage your property listings" />
 
       <div className="mt-6 space-y-3">

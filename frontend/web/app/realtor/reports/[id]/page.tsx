@@ -32,7 +32,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
   if (!reportRes.ok) {
     if (reportRes.status === 404) notFound();
     return (
-      <main className="mx-auto max-w-3xl px-8 py-8">
+      <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
         <RealtorHeader title="Report" subtitle="" />
         <div className="mt-8 rounded-xl border border-red-200 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
           Could not load this report. Please retry.
@@ -48,7 +48,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
   const title = insp?.property_title ?? 'Inspection report';
 
   return (
-    <main className="mx-auto max-w-3xl px-8 py-8">
+    <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
       <Link href="/realtor/reports" className="text-sm text-ink-500 transition hover:text-ink-900">
         ← Back to report history
       </Link>

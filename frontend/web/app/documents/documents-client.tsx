@@ -158,7 +158,7 @@ export function DocumentsClient({
   return (
     <main className="min-h-screen bg-[#fbfbfb]">
       <header className="border-b border-line bg-white">
-        <div className="mx-auto flex h-[102px] w-full max-w-[1280px] items-center gap-5 px-8">
+        <div className="mx-auto flex h-[102px] w-full max-w-[1280px] items-center gap-5 px-4 sm:px-6 lg:px-8">
           <Link
             href={home}
             aria-label="Back"
@@ -184,7 +184,7 @@ export function DocumentsClient({
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[1280px] px-8 py-9">
+      <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-8 py-9">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total Documents" value={data.total} tone="text-ink-buyer" />
           <StatCard

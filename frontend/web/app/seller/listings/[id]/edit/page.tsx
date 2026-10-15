@@ -20,7 +20,7 @@ export default async function EditListingPage({ params }: { params: { id: string
   const l = result.data;
 
   return (
-    <main className="px-8 py-8">
+    <main className="px-4 sm:px-6 lg:px-8 py-8">
       <EditListingForm
         listing={{
           id: l.id,
