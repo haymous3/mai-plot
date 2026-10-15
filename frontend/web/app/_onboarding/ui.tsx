@@ -89,8 +89,13 @@ export function SelectCard({
       // specificity, and Tailwind emits arbitrary values in a different block,
       // so source order decided it and the selected fill never rendered. Same
       // family as `sm:text-6xl` resetting `leading-` in SCRUM-178.
-      className={`flex w-full items-center gap-6 rounded-2xl border px-8 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-deep ${
-        compact ? 'h-[104px]' : 'h-[144px]'
+      //
+      // The measured 144/104px is a MINIMUM, not a fixed height (SCRUM-246).
+      // Fixed, a 375px phone left the text ~100px wide — the description ran
+      // to five lines and spilled out of the card over its neighbour. Below
+      // `sm` the padding, gap and chip shrink and the card grows to fit.
+      className={`flex w-full items-center gap-4 rounded-2xl border px-4 py-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-deep sm:gap-6 sm:px-8 ${
+        compact ? 'min-h-[104px]' : 'min-h-[144px]'
       } ${
         selected
           ? 'border-emerald-deep bg-[#f3f5f4] shadow-sm'
@@ -99,17 +104,17 @@ export function SelectCard({
     >
       {!compact && (
         <span
-          className={`flex h-20 w-20 flex-none items-center justify-center rounded-2xl transition ${
+          className={`flex h-14 w-14 flex-none items-center justify-center rounded-2xl transition sm:h-20 sm:w-20 ${
             selected ? 'bg-emerald-deep text-white' : 'bg-surface-warm text-emerald-deep'
           }`}
         >
-          <Icon className="h-8 w-8" />
+          <Icon className="h-6 w-6 sm:h-8 sm:w-8" />
         </span>
       )}
 
       <span className="min-w-0 flex-1">
-        <span className="block text-[22px] font-bold leading-7 text-ink-buyer">{label}</span>
-        <span className="mt-1 block text-base font-semibold leading-6 text-ink-500">
+        <span className="block text-lg font-bold leading-6 text-ink-buyer sm:text-[22px] sm:leading-7">{label}</span>
+        <span className="mt-1 block text-sm font-semibold leading-5 text-ink-500 sm:text-base sm:leading-6">
           {description}
         </span>
       </span>
