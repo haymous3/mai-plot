@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { type KeyboardEvent, useId, useState } from 'react';
 
 /**
  * Password input with a show/hide toggle — SCRUM-187.
@@ -40,6 +40,8 @@ export function PasswordField({
   placeholder,
   required,
   disabled,
+  onKeyDown,
+  inputClassName = FIELD,
 }: {
   id?: string;
   name?: string;
@@ -50,6 +52,10 @@ export function PasswordField({
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  /** Replaces the default input styling — the onboarding forms use their own
+   * 68px control (SCRUM-247). Must leave right padding for the toggle. */
+  inputClassName?: string;
 }) {
   const [visible, setVisible] = useState(false);
   // Callers that pass no id still need a stable one to hang the toggle's
@@ -68,8 +74,9 @@ export function PasswordField({
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
-        className={FIELD}
+        className={inputClassName}
       />
       <button
         type="button"

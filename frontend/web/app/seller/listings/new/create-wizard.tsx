@@ -501,8 +501,16 @@ export function CreateListingWizard({ poa }: { poa?: SellerPoaStatus | null }) {
               <FilePicker
                 accept={VIDEO_ACCEPT}
                 onPick={(files) => pickVideo(files[0] ?? null)}
-                hint={video ? video.name : `MP4, up to ${MAX_VIDEO_MB}MB`}
+                hint={video ? 'Choose a different video' : `MP4, up to ${MAX_VIDEO_MB}MB`}
               />
+              {video && (
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-bone px-3 py-1.5 text-sm text-ink-600">
+                  <span className="truncate">{video.name}</span>
+                  <button type="button" className="text-red-600" onClick={() => pickVideo(null)}>
+                    remove
+                  </button>
+                </div>
+              )}
             </Field>
             {mediaError && (
               <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -768,7 +776,12 @@ function FilePicker({
         accept={accept}
         multiple={multiple}
         className="hidden"
-        onChange={(e) => onPick(Array.from(e.target.files ?? []))}
+        onChange={(e) => {
+          onPick(Array.from(e.target.files ?? []));
+          // Clear the input so picking the SAME file again (after removing it)
+          // still fires onChange — the browser only fires on a value change.
+          e.target.value = '';
+        }}
       />
     </label>
   );

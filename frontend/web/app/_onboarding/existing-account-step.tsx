@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 
-import { CONTROL, FieldLabel } from './fields';
+import { PasswordField } from '../_components/password-field';
+
+import { CONTROL, CONTROL_BOX, FieldLabel } from './fields';
 import { EnvelopeIcon, PlusIcon, UserCircleIcon } from './icons';
 import { OnboardingHeading, PrimaryButton, SelectCard } from './ui';
 
@@ -144,18 +146,19 @@ export function ExistingAccountStep({
           </div>
           <div>
             <FieldLabel htmlFor="existing-password">Password</FieldLabel>
-            <input
-              id="existing-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && canContinue) onContinue();
-              }}
-              disabled={busy}
-              className={CONTROL}
-            />
+            <div className="mt-3">
+              <PasswordField
+                id="existing-password"
+                autoComplete="current-password"
+                value={password}
+                onChange={setPassword}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canContinue) onContinue();
+                }}
+                disabled={busy}
+                inputClassName={`${CONTROL_BOX} pr-14`}
+              />
+            </div>
           </div>
           <div className="flex items-start gap-3.5 rounded-2xl bg-surface-warm px-6 py-5">
             <EnvelopeIcon className="mt-px h-[22px] w-[22px] flex-none text-emerald-deep" />
