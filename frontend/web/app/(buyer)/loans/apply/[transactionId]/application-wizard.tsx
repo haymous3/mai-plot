@@ -186,7 +186,7 @@ export function ApplicationWizard({
         <span className="w-12" />
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:px-11 py-8 lg:grid-cols-[1.7fr_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:px-11 py-8 xl:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           <StepIndicator step={step} />
 
