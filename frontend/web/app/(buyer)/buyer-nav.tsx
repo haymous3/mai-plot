@@ -1,6 +1,7 @@
-import { AvatarMenu } from './avatar-menu';
+import { AccountBadge } from './account-badge';
 import { NotificationBell } from './notification-bell';
 import { BrandLogo } from '@/app/_components/brand-logo';
+import { RailMenuButton } from '@/app/_components/rail-shell';
 import { authServiceUrl } from '@/lib/api';
 import { buyerBackendGet } from '@/lib/buyer-server-api';
 import type { Account } from '@/lib/settings';
@@ -14,7 +15,8 @@ function greeting(): string {
 
 /**
  * Shared buyer header (SCRUM-95): brand · greeting · notification bell ·
- * account menu. Rendered on every buyer page via the (buyer) layout.
+ * account photo. Rendered on every buyer page via the (buyer) layout; the
+ * account links moved to the buyer rail beneath it in SCRUM-248.
  *
  * Measured against the design (SCRUM-166): 72px tall, 44px inline padding,
  * `#144735` fill and a 1px `#e5e7eb` bottom rule. The fill is `brand-header`,
@@ -44,14 +46,18 @@ export async function BuyerNav() {
           repo — deliberately keep the old name. SCRUM-230 replaced the typed
           wordmark with the designer's logo; the name it spells is the same. */}
       {/* SCRUM-238: the logo goes to the landing page, not the dashboard —
-          the Account menu is the way back to the dashboard. */}
-      <BrandLogo tone="dark" height={28} priority />
+          the rail's Dashboard item is the way back (SCRUM-248). */}
+      {/* SCRUM-248: below `lg` the ☰ opens the buyer rail as a drawer. */}
+      <div className="flex items-center gap-1">
+        <RailMenuButton className="-ml-2 text-bone hover:bg-white/10" />
+        <BrandLogo tone="dark" height={28} priority />
+      </div>
       <p className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-sm text-bone/80 sm:block">
         {greeting()}
       </p>
       <div className="flex items-center gap-1.5">
         <NotificationBell />
-        <AvatarMenu avatarUrl={account?.avatar_url ?? null} name={account?.full_name ?? ''} />
+        <AccountBadge avatarUrl={account?.avatar_url ?? null} name={account?.full_name ?? ''} />
       </div>
     </header>
   );

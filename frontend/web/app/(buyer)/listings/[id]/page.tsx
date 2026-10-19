@@ -110,7 +110,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <Card>
             <h1 className="font-display text-3xl text-ink-buyer">{listing.title}</h1>

@@ -1,14 +1,70 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  createContext,
+  type RefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { BrandLogo } from './brand-logo';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
+type RailDrawer = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  drawerId: string;
+  triggerRef: RefObject<HTMLButtonElement>;
+};
+
+const RailDrawerContext = createContext<RailDrawer | null>(null);
+
 /**
- * The responsive frame around the admin, seller and realtor sidebars (SCRUM-244).
+ * Lets the drawer's menu button live OUTSIDE the rail (SCRUM-248). The buyer
+ * portal keeps its green top bar, so the ☰ goes in that bar instead of the
+ * 64px bar RailShell draws for itself. Inside a provider RailShell draws no
+ * bar of its own; `RailMenuButton` is the trigger.
+ */
+export function RailDrawerProvider({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const drawerId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const value = useMemo(() => ({ open, setOpen, drawerId, triggerRef }), [open, drawerId]);
+  return <RailDrawerContext.Provider value={value}>{children}</RailDrawerContext.Provider>;
+}
+
+/** The ☰ that opens a provided drawer; hidden at `lg`, where the rail is inline. */
+export function RailMenuButton({ className = '' }: { className?: string }) {
+  const ctx = useContext(RailDrawerContext);
+  if (!ctx) throw new Error('RailMenuButton must be inside a RailDrawerProvider');
+  return (
+    <button
+      ref={ctx.triggerRef}
+      type="button"
+      onClick={() => ctx.setOpen(true)}
+      aria-label="Open menu"
+      aria-expanded={ctx.open}
+      aria-controls={ctx.drawerId}
+      className={`flex h-11 w-11 flex-none items-center justify-center rounded-xl transition lg:hidden ${className}`}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-6 w-6" aria-hidden>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * The responsive frame around the admin, seller, realtor and buyer sidebars
+ * (SCRUM-244; buyer SCRUM-248, whose trigger lives in its own top bar — see
+ * RailDrawerProvider above).
  *
  * Until this ticket each portal drew a fixed 256px rail with no breakpoint, so
  * on a 375px phone the page itself got ~119px. Now:
@@ -39,20 +95,27 @@ export function RailShell({
   sticky?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  // A provider (SCRUM-248) owns the state when the trigger lives elsewhere;
+  // otherwise the shell owns it and draws its own top bar.
+  const provided = useContext(RailDrawerContext);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const ownDrawerId = useId();
+  const ownTriggerRef = useRef<HTMLButtonElement>(null);
+  const open = provided ? provided.open : ownOpen;
+  const setOpen = provided ? provided.setOpen : setOwnOpen;
+  const drawerId = provided ? provided.drawerId : ownDrawerId;
+  const triggerRef = provided ? provided.triggerRef : ownTriggerRef;
   const pathname = usePathname();
-  const drawerId = useId();
   const drawerRef = useRef<HTMLElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const close = useCallback(() => {
     setOpen(false);
     triggerRef.current?.focus();
-  }, []);
+  }, [setOpen, triggerRef]);
 
   // Picking a destination navigates; the drawer must not still be covering the
   // page that just loaded. No focus return here — the focus belongs to the new page.
-  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => setOpen(false), [pathname, setOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -97,27 +160,29 @@ export function RailShell({
     const onChange = () => desktop.matches && setOpen(false);
     desktop.addEventListener('change', onChange);
     return () => desktop.removeEventListener('change', onChange);
-  }, [open]);
+  }, [open, setOpen]);
 
   return (
     <>
-      <div className="sticky top-0 z-30 flex h-16 flex-none items-center gap-3 border-b border-line bg-surface-card px-4 lg:hidden">
-        <button
-          ref={triggerRef}
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          aria-expanded={open}
-          aria-controls={drawerId}
-          className="-ml-2 flex h-11 w-11 flex-none items-center justify-center rounded-xl text-ink-700 transition hover:bg-surface-muted"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-6 w-6" aria-hidden>
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        <BrandLogo height={24} />
-        <span className="truncate text-xs leading-4 text-ink-500">{subtitle}</span>
-      </div>
+      {!provided && (
+        <div className="sticky top-0 z-30 flex h-16 flex-none items-center gap-3 border-b border-line bg-surface-card px-4 lg:hidden">
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={open}
+            aria-controls={drawerId}
+            className="-ml-2 flex h-11 w-11 flex-none items-center justify-center rounded-xl text-ink-700 transition hover:bg-surface-muted"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-6 w-6" aria-hidden>
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <BrandLogo height={24} />
+          <span className="truncate text-xs leading-4 text-ink-500">{subtitle}</span>
+        </div>
+      )}
 
       {open && (
         <>

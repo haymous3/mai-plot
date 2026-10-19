@@ -132,9 +132,14 @@ export default async function BuyerDashboardPage({
      * at 471.2 wide, i.e. a 31.8px gutter — 30px once the frame's 1.0597 scale
      * is removed, so `gap-8` (32px) on the 4px grid. Hardcoding 471 would not
      * hold at any other viewport.
+     *
+     * SCRUM-248: the buyer rail takes 256px from `lg` up, so between 1024 and
+     * 1280 the content is ~680–940px. The stat gutter tightens to 16px there,
+     * and the 320px side column stacks under the listings until `xl` — beside
+     * them it left the property grid ~336px, i.e. two ~160px cards.
      */
     <main className="mx-auto max-w-[1562px] px-4 sm:px-6 lg:px-11 py-8">
-      <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:gap-8">
         <StatCard label="Active Listings" value={String(activeListings)} icon="📈" />
         <StatCard label="Verified This Week" value={PLACEHOLDER_STATS.verifiedPct} icon="🛡" />
         <StatCard label="Avg. Deal Time" value={PLACEHOLDER_STATS.avgDealDays} icon="⏱" accent="gold" />
@@ -144,7 +149,7 @@ export default async function BuyerDashboardPage({
         <SearchFilterBar />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
         <div>
           {urgent && urgent.data.length > 0 && (
             <section>

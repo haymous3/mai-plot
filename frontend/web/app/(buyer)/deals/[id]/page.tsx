@@ -46,7 +46,7 @@ export default async function DealProgressPage({ params }: { params: { id: strin
       <h1 className="mt-3 font-display text-3xl text-emerald-deep">Deal Progress</h1>
       <p className="text-sm text-ink-500">Deal ID: {params.id.slice(0, 8)}</p>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <Card>
             <div className="flex items-start justify-between gap-4">
