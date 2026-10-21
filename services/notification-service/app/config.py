@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     sms_via_celery: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/1"
+    # SCRUM-249: prefork child processes per worker. Unset, Celery uses
+    # os.cpu_count(), which inside a container is the HOST's core count — on
+    # Railway that forked dozens of idle Python processes per worker (3–3.6 GB
+    # each at 0.2% CPU, ~90% of the bill). Raise via CELERY_WORKER_CONCURRENCY.
+    celery_worker_concurrency: int = 2
     sms_task_max_retries: int = 5
     sms_task_retry_backoff_max_seconds: int = 600
 

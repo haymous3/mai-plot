@@ -73,3 +73,9 @@ def test_transaction_tasks_go_to_the_transaction_queue() -> None:
         ("payments.credit_loan_disbursement", "transaction-service"),
         ("transactions.advance_loan_decision", "transaction-service"),
     ]
+
+
+def test_worker_pool_is_capped_not_sized_from_host_cpus() -> None:
+    """SCRUM-249: unset, Celery forks one child per HOST core, each idling at
+    ~100 MB — 3.5 GB per worker on Railway. None here would bring that back."""
+    assert celery_app.conf.worker_concurrency == 2

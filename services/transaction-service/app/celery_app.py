@@ -53,6 +53,9 @@ celery_app.conf.update(
     task_default_queue="transaction-service",
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    # SCRUM-249: never let Celery size the pool from os.cpu_count() — see
+    # Settings.celery_worker_concurrency.
+    worker_concurrency=_settings.celery_worker_concurrency,
     worker_max_tasks_per_child=200,
     timezone="UTC",
     beat_schedule={

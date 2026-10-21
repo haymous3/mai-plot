@@ -57,3 +57,9 @@ async def test_seller_notifications_go_to_the_notification_queue() -> None:
         ("notifications.dispatch", "notification-service"),
         ("notifications.dispatch", "notification-service"),
     ]
+
+
+def test_worker_pool_is_capped_not_sized_from_host_cpus() -> None:
+    """SCRUM-249: unset, Celery forks one child per HOST core, each idling at
+    ~100 MB — 3.5 GB per worker on Railway. None here would bring that back."""
+    assert celery_app.conf.worker_concurrency == 2
