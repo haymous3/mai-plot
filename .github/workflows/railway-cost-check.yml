@@ -1,0 +1,61 @@
+name: Railway cost check
+
+# SCRUM-250. Every Monday 07:00 UTC (08:00 Africa/Lagos): average each Railway
+# service's memory + CPU over the last 7 days, price it, and open (or comment
+# on) a GitHub issue when the total is over budget or any service is over its
+# memory limit. The report is always in the run's job summary.
+#
+# Needs ONE repo secret: RAILWAY_TOKEN — a Railway PROJECT token for the
+# production environment (Project → Settings → Tokens). If you use an account
+# or workspace token instead, set RAILWAY_TOKEN_KIND below to "account".
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  cost-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Price last 7 days of Railway usage
+        id: check
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN_KIND: project
+          RAILWAY_PROJECT_ID: d8b3321c-4c68-46e5-90f2-067103781a10 # positive-strength
+          RAILWAY_ENVIRONMENT_ID: 47532398-9d35-4ee8-89b1-3e8e4ecbbf3b # production
+          # Monthly usage budget in USD. ~$52 expected after SCRUM-249.
+          BUDGET_USD: "80"
+          # Per-service average memory ceiling (GB); a capped Celery worker is ~0.3.
+          MEMORY_LIMIT_GB: "1.0"
+          MEMORY_LIMIT_OVERRIDES: "elasticsearch=1.5"
+        run: |
+          python scripts/railway_cost_check.py --report report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update the cost issue
+        if: steps.check.outputs.flagged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create railway-cost --color D93F0B \
+            --description "Weekly Railway cost check (SCRUM-250)" 2>/dev/null || true
+          existing=$(gh issue list --label railway-cost --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file report.md
+          else
+            gh issue create --label railway-cost \
+              --title "Railway cost check: over budget or a service over its memory limit" \
+              --body-file report.md
+          fi
