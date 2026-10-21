@@ -63,6 +63,7 @@ def _service(
         max_video_bytes=200_000_000,
         max_photos=max_photos,
         max_videos=max_videos,
+        public_base_url="https://api.example.test/",
     )
 
 
@@ -72,8 +73,11 @@ async def test_happy_photo_stores_and_inserts() -> None:
     result = await _service(repo, storage).upload(
         listing_id=uuid4(), caller=_owner(), media_type="photo", data=_JPEG, sort_order=2
     )
-    assert result.cdn_url.startswith("https://")
+    # SCRUM-252: the stored URL is the stable redirect link, never a bucket URL.
+    assert result.cdn_url == f"https://api.example.test/listings/media/{result.media_id}"
     assert repo.inserted is not None
+    assert repo.inserted["media_id"] == result.media_id
+    assert repo.inserted["cdn_url"] == result.cdn_url
     assert repo.inserted["media_type"] == "photo"
     assert repo.inserted["sort_order"] == 2
     assert storage.data  # bytes landed in the (fake) bucket

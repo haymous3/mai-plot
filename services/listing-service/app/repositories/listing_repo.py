@@ -526,6 +526,7 @@ class ListingRepository:
     async def insert_media(
         self,
         *,
+        media_id: UUID,
         listing_id: UUID,
         media_type: str,
         s3_key: str,
@@ -533,18 +534,20 @@ class ListingRepository:
         sort_order: int,
         size_bytes: int,
     ) -> UUID:
-        """Insert a listing_media row and return its id."""
-        media_id = (
+        """Insert a listing_media row. The id is caller-supplied (SCRUM-252)
+        because the row's own cdn_url embeds it."""
+        inserted = (
             await self._session.execute(
                 text(
                     """
                     INSERT INTO listing_media
-                        (listing_id, media_type, s3_key, cdn_url, sort_order, size_bytes)
-                    VALUES (:lid, :mtype, :s3, :cdn, :sort, :size)
+                        (id, listing_id, media_type, s3_key, cdn_url, sort_order, size_bytes)
+                    VALUES (:id, :lid, :mtype, :s3, :cdn, :sort, :size)
                     RETURNING id
                     """
                 ),
                 {
+                    "id": media_id,
                     "lid": listing_id,
                     "mtype": media_type,
                     "s3": s3_key,
@@ -554,8 +557,25 @@ class ListingRepository:
                 },
             )
         ).scalar_one()
-        assert isinstance(media_id, UUID)
-        return media_id
+        assert isinstance(inserted, UUID)
+        return inserted
+
+    async def get_media_key(self, media_id: UUID) -> str | None:
+        """The storage key behind a media row, for the GET /listings/media
+        redirect (SCRUM-252). None when the row or its listing is gone."""
+        key = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT m.s3_key FROM listing_media m
+                    JOIN property_listings pl ON pl.id = m.listing_id
+                    WHERE m.id = :id AND pl.deleted_at IS NULL
+                    """
+                ),
+                {"id": media_id},
+            )
+        ).scalar_one_or_none()
+        return str(key) if key is not None else None
 
     async def list_for_admin(
         self,

@@ -30,15 +30,25 @@ class Settings(BaseSettings):
     feed_cache_ttl_seconds: int = 60
     listing_cache_ttl_seconds: int = 300
 
-    # Listing media (SCRUM-22). Photos/videos are PUBLIC — stored in the media
-    # bucket and served via CloudFront (cdn_url is precomputed at upload), NOT
-    # via pre-signed URLs (that pattern is for private PoA/legal documents).
-    # In-memory fake storage is the default so local/CI never reach S3.
+    # Listing media (SCRUM-22, reworked SCRUM-252). Photos/videos are public
+    # content but live in a PRIVATE bucket (Railway has no public one), so the
+    # stored URL is a stable listing-service link —
+    # {media_public_base_url}/listings/media/{media_id} — which 302-redirects to
+    # a pre-signed GET valid for media_presign_ttl_seconds. Set cloudfront_domain
+    # only when a real PUBLIC CDN fronts the bucket; then the redirect goes there.
+    # media_public_base_url must be the PUBLIC gateway (Kong) origin, because
+    # browsers load these URLs straight from <img src>.
+    # ⚠️ In-memory fake storage is the default so local/CI never reach S3 — and
+    # until SCRUM-252 no deployed environment turned it off, so every listing
+    # photo uploaded on Railway lived in one process's memory behind a
+    # `https://cdn.maiplot.local/...` URL that no browser could load.
     media_storage_use_fake: bool = True
     media_s3_bucket: str = "maiplot-media-local"
     media_s3_region: str = "af-south-1"
     media_s3_endpoint_url: str = ""
-    cloudfront_domain: str = "cdn.maiplot.local"
+    cloudfront_domain: str = ""
+    media_presign_ttl_seconds: int = 3600
+    media_public_base_url: str = "http://localhost:8000"
     max_photo_bytes: int = 5 * 1024 * 1024
     max_video_bytes: int = 200 * 1024 * 1024
     max_photos_per_listing: int = 15

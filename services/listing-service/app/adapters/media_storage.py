@@ -1,12 +1,15 @@
-"""Media storage adapter — PUBLIC listing photos/videos.
+"""Media storage adapter — listing photos/videos.
 
-Mirrors the SCRUM-48 document-storage shape, but media is public: objects go
-to the media bucket and are served via CloudFront, so `put` returns a
-precomputed `cdn_url` instead of minting a pre-signed URL. (PoA/legal docs
-use the private + pre-signed pattern; listing media does not.)
+Listing media is PUBLIC content, but the only bucket we have (Railway's
+`maihomme-files`) is PRIVATE. So since SCRUM-252 nothing stores a bucket URL:
+listing_media.cdn_url holds a STABLE listing-service link
+(`{media_public_base_url}/listings/media/{media_id}`), and that endpoint
+302-redirects to `url_for(key)` — a short-lived pre-signed GET, or the plain
+CDN URL once a public CDN domain is configured. The bytes go browser <-> bucket
+directly; the service only mints the redirect.
 
   * MediaStorage — Protocol every call site depends on.
-  * S3MediaStorage — real adapter, boto3 put to the media bucket.
+  * S3MediaStorage — real adapter, boto3 put + presign against the bucket.
   * InMemoryMediaStorage — in-process fake for local + CI (no network).
 
 The media BYTES pass through on upload but are never logged.
@@ -26,7 +29,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class StoredMedia:
     key: str
-    cdn_url: str
     size: int
 
 
@@ -40,6 +42,11 @@ class MediaStorage(Protocol):
     ) -> StoredMedia:  # pragma: no cover - protocol
         ...
 
+    def url_for(self, key: str) -> str:  # pragma: no cover - protocol
+        """Where a browser can fetch the object right now. Local computation
+        (no network), so it is safe on the request path."""
+        ...
+
 
 def _cdn_url(domain: str, key: str) -> str:
     return f"https://{domain}/{key}"
@@ -50,7 +57,7 @@ class InMemoryMediaStorage:
     """Test double. Holds objects in a dict keyed by S3 key so a test can
     assert what was stored without a network round trip."""
 
-    cdn_domain: str = "cdn.maiplot.local"
+    cdn_domain: str = ""
     objects: dict[str, StoredMedia] = field(default_factory=dict)
     data: dict[str, bytes] = field(default_factory=dict)
     fail_next: bool = False
@@ -59,15 +66,20 @@ class InMemoryMediaStorage:
         if self.fail_next:
             self.fail_next = False
             raise MediaStorageError("simulated storage failure")
-        stored = StoredMedia(key=key, cdn_url=_cdn_url(self.cdn_domain, key), size=len(data))
+        stored = StoredMedia(key=key, size=len(data))
         self.objects[key] = stored
         self.data[key] = data
         return stored
 
+    def url_for(self, key: str) -> str:
+        return _cdn_url(self.cdn_domain or "cdn.maiplot.local", key)
+
 
 class S3MediaStorage:
-    """Puts objects into the media bucket and returns their CloudFront URL.
-    boto3 is synchronous, so the blocking call runs in a worker thread."""
+    """Puts objects into the media bucket. With no CDN domain (the Railway
+    private bucket) `url_for` pre-signs a GET; with one, it returns the public
+    CDN URL. boto3 is synchronous, so the upload runs in a worker thread;
+    presigning is local HMAC work and runs inline."""
 
     def __init__(
         self,
@@ -76,11 +88,13 @@ class S3MediaStorage:
         region: str,
         cdn_domain: str,
         endpoint_url: str | None = None,
+        presign_ttl_seconds: int = 3600,
     ) -> None:
         import boto3
 
         self._bucket = bucket
         self._cdn_domain = cdn_domain
+        self._presign_ttl_seconds = presign_ttl_seconds
         self._client = boto3.client(
             "s3",
             region_name=region,
@@ -110,7 +124,17 @@ class S3MediaStorage:
             "media.storage.put_ok",
             extra={"key": key, "size": len(data), "duration_ms": duration_ms},
         )
-        return StoredMedia(key=key, cdn_url=_cdn_url(self._cdn_domain, key), size=len(data))
+        return StoredMedia(key=key, size=len(data))
+
+    def url_for(self, key: str) -> str:
+        if self._cdn_domain:
+            return _cdn_url(self._cdn_domain, key)
+        url: str = self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=self._presign_ttl_seconds,
+        )
+        return url
 
 
 def build_media_storage(
@@ -120,10 +144,15 @@ def build_media_storage(
     region: str,
     cdn_domain: str,
     endpoint_url: str,
+    presign_ttl_seconds: int = 3600,
 ) -> MediaStorage:
     """Factory — in-memory fake for local/CI, real S3 client in production."""
     if use_fake:
         return InMemoryMediaStorage(cdn_domain=cdn_domain)
     return S3MediaStorage(
-        bucket=bucket, region=region, cdn_domain=cdn_domain, endpoint_url=endpoint_url
+        bucket=bucket,
+        region=region,
+        cdn_domain=cdn_domain,
+        endpoint_url=endpoint_url,
+        presign_ttl_seconds=presign_ttl_seconds,
     )

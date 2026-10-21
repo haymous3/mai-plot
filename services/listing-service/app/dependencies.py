@@ -34,6 +34,7 @@ from app.services.listing_query import ListingQueryService
 from app.services.listing_review import ListingReviewService
 from app.services.listing_search import ListingSearchService
 from app.services.listing_update import ListingUpdateService
+from app.services.media_redirect import MediaRedirectService
 from app.services.media_upload import MediaUploadService
 from app.services.saved_listings import SavedListingService
 from app.services.seller_listings import SellerListingsService
@@ -85,6 +86,7 @@ async def get_media_storage(settings: SettingsDep) -> MediaStorage:
             region=settings.media_s3_region,
             cdn_domain=settings.cloudfront_domain,
             endpoint_url=settings.media_s3_endpoint_url,
+            presign_ttl_seconds=settings.media_presign_ttl_seconds,
         )
     return _media_storage
 
@@ -264,6 +266,19 @@ def get_media_upload_service(
         max_video_bytes=settings.max_video_bytes,
         max_photos=settings.max_photos_per_listing,
         max_videos=settings.max_videos_per_listing,
+        public_base_url=settings.media_public_base_url,
+    )
+
+
+def get_media_redirect_service(
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+    storage: MediaStorageDep,
+    settings: SettingsDep,
+) -> MediaRedirectService:
+    return MediaRedirectService(
+        listings=listings,
+        storage=storage,
+        presign_ttl_seconds=settings.media_presign_ttl_seconds,
     )
 
 

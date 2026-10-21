@@ -193,6 +193,23 @@ services:
   - name: listing-service
     url: http://listing-service:8000
     routes:
+      # SCRUM-252: listing photo links. Public, no JWT — <img src> cannot send
+      # one. Each hit is just a 302 to a pre-signed bucket URL (bytes never pass
+      # through), but a results page fires one per photo, so it gets its own,
+      # higher limit instead of eating the 100/min feed budget. Longer path ->
+      # Kong matches this before listings-read.
+      - name: listings-media
+        paths:
+          - /listings/media
+        methods:
+          - GET
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 600
+              policy: local
+              fault_tolerant: true
       - name: listings-read
         paths:
           - /listings
