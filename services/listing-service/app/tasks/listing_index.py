@@ -26,10 +26,14 @@ _settings = get_settings()
 
 async def _run(listing_id: UUID) -> str:
     settings = get_settings()
+    if settings.search_backend == "postgres":
+        # SCRUM-251: nothing to sync. Only a task queued before the switch can
+        # land here (the write path enqueues nothing under postgres).
+        return "skipped"
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     index = build_search_index(
-        use_fake=settings.search_use_fake,
+        backend=settings.search_backend,
         url=settings.elasticsearch_url,
         index=settings.es_listings_index,
     )

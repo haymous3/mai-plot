@@ -13,7 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.media_storage import MediaStorage, build_media_storage
-from app.adapters.search_index import SearchIndex, build_search_index
+from app.adapters.search_index import PostgresSearchIndex, SearchIndex, build_search_index
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.repositories.audit_repo import AuditLogRepository
@@ -47,13 +47,22 @@ _media_storage: MediaStorage | None = None
 _search_index: SearchIndex | None = None
 
 
-async def get_search_index(settings: SettingsDep) -> SearchIndex:
-    """Process-wide search index. The factory picks the in-memory fake
-    (local/CI) vs the real Elasticsearch client (production)."""
+async def get_search_index(
+    settings: SettingsDep,
+    listings: Annotated[ListingRepository, Depends(_listing_repo)],
+) -> SearchIndex:
+    """Postgres (the default, SCRUM-251) is built per request over this
+    request's repository. The memory fake and Elasticsearch are process-wide."""
+    if settings.search_backend == "postgres":
+        return PostgresSearchIndex(
+            listings=listings,
+            urgency_boost_weight=settings.search_urgency_boost_weight,
+            urgency_scale_days=settings.search_urgency_scale_days,
+        )
     global _search_index
     if _search_index is None:
         _search_index = build_search_index(
-            use_fake=settings.search_use_fake,
+            backend=settings.search_backend,
             url=settings.elasticsearch_url,
             index=settings.es_listings_index,
             urgency_boost_weight=settings.search_urgency_boost_weight,

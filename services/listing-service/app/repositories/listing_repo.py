@@ -6,6 +6,7 @@ handlers never touch SQLAlchemy directly.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,8 +17,33 @@ from sqlalchemy import text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.search_index import SearchDoc
+from app.adapters.search_index import SearchDoc, SearchHit, SearchParams
 from app.models import PropertyListing
+
+# Search terms are reduced to letters/digits and OR-ed into a tsquery
+# (SCRUM-251), matching ES multi_match's default "any term" behaviour. Only
+# these tokens ever reach to_tsquery, so its operator syntax cannot be injected.
+_SEARCH_TOKEN = re.compile(r"[^\W_]+")
+
+# Distress urgency boost (SCRUM-115), the same Gaussian decay the ES `gauss`
+# function and InMemorySearchIndex._urgency_boost use: full weight at/after
+# expiry, halving every :scale days before it. Normal listings get 0.
+_URGENCY_BOOST_SQL = """
+    CASE WHEN pl.sale_type = 'distress' AND pl.expires_at IS NOT NULL
+         THEN CAST(:boost_weight AS double precision) * power(
+             CAST(0.5 AS double precision),
+             power(
+                 GREATEST(
+                     CAST(0 AS double precision),
+                     CAST(EXTRACT(EPOCH FROM (pl.expires_at - NOW())) AS double precision)
+                         / 86400.0
+                 ) / CAST(:boost_scale AS double precision),
+                 2
+             )
+         )
+         ELSE 0
+    END
+"""
 
 # Columns a PATCH may set. Keys of the update dict are validated against this
 # so the dynamic UPDATE can only touch intended columns.
@@ -813,6 +839,134 @@ class ListingRepository:
             ),
             {"id": listing_id},
         )
+
+    async def search_listings(
+        self,
+        params: SearchParams,
+        *,
+        urgency_boost_weight: float,
+        urgency_scale_days: float,
+    ) -> tuple[list[SearchHit], int]:
+        """GET /listings/search straight off property_listings (SCRUM-251).
+
+        Same semantics as the ES adapter: active + non-deleted only; the
+        feed's filters; PostGIS radius; free text over title (weight A) and
+        description/address/LGA/state (weight B) via the generated
+        search_vector column. Explicit price sorts order by price; everything
+        else ranks by ts_rank + the distress urgency boost, newest first on
+        ties. search_score is the text rank alone (0 without a query).
+        """
+        where = ["pl.deleted_at IS NULL", "pl.status = 'active'"]
+        binds: dict[str, object] = {}
+        if params.state:
+            where.append("pl.state = :state")
+            binds["state"] = params.state
+        if params.lga:
+            where.append("pl.lga = :lga")
+            binds["lga"] = params.lga
+        if params.sale_type and params.sale_type != "all":
+            where.append("pl.sale_type = :sale_type")
+            binds["sale_type"] = params.sale_type
+        if params.property_type:
+            where.append("pl.property_type = :ptype")
+            binds["ptype"] = params.property_type
+        if params.price_min is not None:
+            where.append("pl.asking_price_kobo >= :pmin")
+            binds["pmin"] = params.price_min
+        if params.price_max is not None:
+            where.append("pl.asking_price_kobo <= :pmax")
+            binds["pmax"] = params.price_max
+        if params.doc_status == "verified":
+            where.append("pl.doc_verification_status = 'verified'")
+        if params.lat is not None and params.lng is not None and params.radius_km is not None:
+            where.append(
+                "ST_DWithin(pl.location, "
+                "CAST(ST_SetSRID(ST_MakePoint(:lng, :lat), 4326) AS geography), :radius_m)"
+            )
+            binds.update(lat=params.lat, lng=params.lng, radius_m=params.radius_km * 1000.0)
+
+        tokens = _SEARCH_TOKEN.findall((params.q or "").lower())
+        if tokens:
+            where.append("pl.search_vector @@ to_tsquery('english', :tsq)")
+            binds["tsq"] = " | ".join(tokens)
+            rank_sql = "ts_rank(pl.search_vector, to_tsquery('english', :tsq))"
+        else:
+            rank_sql = "CAST(0 AS real)"
+        where_sql = " AND ".join(where)
+
+        if params.sort == "price_asc":
+            order_sql = "pl.asking_price_kobo ASC, pl.created_at DESC"
+        elif params.sort == "price_desc":
+            order_sql = "pl.asking_price_kobo DESC, pl.created_at DESC"
+        elif urgency_scale_days > 0:
+            order_sql = f"({rank_sql} + {_URGENCY_BOOST_SQL}) DESC, pl.created_at DESC"
+            binds.update(boost_weight=urgency_boost_weight, boost_scale=urgency_scale_days)
+        else:
+            order_sql = f"{rank_sql} DESC, pl.created_at DESC"
+
+        total = (
+            await self._session.execute(
+                text(f"SELECT COUNT(*) FROM property_listings pl WHERE {where_sql}"),
+                {k: v for k, v in binds.items() if not k.startswith("boost_")},
+            )
+        ).scalar_one()
+
+        rows = (
+            await self._session.execute(
+                text(
+                    f"""
+                    SELECT pl.id, pl.title, pl.description, pl.property_type, pl.state, pl.lga,
+                           pl.address_text,
+                           ST_Y(pl.location::geometry) AS lat, ST_X(pl.location::geometry) AS lng,
+                           pl.size_sqm, pl.asking_price_kobo, pl.sale_type, pl.urgency_tag,
+                           pl.expires_at, pl.status, pl.doc_verification_status,
+                           pl.view_count, pl.interest_count, pl.created_at,
+                           u.seller_authority_type,
+                           {rank_sql} AS search_score
+                    FROM property_listings pl
+                    LEFT JOIN users u ON u.id = pl.seller_id
+                    WHERE {where_sql}
+                    ORDER BY {order_sql}
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {
+                    **binds,
+                    "limit": params.page_size,
+                    "offset": (params.page - 1) * params.page_size,
+                },
+            )
+        ).all()
+
+        hits = [
+            SearchHit(
+                doc=SearchDoc(
+                    id=r.id,
+                    title=r.title,
+                    description=r.description,
+                    property_type=r.property_type,
+                    state=r.state,
+                    lga=r.lga,
+                    address_text=r.address_text,
+                    lat=r.lat,
+                    lng=r.lng,
+                    size_sqm=r.size_sqm,
+                    asking_price_kobo=r.asking_price_kobo,
+                    sale_type=r.sale_type,
+                    urgency_tag=r.urgency_tag,
+                    expires_at=r.expires_at,
+                    status=r.status,
+                    doc_verification_status=r.doc_verification_status,
+                    seller_authority_type=r.seller_authority_type,
+                    view_count=r.view_count,
+                    interest_count=r.interest_count,
+                    created_at=r.created_at,
+                ),
+                score=float(r.search_score),
+            )
+            for r in rows
+        ]
+        return hits, int(total)
 
     async def mark_es_indexed(self, listing_id: UUID) -> None:
         """Stamp es_indexed_at = NOW() after a successful ES sync (SCRUM-54).

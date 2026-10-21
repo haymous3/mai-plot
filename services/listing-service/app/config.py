@@ -12,6 +12,7 @@ issuer to verify tokens auth-service issued.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,11 +44,15 @@ class Settings(BaseSettings):
     max_photos_per_listing: int = 15
     max_videos_per_listing: int = 1
 
-    # Listing search (SCRUM-22). All listing search runs on Elasticsearch
-    # (CLAUDE.md non-negotiable) — never Postgres full-text. The in-memory
-    # fake index is the default so local/CI never need an ES cluster; prod
-    # sets search_use_fake=false + the real cluster URL.
-    search_use_fake: bool = True
+    # Listing search backend (SCRUM-251). "postgres" (the default, everywhere)
+    # queries property_listings directly: full-text on the generated
+    # search_vector column + PostGIS for radius. Nothing to sync, so a listing is
+    # searchable the moment its row commits. "elasticsearch" is kept behind this
+    # switch for when scale needs it; "memory" is the per-process test double.
+    # ⚠️ Before SCRUM-251 the default was the in-memory fake (search_use_fake)
+    # and NO environment ever set it false — so production search ran on a
+    # per-process dict and the Elasticsearch container sat unused.
+    search_backend: Literal["postgres", "elasticsearch", "memory"] = "postgres"
     elasticsearch_url: str = "http://localhost:9200"
     es_listings_index: str = "listings"
 
@@ -85,7 +90,9 @@ class Settings(BaseSettings):
     # true (the broker is celery_broker_url above).
     notifications_enabled: bool = False
 
-    # ES indexing (SCRUM-54). On create / edit / status change the listing is
+    # ES indexing (SCRUM-54). Only used when search_backend is "elasticsearch"
+    # or "memory" — the postgres backend reads the row itself, so writes dispatch
+    # nothing (SCRUM-251). On create / edit / status change the listing is
     # synced to Elasticsearch off the request path. In production
     # (index_via_celery=true) the write path enqueues a Celery task — index
     # failures retry with exponential backoff and never block the API. Local/CI

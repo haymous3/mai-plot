@@ -25,10 +25,16 @@ async def _run() -> dict[str, int]:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
-    index = build_search_index(
-        use_fake=settings.search_use_fake,
-        url=settings.elasticsearch_url,
-        index=settings.es_listings_index,
+    # SCRUM-251: under postgres search an expired row simply stops matching
+    # `status = 'active'`, so there is no index to remove it from.
+    index = (
+        None
+        if settings.search_backend == "postgres"
+        else build_search_index(
+            backend=settings.search_backend,
+            url=settings.elasticsearch_url,
+            index=settings.es_listings_index,
+        )
     )
     try:
         async with sessionmaker() as session:
@@ -36,7 +42,9 @@ async def _run() -> dict[str, int]:
             service = ListingExpiryService(
                 listings=listings,
                 audit=AuditLogRepository(session),
-                index_sync=ListingIndexSync(index=index, listings=listings),
+                index_sync=(
+                    ListingIndexSync(index=index, listings=listings) if index is not None else None
+                ),
                 warning_window_hours=settings.expiry_warning_window_hours,
                 notifier=build_expiry_notifier(
                     enabled=settings.notifications_enabled,
