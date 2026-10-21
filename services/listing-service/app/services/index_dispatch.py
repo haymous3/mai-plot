@@ -15,6 +15,10 @@ the request itself. Two transports share one Protocol:
 
 `build_index_dispatcher` picks the transport from settings
 (`index_via_celery`).
+
+  * NullIndexDispatcher — the postgres search backend (SCRUM-251, the
+    default). Search reads the row itself, so there is nothing to sync and the
+    write path enqueues nothing.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import logging
 from typing import Protocol
 from uuid import UUID
 
-from app.adapters.search_index import SearchIndex
+from app.adapters.search_index import PostgresSearchIndex, SearchIndex
 from app.repositories.listing_repo import ListingRepository
 from app.services.listing_index_sync import ListingIndexSync
 
@@ -62,9 +66,18 @@ class InlineIndexDispatcher:
         await self._sync.sync_safe(listing_id)
 
 
+class NullIndexDispatcher:
+    """Postgres search backend — nothing to sync (SCRUM-251)."""
+
+    async def enqueue(self, listing_id: UUID) -> None:
+        return None
+
+
 def build_index_dispatcher(
     *, via_celery: bool, index: SearchIndex, listings: ListingRepository
 ) -> IndexDispatcher:
+    if isinstance(index, PostgresSearchIndex):
+        return NullIndexDispatcher()
     if via_celery:
         return CeleryIndexDispatcher()
     return InlineIndexDispatcher(sync=ListingIndexSync(index=index, listings=listings))

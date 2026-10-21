@@ -8,7 +8,14 @@ from uuid import uuid4
 
 import pytest
 
-from app.adapters.search_index import InMemorySearchIndex, SearchDoc, SearchParams
+from app.adapters.search_index import (
+    InMemorySearchIndex,
+    PostgresSearchIndex,
+    SearchDoc,
+    SearchHit,
+    SearchParams,
+    build_search_index,
+)
 
 _NOW = datetime.now(UTC)
 
@@ -181,3 +188,47 @@ async def test_delete_removes_from_index() -> None:
     await idx.delete(doc.id)
     _, total = await idx.search(SearchParams())
     assert total == 0
+
+
+# --- PostgresSearchIndex + factory (SCRUM-251) ------------------------------
+
+
+class _RecordingSource:
+    def __init__(self) -> None:
+        self.calls: list[tuple[SearchParams, float, float]] = []
+
+    async def search_listings(
+        self, params: SearchParams, *, urgency_boost_weight: float, urgency_scale_days: float
+    ) -> tuple[list[SearchHit], int]:
+        self.calls.append((params, urgency_boost_weight, urgency_scale_days))
+        return [SearchHit(doc=_doc(), score=0.5)], 1
+
+
+@pytest.mark.asyncio
+async def test_postgres_index_delegates_search_with_boost_settings() -> None:
+    source = _RecordingSource()
+    idx = PostgresSearchIndex(listings=source, urgency_boost_weight=4.0, urgency_scale_days=2.0)
+    params = SearchParams(q="lekki")
+
+    hits, total = await idx.search(params)
+
+    assert total == 1 and hits[0].score == 0.5
+    assert source.calls == [(params, 4.0, 2.0)]
+
+
+@pytest.mark.asyncio
+async def test_postgres_index_writes_are_no_ops() -> None:
+    source = _RecordingSource()
+    idx = PostgresSearchIndex(listings=source)
+    await idx.upsert(_doc())
+    await idx.delete(uuid4())
+    assert source.calls == []
+
+
+def test_factory_builds_process_wide_backends_only() -> None:
+    assert isinstance(
+        build_search_index(backend="memory", url="http://unused", index="listings"),
+        InMemorySearchIndex,
+    )
+    with pytest.raises(ValueError):
+        build_search_index(backend="postgres", url="http://unused", index="listings")

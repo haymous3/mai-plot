@@ -6,10 +6,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.search_index import InMemorySearchIndex
+from app.adapters.search_index import InMemorySearchIndex, PostgresSearchIndex
 from app.services.index_dispatch import (
     CeleryIndexDispatcher,
     InlineIndexDispatcher,
+    NullIndexDispatcher,
     build_index_dispatcher,
 )
 
@@ -28,6 +29,20 @@ def test_factory_picks_inline_for_dev_and_celery_for_prod() -> None:
     celery = build_index_dispatcher(via_celery=True, index=index, listings=None)  # type: ignore[arg-type]
     assert isinstance(inline, InlineIndexDispatcher)
     assert isinstance(celery, CeleryIndexDispatcher)
+
+
+def test_postgres_search_dispatches_nothing_whatever_the_transport() -> None:
+    """SCRUM-251: under postgres search there is no second copy to sync, so
+    even a prod config with index_via_celery=true must not enqueue tasks."""
+    index = PostgresSearchIndex(listings=None)  # type: ignore[arg-type]
+    for via_celery in (False, True):
+        dispatcher = build_index_dispatcher(via_celery=via_celery, index=index, listings=None)  # type: ignore[arg-type]
+        assert isinstance(dispatcher, NullIndexDispatcher)
+
+
+@pytest.mark.asyncio
+async def test_null_dispatch_is_a_no_op() -> None:
+    await NullIndexDispatcher().enqueue(uuid4())  # must not raise or touch anything
 
 
 @pytest.mark.asyncio

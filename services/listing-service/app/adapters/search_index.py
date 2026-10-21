@@ -1,17 +1,19 @@
-"""Listing search index adapter (Elasticsearch).
+"""Listing search index adapter.
 
-CLAUDE.md non-negotiable: all listing search runs on Elasticsearch, never
-Postgres full-text. This adapter mirrors the storage/media adapter shape:
+This adapter mirrors the storage/media adapter shape:
 
   * SearchIndex — Protocol every call site depends on.
-  * ElasticsearchIndex — real adapter (AsyncElasticsearch).
-  * InMemorySearchIndex — in-process fake for local + CI, faithfully
-    implementing the same query semantics so tests are meaningful without an
-    ES cluster.
+  * PostgresSearchIndex — production default since SCRUM-251. Search is a
+    query on property_listings itself (ListingRepository.search_listings), so
+    upsert/delete are no-ops: there is no second copy to keep in step.
+  * ElasticsearchIndex — kept behind `search_backend="elasticsearch"` for when
+    scale needs it (typo tolerance, very large catalogues).
+  * InMemorySearchIndex — in-process fake, implementing the same query
+    semantics so tests are meaningful without a cluster.
 
 Only `active`, non-deleted listings are returned by search. The fake's
 relevance scoring is intentionally simple (term-overlap) — enough to assert
-ordering; the real index uses ES BM25 via multi_match.
+ordering; Postgres uses ts_rank, ES uses BM25 via multi_match.
 """
 
 from __future__ import annotations
@@ -89,6 +91,50 @@ class SearchIndex(Protocol):
         self, params: SearchParams
     ) -> tuple[list[SearchHit], int]:  # pragma: no cover - protocol
         ...
+
+
+class SearchSource(Protocol):
+    """What PostgresSearchIndex needs from the listing repository. A Protocol
+    rather than the concrete class because listing_repo imports this module."""
+
+    async def search_listings(
+        self,
+        params: SearchParams,
+        *,
+        urgency_boost_weight: float,
+        urgency_scale_days: float,
+    ) -> tuple[list[SearchHit], int]:  # pragma: no cover - protocol
+        ...
+
+
+class PostgresSearchIndex:
+    """Search straight off property_listings (SCRUM-251). Built per request
+    around that request's repository, so it reads the same session as the rest
+    of the request and needs no process-wide state."""
+
+    def __init__(
+        self,
+        *,
+        listings: SearchSource,
+        urgency_boost_weight: float = 3.0,
+        urgency_scale_days: float = 7.0,
+    ) -> None:
+        self._listings = listings
+        self._urgency_boost_weight = urgency_boost_weight
+        self._urgency_scale_days = urgency_scale_days
+
+    async def upsert(self, doc: SearchDoc) -> None:
+        """No-op: the row IS the document."""
+
+    async def delete(self, listing_id: UUID) -> None:
+        """No-op: a deleted or hidden row is filtered out at query time."""
+
+    async def search(self, params: SearchParams) -> tuple[list[SearchHit], int]:
+        return await self._listings.search_listings(
+            params,
+            urgency_boost_weight=self._urgency_boost_weight,
+            urgency_scale_days=self._urgency_scale_days,
+        )
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -434,14 +480,18 @@ def _from_source(src: dict[str, Any]) -> SearchDoc:
 
 def build_search_index(
     *,
-    use_fake: bool,
+    backend: str,
     url: str,
     index: str,
     urgency_boost_weight: float = 3.0,
     urgency_scale_days: float = 7.0,
 ) -> SearchIndex:
-    """Factory — in-memory fake for local/CI, real Elasticsearch in production."""
-    if use_fake:
+    """Factory for the PROCESS-WIDE backends ("memory" | "elasticsearch").
+    "postgres" is per request (it needs the request's session), so callers
+    build PostgresSearchIndex themselves and never reach here with it."""
+    if backend == "postgres":
+        raise ValueError("postgres search is per-request; build PostgresSearchIndex directly")
+    if backend == "memory":
         return InMemorySearchIndex(
             urgency_boost_weight=urgency_boost_weight,
             urgency_scale_days=urgency_scale_days,
