@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     # runs hourly; warnings fire 48h before a listing expires.
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/1"
+    # SCRUM-249: prefork child processes per worker. Unset, Celery uses
+    # os.cpu_count(), which inside a container is the HOST's core count — on
+    # Railway that forked dozens of idle Python processes per worker (3–3.6 GB
+    # each at 0.2% CPU, ~90% of the bill). Raise via CELERY_WORKER_CONCURRENCY.
+    celery_worker_concurrency: int = 2
     expiry_beat_interval_seconds: float = 3600.0
     expiry_warning_window_hours: int = 48
 

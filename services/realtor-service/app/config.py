@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     notifications_enabled: bool = False
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/1"
+    # SCRUM-249: prefork child processes per worker. Unset, Celery uses
+    # os.cpu_count(), which inside a container is the HOST's core count — on
+    # Railway that forked dozens of idle Python processes per worker (3–3.6 GB
+    # each at 0.2% CPU, ~90% of the bill). Raise via CELERY_WORKER_CONCURRENCY.
+    celery_worker_concurrency: int = 2
 
     # Realtor commission (SCRUM-74). On a completed deal the realtor who did the
     # inspection accrues a commission = commission_rate_bps/10_000 of the agreed

@@ -33,3 +33,9 @@ class _RecordingApp:
 def test_this_services_tasks_run_on_its_own_queue() -> None:
     """Its beat tasks must reach ITS worker, not whichever grabbed them first."""
     assert celery_app.conf.task_default_queue == "document-service"
+
+
+def test_worker_pool_is_capped_not_sized_from_host_cpus() -> None:
+    """SCRUM-249: unset, Celery forks one child per HOST core, each idling at
+    ~100 MB — 3.5 GB per worker on Railway. None here would bring that back."""
+    assert celery_app.conf.worker_concurrency == 2

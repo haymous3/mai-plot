@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # backend. loan_poll_enabled=false (dev/CI default) makes the task a no-op (and
     # the fake adapter only ever reports under_review, so polling is harmless).
     celery_result_backend: str = "redis://localhost:6379/1"
+    # SCRUM-249: prefork child processes per worker. Unset, Celery uses
+    # os.cpu_count(), which inside a container is the HOST's core count — on
+    # Railway that forked dozens of idle Python processes per worker (3–3.6 GB
+    # each at 0.2% CPU, ~90% of the bill). Raise via CELERY_WORKER_CONCURRENCY.
+    celery_worker_concurrency: int = 2
     loan_poll_enabled: bool = False
     loan_poll_interval_seconds: float = 900.0  # every 15 min
     loan_poll_stale_minutes: int = 30  # only poll loans pending this long
