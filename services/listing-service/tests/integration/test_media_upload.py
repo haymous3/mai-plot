@@ -43,7 +43,8 @@ async def test_owner_uploads_photo(
     )
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["cdn_url"].startswith("https://cdn.maiplot.test/")
+    # SCRUM-252: a stable link to the redirect endpoint, not a bucket URL.
+    assert body["cdn_url"] == f"http://localhost:8000/listings/media/{body['media_id']}"
 
     with db_engine.connect() as conn:
         row = conn.execute(
@@ -59,10 +60,17 @@ async def test_owner_uploads_photo(
         assert row.sort_order == 1
         assert row.size_bytes == len(_JPEG)
 
-    # The new media shows up on the detail endpoint.
+    # The new media shows up on the detail endpoint...
     detail = await http_client.get(f"/listings/{listing_id}")
     assert detail.status_code == 200
-    assert len(detail.json()["media"]) == 1
+    assert [m["url"] for m in detail.json()["media"]] == [body["cdn_url"]]
+
+    # ...and following that URL redirects to where the bytes actually are.
+    redirect = await http_client.get(f"/listings/media/{body['media_id']}")
+    assert redirect.status_code == 302
+    key = next(iter(media_storage_fake.data))
+    assert redirect.headers["location"] == f"https://cdn.maiplot.test/{key}"
+    assert redirect.headers["cache-control"] == "public, max-age=3300"
 
 
 @pytest.mark.asyncio
@@ -222,3 +230,38 @@ async def test_media_upload_requires_auth(
     )
     assert response.status_code == 401
     assert_error_envelope(response.json(), "UNAUTHORIZED")
+
+
+@pytest.mark.asyncio
+async def test_unknown_media_id_is_404(
+    clean_listing_tables: None,
+    http_client: AsyncClient,
+    assert_error_envelope: Callable[[dict[str, Any], str], None],
+) -> None:
+    response = await http_client.get(f"/listings/media/{uuid4()}")
+    assert response.status_code == 404
+    assert_error_envelope(response.json(), "MEDIA_NOT_FOUND")
+
+
+@pytest.mark.asyncio
+async def test_media_of_a_deleted_listing_is_404(
+    clean_listing_tables: None,
+    http_client: AsyncClient,
+    db_engine: Engine,
+    seed_seller: Callable[..., UUID],
+    seed_listing: Callable[..., UUID],
+    seed_media: Callable[..., None],
+) -> None:
+    listing_id = seed_listing(seller_id=seed_seller(phone="08012345678"))
+    seed_media(listing_id=listing_id)
+    with db_engine.begin() as conn:
+        media_id = conn.execute(
+            text("SELECT id FROM listing_media WHERE listing_id = :id"), {"id": listing_id}
+        ).scalar_one()
+        conn.execute(
+            text("UPDATE property_listings SET deleted_at = NOW() WHERE id = :id"),
+            {"id": listing_id},
+        )
+
+    response = await http_client.get(f"/listings/media/{media_id}")
+    assert response.status_code == 404

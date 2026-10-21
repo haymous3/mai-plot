@@ -3,16 +3,19 @@
 Only the owning seller (or an admin) may add media. The file is validated
 server-side by its magic bytes (must match the declared photo/video type and
 size limits), the per-type cap is enforced (max photos / max videos), the
-object is stored in the PUBLIC media bucket, and a listing_media row is
-written with the precomputed CloudFront URL. The cached listing detail
-(`listing:{id}`) is invalidated so the new media shows up.
+object is stored in the media bucket, and a listing_media row is written
+whose cdn_url is the STABLE redirect link `{base}/listings/media/{media_id}`
+(SCRUM-252) — never a bucket URL, which would be private or expire. Other
+services read that column straight from the shared DB (realtor inspections,
+transaction-service), so it has to be a URL that works forever. The cached
+listing detail (`listing:{id}`) is invalidated so the new media shows up.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -44,6 +47,11 @@ class MediaUploadResult:
     cdn_url: str
 
 
+def media_redirect_url(public_base_url: str, media_id: UUID) -> str:
+    """The stable, public URL stored in listing_media.cdn_url (SCRUM-252)."""
+    return f"{public_base_url.rstrip('/')}/listings/media/{media_id}"
+
+
 class MediaUploadService:
     def __init__(
         self,
@@ -55,7 +63,9 @@ class MediaUploadService:
         max_video_bytes: int,
         max_photos: int,
         max_videos: int,
+        public_base_url: str,
     ) -> None:
+        self._public_base_url = public_base_url.rstrip("/")
         self._redis = redis
         self._listings = listings
         self._storage = storage
@@ -98,16 +108,19 @@ class MediaUploadService:
             logger.error("media.upload.storage_unavailable", extra={"listing_id": str(listing_id)})
             raise MediaStorageUnavailable() from exc
 
-        media_id = await self._listings.insert_media(
+        media_id = uuid4()
+        cdn_url = media_redirect_url(self._public_base_url, media_id)
+        await self._listings.insert_media(
+            media_id=media_id,
             listing_id=listing_id,
             media_type=media_type,
             s3_key=key,
-            cdn_url=stored.cdn_url,
+            cdn_url=cdn_url,
             sort_order=sort_order,
             size_bytes=stored.size,
         )
         await self._invalidate(listing_id)
-        return MediaUploadResult(media_id=media_id, cdn_url=stored.cdn_url)
+        return MediaUploadResult(media_id=media_id, cdn_url=cdn_url)
 
     async def _invalidate(self, listing_id: UUID) -> None:
         """Best-effort detail-cache bust so the new media appears; a Redis

@@ -36,6 +36,7 @@ curl -sS http://localhost:8000/auth/health
 | `/auth/verify/*`         | auth-service         | JWT                         | 60/min     |
 | `/auth/seller/*`         | auth-service         | JWT                         | 60/min     |
 | `/auth/switch-role`, `/auth/add-role`, `/auth/reauth` | auth-service | JWT | 60/min |
+| `GET /listings/media/*`  | listing-service      | public (photo 302s, SCRUM-252) | 600/min |
 | `GET /listings/*`        | listing-service      | public                      | 100/min    |
 | `POST PATCH DELETE /listings/*` | listing-service | JWT                       | 30/min     |
 | `/transactions/*`        | transaction-service  | JWT                         | 60/min     |

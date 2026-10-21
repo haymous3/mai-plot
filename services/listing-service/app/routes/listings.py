@@ -10,7 +10,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.adapters.search_index import SearchParams
 from app.dependencies import (
@@ -22,6 +22,7 @@ from app.dependencies import (
     get_listing_query_service,
     get_listing_search_service,
     get_listing_update_service,
+    get_media_redirect_service,
     get_media_upload_service,
     get_saved_listing_service,
     get_seller_listings_service,
@@ -63,6 +64,7 @@ from app.services.listing_update import (
     NotListingOwner,
 )
 from app.services.media import InvalidMedia
+from app.services.media_redirect import MediaNotFound, MediaRedirectService
 from app.services.media_upload import (
     MediaLimitExceeded,
     MediaStorageUnavailable,
@@ -183,6 +185,25 @@ async def list_my_listings(
     """The caller's own listings for "My Listings" (SCRUM-98). Declared before
     /{listing_id} so the literal path wins."""
     return await service.list_mine(current_user.user_id)
+
+
+@router.get("/media/{media_id}", response_model=None)
+async def get_listing_media(
+    media_id: UUID,
+    service: Annotated[MediaRedirectService, Depends(get_media_redirect_service)],
+) -> RedirectResponse | JSONResponse:
+    """Public, unauthenticated: listing photos are public content (SCRUM-252).
+    listing_media.cdn_url points here; this 302s to a fresh pre-signed bucket
+    URL, so <img src> works everywhere the stored URL is used."""
+    try:
+        location = await service.locate(media_id)
+    except MediaNotFound:
+        return _error(status.HTTP_404_NOT_FOUND, "MEDIA_NOT_FOUND", "No media found with that id.")
+    return RedirectResponse(
+        location.url,
+        status_code=status.HTTP_302_FOUND,
+        headers={"Cache-Control": f"public, max-age={location.max_age_seconds}"},
+    )
 
 
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
